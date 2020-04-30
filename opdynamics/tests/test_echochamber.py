@@ -28,17 +28,26 @@ class TestEchoChamber(TestCase):
 
     def test_set_activities(self):
         from scipy.stats import powerlaw
+        from opdynamics.utils.distributions import negpowerlaw
 
         gamma = 2
         min_val = 0.1
         max_val = 0.5
-        self.ec.set_activities(powerlaw, gamma, min_val, max_val, dim=1, inverse=True)
+        self.ec.set_activities(negpowerlaw, gamma, min_val, max_val, dim=1)
         self.assertGreaterEqual(np.min(self.ec.activities), min_val)
         self.assertLessEqual(np.max(self.ec.activities), max_val)
         self.assertTrue(
             self.ec.activities.shape[0] == self.ec.N,
             "each agent in the echo chamber must have an activity probability",
         )
+        self.ec.set_activities(powerlaw, gamma, min_val, max_val, dim=1)
+        self.assertGreaterEqual(np.min(self.ec.activities), min_val)
+        self.assertLessEqual(np.max(self.ec.activities), max_val)
+        self.assertTrue(
+            self.ec.activities.shape[0] == self.ec.N,
+            "each agent in the echo chamber must have an activity probability",
+        )
+
         # TODO: test other distributions
         # mu = 1
         # sigma = 2

@@ -24,15 +24,7 @@ class VisEchoChamber(object):
 
         b = colors.to_rgba("blue")
         r = colors.to_rgba("red")
-        if color_code:
-            # pd.DataFrame(self.ec.result.y, index=self.ec.result.t)
-            for n in self.ec.result.y:
-                z = np.ndarray(shape=[len(n), 4])
-                mask = n >= 0
-                z[mask] = b
-                z[~mask] = r
-                ax.scatter(self.ec.result.t, n, c=z, s=2)
-        elif color_code == "line":
+        if color_code == "line" or color_code == "lines":
             # using the colorline method allows colors to be dependent on a value, in this case, opinion,
             # but takes much longer to display
             for n in self.ec.result.y:
@@ -40,18 +32,19 @@ class VisEchoChamber(object):
                 mask = n >= 0
                 z[mask] = b
                 z[~mask] = r
-                colorline(self.ec.result.t, n, z, ax=ax)
-        else:
+                colorline(self.ec.result.t, n, z, lw=0.1, ax=ax)
+        elif color_code:
             for n in self.ec.result.y:
-                color = b if n[0] > 0 else r
+                z = np.ndarray(shape=[len(n), 4])
+                mask = n >= 0
+                z[mask] = b
+                z[~mask] = r
+                ax.scatter(self.ec.result.t, n, c=z, s=0.1)
+        else:
+            sns.set_palette(sns.color_palette("Set1", n_colors=len(self.ec.result.y)))
+            for n in self.ec.result.y:
                 sns.lineplot(
-                    self.ec.result.t,
-                    n,
-                    linestyle="-",
-                    color=color,
-                    mec="None",
-                    lw=0.5,
-                    ax=ax,
+                    self.ec.result.t, n, linestyle="-", mec="None", lw=0.1, ax=ax,
                 )
         ax.set_xlabel("$t$")
         ax.set_ylabel("$x_i{t}$")
@@ -94,7 +87,7 @@ def colorline(
 
     z = np.asarray(z)
 
-    segments = make_segments(x, y)
+    segments = _make_segments(x, y)
     lc = mcoll.LineCollection(
         segments, colors=z, cmap=cmap, norm=norm, linewidth=linewidth, **kwargs
     )
@@ -106,7 +99,7 @@ def colorline(
     return lc
 
 
-def make_segments(x, y):
+def _make_segments(x, y):
     """
     Create list of line segments from x and y coordinates, in the correct format
     for LineCollection: an array of the form numlines x (points per line) x 2 (x

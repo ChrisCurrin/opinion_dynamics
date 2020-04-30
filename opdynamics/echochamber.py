@@ -3,10 +3,12 @@ import numpy as np
 import logging
 
 from collections import namedtuple
-from typing import Callable
+from typing import Callable, Tuple
 
 from numpy.random import default_rng
-from scipy.stats import powerlaw, rv_continuous
+from scipy.stats import powerlaw
+
+from opdynamics.utils.distributions import negpowerlaw
 
 logging.basicConfig()
 logger = logging.getLogger("echo chamber")
@@ -20,11 +22,17 @@ EchoChamberSimResult = namedtuple(
 
 
 class EchoChamber(object):
+    """ A network of agents interacting with each other. """
 
     # noinspection PyTypeChecker
-    def __init__(self, N, m=10, K=3.0, alpha=3.0, seed=1337, *args, **kwargs):
+    def __init__(
+        self, N, m=10, K=3.0, alpha=3.0, name="echochamber", seed=1337, *args, **kwargs
+    ):
         # create a random number generator for this object (to be thread-safe)
         self.rn = default_rng(seed)
+
+        # create a human-readable name for ths object
+        self.name = name
 
         # assign args to object variables
         self.N = N
@@ -54,18 +62,12 @@ class EchoChamber(object):
         """
         self.opinions = self.rn.uniform(min_val, max_val, size=self.N)
 
-    def set_activities(
-        self,
-        distribution: rv_continuous = powerlaw,
-        *dist_args,
-        dim: int = 1,
-        inverse: bool = True,
-    ):
+    def set_activities(self, distribution=negpowerlaw, *dist_args, dim: int = 1):
         """
         Sample activities from a given distribution
 
-        :param distribution: A distribution that extends `rv_continuous`, such as `powerlaw`, to retrieve random
-            samples.
+        :param distribution: A distribution that extends `rv_continuous`, such as `powerlaw`,
+            or is like `rv_continuous` (has a `rvs` method) to retrieve random samples.
 
         :param dist_args: Arguments to pass to the distribution. See `scipy.stats`.
             For `powerlaw` (default), the expected arguments are (gamma, min_val, max_val)
@@ -74,7 +76,6 @@ class EchoChamber(object):
             second dimension is the number of agents that an agent interacts with (m), further dimensions are not
             supported and raises an error.
 
-        :param inverse: (default: True) Whether the distribution should be the inverse (1/distribution)
         """
         if dim == 1:
             size = self.N
@@ -84,22 +85,12 @@ class EchoChamber(object):
             raise NotImplementedError("dimensions of more than 2 not implemented")
 
         if distribution == powerlaw:
+            # some tinkering of arguments for `rvs` method so that we can keep this method's arguments clear
             gamma, min_val, max_val = dist_args
             # to compensate for shift
             dist_args = (*dist_args[:2], max_val - min_val)
-            if inverse:
-                # replace min_val
-                dist_args = (dist_args[0], 0, *dist_args[2:])
 
-        activities = distribution.rvs(*dist_args, size=size)
-        if distribution == powerlaw and inverse:
-            activities = dist_args[2] - activities
-        elif inverse:
-            raise NotImplementedError(
-                "inverse of the distribution not implemented yet. See if `scipy` already has an inverse"
-            )
-
-        self.activities = activities
+        self.activities = distribution.rvs(*dist_args, size=size)
 
     def set_connection_probabilities(self, beta: float = 0.0):
         """For agent `i`, the probability of connecting to agent `j` is a function of the absolute strength of
@@ -151,7 +142,7 @@ class EchoChamber(object):
             1. get the interactions (A) that happen at this time point between each of N agents based on activity
             probabilities (p_conn) and the number of agents to interact with (m).
             2. calculate opinion derivative by getting the scaled (by social influence, alpha) opinions (y.T) of agents
-            interacting with each other (A), multiplied by social interaction strength (K)
+            interacting with each other (A), multiplied by social interaction strength (K).
 
             """
             K, alpha, N, m, p_conn, A, dt = args
@@ -208,6 +199,21 @@ class EchoChamber(object):
             )
         logger.info("done running")
 
+    def get_mean_opinion(self, t: np.number = -1) -> Tuple[float, float]:
+        """Calculate the average opinion at time point `t`.
+
+        If t is -1, the last time point is used.
+
+        :param t: time point to get the average for. The closest time point is used.
+        :return: actual time point used, mean value of opinions at actual time point.
+        """
+        if self.result is None:
+            raise RuntimeError(
+                f"{self.name} has not been run. call `.run_network` first."
+            )
+        idx = -1 if t == -1 else np.argmin(np.abs(t - self.result.t))
+        return self.result.t[idx], np.mean(self.result.y[:, idx])
+
     # noinspection PySameParameterValue
     @staticmethod
     def run_params(
@@ -224,7 +230,7 @@ class EchoChamber(object):
         plot_opinion=False,
     ):
         _ec = EchoChamber(N, m, K, alpha)
-        _ec.set_activities(powerlaw, gamma, eta, 1, dim=1, inverse=True)
+        _ec.set_activities(negpowerlaw, gamma, eta, 1, dim=1)
         _ec.set_connection_probabilities(beta=beta)
         _ec.set_social_interactions(dt=dt, t_end=T, mutual=mutual_interactions)
         _ec.set_dynamics()
@@ -253,7 +259,7 @@ if __name__ == "__main__":
     eta = 1e-2  # minimum activity level with another agent
     gamma = 2.1  # power law distribution param
     beta = 2  # power law decay of connection probability
-    activity_distribution = powerlaw
+    activity_distribution = negpowerlaw
     ec = EchoChamber(num_agents, m, K, alpha)
     vis = VisEchoChamber(ec)
 
