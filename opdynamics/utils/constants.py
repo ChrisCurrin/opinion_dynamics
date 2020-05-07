@@ -1,0 +1,6 @@
+"""Store constants"""
+TIME_SYMBOL = "$t$"
+OPINION_AGENT_TIME = "$x_i (t)$"
+P_A_X = "$p(a,x)$"
+OPINION_SYMBOL = "$x$"
+ACTIVITY_SYMBOL = "$a$"

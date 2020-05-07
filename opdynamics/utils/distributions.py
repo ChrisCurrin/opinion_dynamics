@@ -22,8 +22,8 @@ class negpowerlaw(object):
         :return: Power law-distributed values, in the range [low, high], with length of `size`.
         """
         r = np.random.random(size=size)
-        ag, bg = low ** (-gamma + 1), high ** (-gamma + 1)
-        return np.power(ag + (bg - ag) * r, 1.0 / (-gamma + 1.0))
+        ag, bg = low ** (1 - gamma), high ** (1 - gamma)
+        return np.power(ag + (bg - ag) * r, 1.0 / (1 - gamma))
 
     @staticmethod
     def rvs_alt(gamma: float, low=0.01, high=1.0, size=1) -> np.ndarray:

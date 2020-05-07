@@ -1,9 +1,10 @@
 """"""
+
 import numpy as np
 import logging
 
 from collections import namedtuple
-from typing import Callable, Tuple
+from typing import Callable, Tuple, Union
 
 from numpy.random import default_rng
 from scipy.stats import powerlaw
@@ -22,7 +23,18 @@ EchoChamberSimResult = namedtuple(
 
 
 class EchoChamber(object):
-    """ A network of agents interacting with each other. """
+    """ A network of agents interacting with each other.
+
+    * N - number of agents
+    * m - number of other agents to interact with
+    * alpha - controversialness of issue (sigmoidal shape)
+    * K - social interaction strength
+    * epsilon - minimum activity level with another agent
+    * gamma - power law distribution param
+    * beta - power law decay of connection probability
+    * p_mutual_interaction - probability of a p_mutual_interaction interaction
+
+    """
 
     # noinspection PyTypeChecker
     def __init__(
@@ -111,24 +123,37 @@ class EchoChamber(object):
             p_conn[i] /= np.sum(p_conn[i])
         self.p_conn = p_conn
 
-    def set_social_interactions(self, dt, t_end, mutual=True):
-        t_arr = np.arange(0, t_end + dt, dt)
-        self.adj_mat = np.zeros((len(t_arr), self.N, self.N), dtype=int)
-        rn = self.rn.random(size=len(t_arr))
-        for t_idx, t_point in enumerate(t_arr):
-            active_agents = np.where(self.activities >= rn[t_idx])[0]
-            for i in active_agents:
-                ind = self.rn.choice(
-                    self.N,  # choose indices for
-                    size=self.m,  # other distinct agents
-                    replace=False,  # (which must be unique)
-                    p=self.p_conn[i],  # with these probabilities
+    def set_social_interactions(
+        self, r: float = 0.5, lazy=False, dt: float = None, t_end: float = None
+    ):
+        """
+        Define the social interactions that occur at each time step.
+
+        Populates `self.adj_mat` (adjacency matrix) that is used in opinion dynamics.
+
+        :param r: Probability of a mutual interaction [0,1].
+        :param lazy: Generate self.adj_mat on-demand during simulation (True) or computer all the interaction matrices
+            for all time steps before (False).
+        :param dt: Time step being used in simulation. Specified here so interaction dynamics have a clear time step
+            even if the integration of the opinion dynamics occurs at smaller time steps (e.g. with the RK method).
+        :param t_end: Last time point. Together with dt, determines the size of the social interaction array.
+
+        """
+        from opdynamics.socialinteraction import (
+            SocialInteraction,
+            get_social_interaction,
+        )
+
+        if lazy:
+            self.adj_mat = SocialInteraction(self, r)
+        else:
+            t_arr = np.arange(0, t_end + dt, dt)
+            self.adj_mat = np.zeros((len(t_arr), self.N, self.N), dtype=int)
+            active_thresholds = self.rn.random(size=len(t_arr))
+            for t_idx, t_point in enumerate(t_arr):
+                self.adj_mat[t_idx, :, :] = get_social_interaction(
+                    self, active_thresholds[t_idx], r
                 )
-                self.adj_mat[t_idx, i, ind] = 1
-                if mutual:
-                    # create symmetric matrix by not distinguishing between i->j  and j->i
-                    # a non-symmetric matrix means an agent ignores external interactions
-                    self.adj_mat[t_idx, ind, i] = 1
 
     def set_dynamics(self):
         """Set the dynamics of network by assigning a function to `self.dy_dt`.
@@ -158,16 +183,16 @@ class EchoChamber(object):
         if self.activities is None or self.p_conn is None or self.dy_dt is None:
             raise RuntimeError(
                 """Activities, connection probabilities, and dynamics need to be set. 
-                                            ec = EchoChamber(...)
-                                            ec.set_activities(...)
-                                            ec.set_connection_probabilities(...)
-                                            ec.set_dynamics(...)
-                                            ec.run_network(...)
-                                            """
+                                                            ec = EchoChamber(...)
+                                                            ec.set_activities(...)
+                                                            ec.set_connection_probabilities(...)
+                                                            ec.set_dynamics(...)
+                                                            ec.run_network(...)
+                                                            """
             )
 
         if self.adj_mat is None:
-            self.set_social_interactions(dt, t_end, mutual=True)
+            self.set_social_interactions(r=True, dt=dt, t_end=t_end)
 
         args = (self.K, self.alpha, self.N, self.m, self.p_conn, self.adj_mat, dt)
 
@@ -187,7 +212,7 @@ class EchoChamber(object):
                 t_arr, y_arr.T, None, None, None, None, None, None, None, None, True
             )
         else:
-            self.result = solve_ivp(
+            self.result: EchoChamberSimResult = solve_ivp(
                 self.dy_dt,
                 t_span=[0, t_end],
                 y0=self.opinions,
@@ -197,22 +222,35 @@ class EchoChamber(object):
                 first_step=dt,
                 max_step=dt,
             )
-        logger.info("done running")
+        # reassign opinions to last time point
+        self.opinions = self.result.y[:, -1]
+        logger.debug(f"done running {self.name}")
 
-    def get_mean_opinion(self, t: np.number = -1) -> Tuple[float, float]:
+    def get_mean_opinion(
+        self, t: Union[np.number, np.ndarray] = -1
+    ) -> Tuple[float, np.ndarray]:
         """Calculate the average opinion at time point `t`.
+
+        t can be an array of numbers if it is a numpy ndarray.
 
         If t is -1, the last time point is used.
 
+        If t is None, all time points are retrieved
+
+
         :param t: time point to get the average for. The closest time point is used.
-        :return: actual time point used, mean value of opinions at actual time point.
+        :return: pair of actual time point(s) used, mean value(s) of opinions at actual time point(s).
         """
         if self.result is None:
             raise RuntimeError(
                 f"{self.name} has not been run. call `.run_network` first."
             )
-        idx = -1 if t == -1 else np.argmin(np.abs(t - self.result.t))
-        return self.result.t[idx], np.mean(self.result.y[:, idx])
+        if isinstance(t, np.number):
+            idx = -1 if t == -1 else np.argmin(np.abs(t - self.result.t))
+        else:
+            idx = t if t is not None else np.arange(len(self.result.t))
+        time_point, average = self.result.t[idx], np.mean(self.result.y[:, idx], axis=0)
+        return time_point, average
 
     # noinspection PySameParameterValue
     @staticmethod
@@ -222,17 +260,23 @@ class EchoChamber(object):
         K=3,
         alpha=0.05,
         beta=2,
-        eta=1e-2,
+        epsilon=1e-2,
         gamma=2.1,
         dt=0.01,
         T=1.0,
-        mutual_interactions=True,
+        mutual_interactions=0.5,
         plot_opinion=False,
     ):
+        """Class method to quickly and conveniently run a simulation where the parameters differ, but the structure
+        is the same (activity distribution, dynamics, etc.)"""
+        logger.debug(
+            f"run_params(N={N}, m={m}, K={K}, alpha={alpha}, beta={beta}, epsilon={epsilon}, gamma={gamma}, "
+            f"dt={dt}, T={T}, mutual_interactions={mutual_interactions}, plot_opinion={plot_opinion})"
+        )
         _ec = EchoChamber(N, m, K, alpha)
-        _ec.set_activities(negpowerlaw, gamma, eta, 1, dim=1)
+        _ec.set_activities(negpowerlaw, gamma, epsilon, 1, dim=1)
         _ec.set_connection_probabilities(beta=beta)
-        _ec.set_social_interactions(dt=dt, t_end=T, mutual=mutual_interactions)
+        _ec.set_social_interactions(r=mutual_interactions, dt=dt, t_end=T)
         _ec.set_dynamics()
         _ec.run_network(dt=dt, t_end=T, method="RK45")
         if plot_opinion:
@@ -250,20 +294,18 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
     from opdynamics.visualise import VisEchoChamber
 
-    default_rng(1337)
-
     num_agents = 1000
     m = 10  # number of other agents to interact with
     alpha = 0.05  # controversialness of issue (sigmoidal shape)
     K = 3  # social interaction strength
-    eta = 1e-2  # minimum activity level with another agent
+    epsilon = 1e-2  # minimum activity level with another agent
     gamma = 2.1  # power law distribution param
     beta = 2  # power law decay of connection probability
     activity_distribution = negpowerlaw
-    ec = EchoChamber(num_agents, m, K, alpha)
+    ec = EchoChamber(num_agents, m, K, alpha, seed=1337)
     vis = VisEchoChamber(ec)
 
-    ec.set_activities(activity_distribution, gamma, eta, 1)
+    ec.set_activities(activity_distribution, gamma, epsilon, 1)
     vis.show_activities()
 
     ec.set_connection_probabilities(beta=beta)
@@ -274,7 +316,7 @@ if __name__ == "__main__":
 
     # this is shorthand for above
     EchoChamber.run_params(
-        num_agents, m, K, alpha, beta, eta, gamma, 0.01, 0.5, True, True
+        num_agents, m, K, alpha, beta, epsilon, gamma, 0.01, 0.5, True, True
     )
 
     plt.show()
