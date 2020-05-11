@@ -18,4 +18,6 @@ Target Python version: >= 3.6
 
 Note that the code is formatted using the [black](https://pypi.org/project/black/) Python module.
 
+Update `environment.yml` using `conda env export --from-history > environment.yml`
+
 

@@ -1,13 +1,16 @@
+from functools import wraps
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
+from typing import Callable
 
 
-def optional_fig_ax(function):
+def optional_fig_ax(function: Callable):
     """
     Decorator that optionally creates a new figure and axis if they are not defined during method call.
     """
 
+    @wraps(function)
     def wrapper(*args, **kwargs):
         """
         If neither `fig` nor `ax` are defined, then call plt.subplots().
@@ -28,6 +31,6 @@ def optional_fig_ax(function):
             ax = fig.gca()
         kwargs["fig"] = fig
         kwargs["ax"] = ax
-        function(*args, **kwargs)
+        return function(*args, **kwargs)
 
     return wrapper

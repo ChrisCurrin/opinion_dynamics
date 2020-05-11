@@ -4,11 +4,13 @@ channels:
   - defaults
 dependencies:
   - python=3.7
-  - scipy>=1.4.1
+  - scipy==1.4.1
   - numpy
   - cython
   - jupyter
   - seaborn
   - black
+  - tqdm
+  - pytables
 prefix: C:\Users\Chris\Anaconda3\envs\opinion_dynamics
 

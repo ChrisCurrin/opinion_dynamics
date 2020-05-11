@@ -10,8 +10,8 @@ from numpy.random import default_rng
 from scipy.stats import powerlaw
 
 from opdynamics.utils.distributions import negpowerlaw
+from opdynamics.integrate.types import diffeq
 
-logging.basicConfig()
 logger = logging.getLogger("echo chamber")
 
 # create a named tuple for hinting of result object from ODE solver
@@ -23,7 +23,8 @@ EchoChamberSimResult = namedtuple(
 
 
 class EchoChamber(object):
-    """ A network of agents interacting with each other.
+    """
+    A network of agents interacting with each other.
 
     * N - number of agents
     * m - number of other agents to interact with
@@ -37,9 +38,9 @@ class EchoChamber(object):
     """
 
     # noinspection PyTypeChecker
-    def __init__(
-        self, N, m=10, K=3.0, alpha=3.0, name="echochamber", seed=1337, *args, **kwargs
-    ):
+    def __init__(self, N, m, K, alpha, name="echochamber", seed=1337, *args, **kwargs):
+        from opdynamics.socialinteraction import SocialInteraction
+
         # create a random number generator for this object (to be thread-safe)
         self.rn = default_rng(seed)
 
@@ -54,15 +55,15 @@ class EchoChamber(object):
         # quick checks
         assert N > 0 and type(N) is int
         assert 0 < m < N and type(m) is int
-        assert alpha > 0
-        assert K > 0
+        assert alpha >= 0
+        assert K >= 0
 
         # create array variables
         self.opinions: np.ndarray = None
-        self.adj_mat: np.ndarray = None
+        self.adj_mat: SocialInteraction = None
         self.activities: np.ndarray = None
         self.p_conn: np.ndarray = None
-        self.dy_dt: Callable = None
+        self.dy_dt: diffeq = None
         self.result: EchoChamberSimResult = None
         self.init_opinions()
 
@@ -75,8 +76,7 @@ class EchoChamber(object):
         self.opinions = self.rn.uniform(min_val, max_val, size=self.N)
 
     def set_activities(self, distribution=negpowerlaw, *dist_args, dim: int = 1):
-        """
-        Sample activities from a given distribution
+        """Sample activities from a given distribution
 
         :param distribution: A distribution that extends `rv_continuous`, such as `powerlaw`,
             or is like `rv_continuous` (has a `rvs` method) to retrieve random samples.
@@ -92,6 +92,7 @@ class EchoChamber(object):
         if dim == 1:
             size = self.N
         elif dim == 2:
+            logger.warning("2D activities not tested!")
             size = (self.N, self.m)
         else:
             raise NotImplementedError("dimensions of more than 2 not implemented")
@@ -108,9 +109,10 @@ class EchoChamber(object):
         """For agent `i`, the probability of connecting to agent `j` is a function of the absolute strength of
         their opinions and a beta param, relative to all of the differences between an agent i and every other agent.
 
-        $$ p_{ij} = \frac{|x_i - x_j|^{-\beta}}{\sum_j |x_i - x_j|^{-\beta}} $$
+        .. math::
+            p_{ij} = \\frac{|x_i - x_j|^{-\\beta}}{\sum_j |x_i - x_j|^{-\\beta}}
 
-        :param beta: Power law decay of connection probability. Decay when beta>0, increase when beta>0.
+        :param beta: Power law decay of connection probability. Decay when beta>0, increase when beta<0.
             When beta=0, then connection probabilities are uniform.
 
         """
@@ -126,8 +128,7 @@ class EchoChamber(object):
     def set_social_interactions(
         self, r: float = 0.5, lazy=False, dt: float = None, t_end: float = None
     ):
-        """
-        Define the social interactions that occur at each time step.
+        """Define the social interactions that occur at each time step.
 
         Populates `self.adj_mat` (adjacency matrix) that is used in opinion dynamics.
 
@@ -139,21 +140,26 @@ class EchoChamber(object):
         :param t_end: Last time point. Together with dt, determines the size of the social interaction array.
 
         """
-        from opdynamics.socialinteraction import (
-            SocialInteraction,
-            get_social_interaction,
-        )
+        from opdynamics.socialinteraction import SocialInteraction
 
-        if lazy:
-            self.adj_mat = SocialInteraction(self, r)
-        else:
-            t_arr = np.arange(0, t_end + dt, dt)
-            self.adj_mat = np.zeros((len(t_arr), self.N, self.N), dtype=int)
-            active_thresholds = self.rn.random(size=len(t_arr))
-            for t_idx, t_point in enumerate(t_arr):
-                self.adj_mat[t_idx, :, :] = get_social_interaction(
-                    self, active_thresholds[t_idx], r
+        if self.activities is None or self.p_conn is None:
+            raise RuntimeError(
+                """Activities and connection probabilities need to be set. 
+                                                                        ec = EchoChamber(...)
+                                                                        ec.set_activities(...)
+                                                                        ec.set_connection_probabilities(...)
+                                                                        ec.set_social_interactions(...)
+                                                                        """
+            )
+
+        self.adj_mat = SocialInteraction(self, r)
+        if not lazy:
+            if t_end is None or dt is None:
+                raise RuntimeError(
+                    "`t_end` and `dt` need to be defined for eager calculation of adjacency matrix in "
+                    "`set_social_interactions`"
                 )
+            self.adj_mat.eager(t_end, dt)
 
     def set_dynamics(self):
         """Set the dynamics of network by assigning a function to `self.dy_dt`.
@@ -161,7 +167,7 @@ class EchoChamber(object):
         `self.dy_dt` is a function to be called by the ODE solver, which expects a signature of (t, y, *args).
         """
 
-        def dy_dt(t, y, *args):
+        def dy_dt(t: float, y: np.ndarray, *args) -> np.ndarray:
             """Activity-Driven (AD) network dynamics.
 
             1. get the interactions (A) that happen at this time point between each of N agents based on activity
@@ -177,41 +183,56 @@ class EchoChamber(object):
 
         self.dy_dt = dy_dt
 
-    def run_network(self, dt=0.01, t_end=0.05, method="RK45"):
+    def run_network(
+        self, dt: float = 0.01, t_end: float = 0.05, method: str = "RK45"
+    ) -> None:
+        """Run a simulation for the echo chamber until `t_end` with a time step of `dt`.
+
+        Because the echo chamber has ODE dynamics, an appropriate method should be chosen from
+        `scipy.integrate.solver_ivp` or `opdynamics.integrate.solvers`
+
+        :param dt: (Max) Time step for integrator. Smaller values will yield more accurate results but the simulation
+            will take longer. Large `dt` for unstable methods (like "Euler") can cause numerical instability where
+            results show **increasingly large** oscillations in opinions (nonsensical).
+        :param t_end: Time for simulation to span. Number of iterations will be at least t_end/dt.
+        :param method: Integration method to use. Must be one specified by `scipy.integrate.solver_ivp` or
+            `opdynamics.integrate.solvers`
+
+        """
         from scipy.integrate import solve_ivp
+        from opdynamics.integrate.solvers import ODE_INTEGRATORS, solve_ode
 
-        if self.activities is None or self.p_conn is None or self.dy_dt is None:
+        if (
+            self.activities is None
+            or self.p_conn is None
+            or self.adj_mat is None
+            or self.dy_dt is None
+        ):
             raise RuntimeError(
-                """Activities, connection probabilities, and dynamics need to be set. 
-                                                            ec = EchoChamber(...)
-                                                            ec.set_activities(...)
-                                                            ec.set_connection_probabilities(...)
-                                                            ec.set_dynamics(...)
-                                                            ec.run_network(...)
-                                                            """
+                """Activities, connection probabilities, social interactions, and dynamics need to be set. 
+                                                                        ec = EchoChamber(...)
+                                                                        ec.set_activities(...)
+                                                                        ec.set_connection_probabilities(...)
+                                                                        ec.set_social_interactions(...)
+                                                                        ec.set_dynamics(...)
+                                                                        ec.run_network(...)
+                                                                        """
             )
-
-        if self.adj_mat is None:
-            self.set_social_interactions(r=True, dt=dt, t_end=t_end)
 
         args = (self.K, self.alpha, self.N, self.m, self.p_conn, self.adj_mat, dt)
 
-        if method == "FEuler":
-            # forward euler
-            y = self.opinions
-            t_arr = np.arange(0, t_end + dt, dt)
-            y_arr = np.zeros(shape=(len(t_arr), len(y)))
-            for i, t in enumerate(t_arr):
-                y_arr[i] = y
-                dy_dt = self.dy_dt(t, y, *args)
-                dy = dy_dt * dt
-                y += dy
-            # add final y
-            y_arr[-1] = y
-            self.result = EchoChamberSimResult(
-                t_arr, y_arr.T, None, None, None, None, None, None, None, None, True
+        if method in ODE_INTEGRATORS:
+            # use a custom method in `opdynamics.utils.integrators`
+            self.result: EchoChamberSimResult = solve_ode(
+                self.dy_dt,
+                t_span=[0, t_end],
+                y0=self.opinions,
+                method=method,
+                dt=dt,
+                args=args,
             )
         else:
+            # use a method in `scipy.integrate`
             self.result: EchoChamberSimResult = solve_ivp(
                 self.dy_dt,
                 t_span=[0, t_end],
@@ -231,11 +252,11 @@ class EchoChamber(object):
     ) -> Tuple[float, np.ndarray]:
         """Calculate the average opinion at time point `t`.
 
-        t can be an array of numbers if it is a numpy ndarray.
+        `t` can be an array of numbers if it is a numpy ndarray.
 
-        If t is -1, the last time point is used.
+        If `t` is -1, the last time point is used.
 
-        If t is None, all time points are retrieved
+        If `t` is None, all time points are retrieved
 
 
         :param t: time point to get the average for. The closest time point is used.
@@ -252,56 +273,148 @@ class EchoChamber(object):
         time_point, average = self.result.t[idx], np.mean(self.result.y[:, idx], axis=0)
         return time_point, average
 
+    def get_nearest_neighbours(self):
+        """Calculate mean value of every agents' nearest neighbour.
+
+        .. math::
+                \\frac{\sum_j a_{ij} x_j}{\sum_j a_{ij}}
+
+        where
+
+        .. math:: a_{ij}
+        represents the (static) adjacency matrix of the aggregated interaction network
+        and
+
+        .. math:: \sum_j a_{ij}
+        is the degree of node `i`.
+
+        """
+        snapshot_adj_mat = self.adj_mat[-1]
+        out_degree_i = np.sum(snapshot_adj_mat, axis=0)
+        close_opinions = np.sum(snapshot_adj_mat * self.opinions, axis=0)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            # suppress warnings about dividing by nan or 0
+            nn = close_opinions / out_degree_i
+        return nn
+
     # noinspection PySameParameterValue
     @staticmethod
     def run_params(
-        N=1000,
-        m=10,
-        K=3,
-        alpha=0.05,
-        beta=2,
-        epsilon=1e-2,
-        gamma=2.1,
-        dt=0.01,
-        T=1.0,
-        mutual_interactions=0.5,
-        plot_opinion=False,
+        N: int = 1000,
+        m: int = 10,
+        K: float = 3,
+        alpha: float = 2,
+        beta: float = 2,
+        epsilon: float = 1e-2,
+        gamma: float = 2.1,
+        dt: float = 0.01,
+        T: float = 1.0,
+        r: float = 0.5,
+        method: str = "RK45",
+        plot_opinion: Union[bool, str] = False,
+        lazy: bool = False,
     ):
         """Class method to quickly and conveniently run a simulation where the parameters differ, but the structure
         is the same (activity distribution, dynamics, etc.)"""
         logger.debug(
             f"run_params(N={N}, m={m}, K={K}, alpha={alpha}, beta={beta}, epsilon={epsilon}, gamma={gamma}, "
-            f"dt={dt}, T={T}, mutual_interactions={mutual_interactions}, plot_opinion={plot_opinion})"
+            f"dt={dt}, T={T}, r={r}, plot_opinion={plot_opinion}, lazy={lazy})"
         )
         _ec = EchoChamber(N, m, K, alpha)
         _ec.set_activities(negpowerlaw, gamma, epsilon, 1, dim=1)
         _ec.set_connection_probabilities(beta=beta)
-        _ec.set_social_interactions(r=mutual_interactions, dt=dt, t_end=T)
+        _ec.set_social_interactions(r=r, lazy=lazy, dt=dt, t_end=T)
         _ec.set_dynamics()
-        _ec.run_network(dt=dt, t_end=T, method="RK45")
+        _ec.run_network(dt=dt, t_end=T, method=method)
         if plot_opinion:
             from matplotlib.axes import Axes
             from opdynamics.visualise import VisEchoChamber
 
             _vis = VisEchoChamber(_ec)
-            _vis.show_opinions(
-                True, ax=plot_opinion if isinstance(plot_opinion, Axes) else None
-            )
+            if plot_opinion == "summary":
+                _vis.show_summary()
+            else:
+                _vis.show_opinions(True)
         return _ec
+
+
+class NoisyEchoChamber(EchoChamber):
+    # noinspection PyTypeChecker
+    def __init__(self, name="noisy echochamber", *args, **kwargs):
+        super().__init__(name=name, *args, **kwargs)
+        self.diffusion: diffeq = None
+        self.wiener_process: Callable = None
+
+    def set_dynamics(self, D=0.01):
+        """Set up Stochastic ordinary differential equation. See `run_network` for changes to the integration."""
+        # assign drift as before, aka dy_dt
+        super().set_dynamics()
+
+        # create new diffusion term
+        self.diffusion = lambda t, y, *args: np.sqrt(D)
+        self.wiener_process = lambda: self.rn.normal(0, 1, size=self.N)
+
+    def run_network(self, dt=0.01, t_end=0.05, method="Euler–Maruyama", r=None):
+        """Dynamics are no longer of an ordinary differential equation so we can't use scipy.solve_ivp anymore"""
+
+        from opdynamics.integrate.solvers import SDE_INTEGRATORS, solve_sde
+
+        if (
+            self.activities is None
+            or self.p_conn is None
+            or self.adj_mat is None
+            or self.dy_dt is None
+        ):
+            raise RuntimeError(
+                """Activities, connection probabilities, social interactions, and dynamics need to be set. 
+                                                                            ec = EchoChamber(...)
+                                                                            ec.set_activities(...)
+                                                                            ec.set_connection_probabilities(...)
+                                                                            ec.set_social_interactions(...)
+                                                                            ec.set_dynamics(...)
+                                                                            ec.run_network(...)
+                                                                            """
+            )
+
+        args = (self.K, self.alpha, self.N, self.m, self.p_conn, self.adj_mat, dt)
+
+        if method in SDE_INTEGRATORS:
+            # use a custom method in `opdynamics.utils.integrators`
+            self.result: EchoChamberSimResult = solve_sde(
+                self.dy_dt,
+                self.diffusion,
+                self.wiener_process,
+                t_span=[0, t_end],
+                y0=self.opinions,
+                method=method,
+                dt=dt,
+                args=args,
+            )
+        else:
+            raise NotImplementedError()
+        # reassign opinions to last time point
+        self.opinions = self.result.y[:, -1]
+        logger.debug(f"done running {self.name}")
 
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     from opdynamics.visualise import VisEchoChamber
 
+    logging.basicConfig(level=logging.DEBUG)
+
     num_agents = 1000
     m = 10  # number of other agents to interact with
-    alpha = 0.05  # controversialness of issue (sigmoidal shape)
+    alpha = 2  # controversialness of issue (sigmoidal shape)
     K = 3  # social interaction strength
     epsilon = 1e-2  # minimum activity level with another agent
     gamma = 2.1  # power law distribution param
     beta = 2  # power law decay of connection probability
     activity_distribution = negpowerlaw
+
+    dt = 0.01
+    t_end = 0.5
+
     ec = EchoChamber(num_agents, m, K, alpha, seed=1337)
     vis = VisEchoChamber(ec)
 
@@ -309,14 +422,19 @@ if __name__ == "__main__":
     vis.show_activities()
 
     ec.set_connection_probabilities(beta=beta)
+    ec.set_social_interactions(r=0.5, dt=dt, t_end=t_end)
     ec.set_dynamics()
 
-    ec.run_network(dt=0.01, t_end=0.5)
+    ec.run_network(dt=dt, t_end=t_end)
     vis.show_opinions(color_code=False)
 
     # this is shorthand for above
     EchoChamber.run_params(
-        num_agents, m, K, alpha, beta, epsilon, gamma, 0.01, 0.5, True, True
+        num_agents, m, K, alpha, beta, epsilon, gamma, 0.01, 0.5, plot_opinion=True
+    )
+
+    EchoChamber.run_params(
+        num_agents, m, K, alpha, beta, epsilon, gamma, 0.01, 1, plot_opinion="summary"
     )
 
     plt.show()
