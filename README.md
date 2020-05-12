@@ -13,6 +13,10 @@ Target Python version: >= 3.6
 
 `jupter notebook opdynamics.ipynb`
 
+## 3. Use as a module
+
+`python -m opdynamics 1000 10 2 3 -beta 2 --activity negpowerlaw 2.1 1e-2 -r 0.5 -T 10 --plot summary --save -v`
+`python -m opdynamics 1000 10 2 3 -D 0.01 -beta 2 --activity negpowerlaw 2.1 1e-2 -r 0.5 -T 10 --plot summary --save -v`
 
 # Development
 

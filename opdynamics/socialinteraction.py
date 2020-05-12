@@ -1,6 +1,7 @@
 from functools import lru_cache
 import logging
 import numpy as np
+from tqdm import tqdm
 
 from opdynamics.echochamber import EchoChamber
 
@@ -42,16 +43,21 @@ class SocialInteraction(object):
         assert (
             0 <= p_mutual_interaction <= 1
         ), "p_mutual_interaction is a probability between 0 and 1"
+        logger.debug(
+            f"Social Interaction for {ec.name} initialised with r={p_mutual_interaction}."
+        )
 
     def eager(self, t_end: float, dt: float):
         """Pre-compute social interactions (the adjacency matrix) for each time step until t_end."""
+        logger.info(f"eagerly computing {1+int(t_end/dt)} adjacency matrices...")
         t_arr = np.arange(0, t_end + dt, dt)
         self._time_mat = np.zeros((len(t_arr), self.ec.N, self.ec.N), dtype=int)
         active_thresholds = self.ec.rn.random(size=len(t_arr))
-        for t_idx, t_point in enumerate(t_arr):
+        for t_idx, t_point in tqdm(enumerate(t_arr)):
             self._time_mat[t_idx, :, :] = get_social_interaction(
                 self.ec, active_thresholds[t_idx], self.p_mutual_interaction
             )
+        logger.debug(f"adjacency matrix has shape = {self._time_mat.shape}")
 
     @property
     def accumulator(self):

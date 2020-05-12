@@ -1,3 +1,5 @@
+import time
+import logging
 from functools import wraps
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
@@ -6,8 +8,13 @@ from typing import Callable
 
 
 def optional_fig_ax(function: Callable):
-    """
-    Decorator that optionally creates a new figure and axis if they are not defined during method call.
+    """Decorator that optionally creates a new figure and axis if they are not defined during method call.
+
+    Usage:
+    @optional_fig_ag
+    def function(ax=None, fig=None):
+        ...
+        return fig, ax
     """
 
     @wraps(function)
@@ -32,5 +39,36 @@ def optional_fig_ax(function: Callable):
         kwargs["fig"] = fig
         kwargs["ax"] = ax
         return function(*args, **kwargs)
+
+    return wrapper
+
+
+class timeblock(object):
+    """Context guard for timing a block of code"""
+
+    def __enter__(self, name=""):
+        self.start = time.time()
+        self.name = name
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        end = time.time()
+        logging.debug(f"{self.name} took: {end - self.start:2.2f} sec")
+
+
+def timefunc(f):
+    """Decorator for timing functions
+    Usage:
+    @timing
+    def function(a):
+        pass
+    """
+
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        start = time.time()
+        result = f(*args, **kwargs)
+        end = time.time()
+        logging.debug(f"function:{f.__name__} took: {end-start:2.2f} sec")
+        return result
 
     return wrapper

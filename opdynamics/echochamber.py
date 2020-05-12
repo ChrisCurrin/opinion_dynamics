@@ -3,23 +3,15 @@
 import numpy as np
 import logging
 
-from collections import namedtuple
 from typing import Callable, Tuple, Union
 
 from numpy.random import default_rng
 from scipy.stats import powerlaw
 
 from opdynamics.utils.distributions import negpowerlaw
-from opdynamics.integrate.types import diffeq
+from opdynamics.integrate.types import SolverResult, diffeq
 
 logger = logging.getLogger("echo chamber")
-
-# create a named tuple for hinting of result object from ODE solver
-# see `scipy.stats.solve_ivp` for return object definition
-EchoChamberSimResult = namedtuple(
-    "EchoChamberSimResult",
-    "t y sol t_events y_events nfev njev nlu status message success",
-)
 
 
 class EchoChamber(object):
@@ -64,7 +56,7 @@ class EchoChamber(object):
         self.activities: np.ndarray = None
         self.p_conn: np.ndarray = None
         self.dy_dt: diffeq = None
-        self.result: EchoChamberSimResult = None
+        self.result: SolverResult = None
         self.init_opinions()
 
     def init_opinions(self, min_val=-1.0, max_val=1.0):
@@ -161,7 +153,7 @@ class EchoChamber(object):
                 )
             self.adj_mat.eager(t_end, dt)
 
-    def set_dynamics(self):
+    def set_dynamics(self, *args, **kwargs):
         """Set the dynamics of network by assigning a function to `self.dy_dt`.
 
         `self.dy_dt` is a function to be called by the ODE solver, which expects a signature of (t, y, *args).
@@ -223,7 +215,7 @@ class EchoChamber(object):
 
         if method in ODE_INTEGRATORS:
             # use a custom method in `opdynamics.utils.integrators`
-            self.result: EchoChamberSimResult = solve_ode(
+            self.result: SolverResult = solve_ode(
                 self.dy_dt,
                 t_span=[0, t_end],
                 y0=self.opinions,
@@ -233,7 +225,7 @@ class EchoChamber(object):
             )
         else:
             # use a method in `scipy.integrate`
-            self.result: EchoChamberSimResult = solve_ivp(
+            self.result: SolverResult = solve_ivp(
                 self.dy_dt,
                 t_span=[0, t_end],
                 y0=self.opinions,
@@ -297,61 +289,21 @@ class EchoChamber(object):
             nn = close_opinions / out_degree_i
         return nn
 
-    # noinspection PySameParameterValue
-    @staticmethod
-    def run_params(
-        N: int = 1000,
-        m: int = 10,
-        K: float = 3,
-        alpha: float = 2,
-        beta: float = 2,
-        epsilon: float = 1e-2,
-        gamma: float = 2.1,
-        dt: float = 0.01,
-        T: float = 1.0,
-        r: float = 0.5,
-        method: str = "RK45",
-        plot_opinion: Union[bool, str] = False,
-        lazy: bool = False,
-    ):
-        """Class method to quickly and conveniently run a simulation where the parameters differ, but the structure
-        is the same (activity distribution, dynamics, etc.)"""
-        logger.debug(
-            f"run_params(N={N}, m={m}, K={K}, alpha={alpha}, beta={beta}, epsilon={epsilon}, gamma={gamma}, "
-            f"dt={dt}, T={T}, r={r}, plot_opinion={plot_opinion}, lazy={lazy})"
-        )
-        _ec = EchoChamber(N, m, K, alpha)
-        _ec.set_activities(negpowerlaw, gamma, epsilon, 1, dim=1)
-        _ec.set_connection_probabilities(beta=beta)
-        _ec.set_social_interactions(r=r, lazy=lazy, dt=dt, t_end=T)
-        _ec.set_dynamics()
-        _ec.run_network(dt=dt, t_end=T, method=method)
-        if plot_opinion:
-            from matplotlib.axes import Axes
-            from opdynamics.visualise import VisEchoChamber
-
-            _vis = VisEchoChamber(_ec)
-            if plot_opinion == "summary":
-                _vis.show_summary()
-            else:
-                _vis.show_opinions(True)
-        return _ec
-
 
 class NoisyEchoChamber(EchoChamber):
     # noinspection PyTypeChecker
-    def __init__(self, name="noisy echochamber", *args, **kwargs):
+    def __init__(self, *args, name="noisy echochamber", **kwargs):
         super().__init__(name=name, *args, **kwargs)
         self.diffusion: diffeq = None
         self.wiener_process: Callable = None
 
-    def set_dynamics(self, D=0.01):
+    def set_dynamics(self, D=0.01, *args, **kwargs):
         """Set up Stochastic ordinary differential equation. See `run_network` for changes to the integration."""
         # assign drift as before, aka dy_dt
         super().set_dynamics()
 
         # create new diffusion term
-        self.diffusion = lambda t, y, *args: np.sqrt(D)
+        self.diffusion = lambda t, y, *diff_args: np.sqrt(D)
         self.wiener_process = lambda: self.rn.normal(0, 1, size=self.N)
 
     def run_network(self, dt=0.01, t_end=0.05, method="Euler–Maruyama", r=None):
@@ -380,7 +332,7 @@ class NoisyEchoChamber(EchoChamber):
 
         if method in SDE_INTEGRATORS:
             # use a custom method in `opdynamics.utils.integrators`
-            self.result: EchoChamberSimResult = solve_sde(
+            self.result: SolverResult = solve_sde(
                 self.dy_dt,
                 self.diffusion,
                 self.wiener_process,
@@ -411,7 +363,7 @@ if __name__ == "__main__":
     gamma = 2.1  # power law distribution param
     beta = 2  # power law decay of connection probability
     activity_distribution = negpowerlaw
-
+    r = 0.5
     dt = 0.01
     t_end = 0.5
 
@@ -422,19 +374,10 @@ if __name__ == "__main__":
     vis.show_activities()
 
     ec.set_connection_probabilities(beta=beta)
-    ec.set_social_interactions(r=0.5, dt=dt, t_end=t_end)
+    ec.set_social_interactions(r=r, dt=dt, t_end=t_end)
     ec.set_dynamics()
 
     ec.run_network(dt=dt, t_end=t_end)
     vis.show_opinions(color_code=False)
-
-    # this is shorthand for above
-    EchoChamber.run_params(
-        num_agents, m, K, alpha, beta, epsilon, gamma, 0.01, 0.5, plot_opinion=True
-    )
-
-    EchoChamber.run_params(
-        num_agents, m, K, alpha, beta, epsilon, gamma, 0.01, 1, plot_opinion="summary"
-    )
 
     plt.show()

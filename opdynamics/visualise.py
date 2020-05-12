@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from typing import Callable
+from typing import Callable, Tuple
 
 from matplotlib import colors
 from matplotlib.axes import Axes
@@ -33,12 +33,19 @@ class VisEchoChamber(object):
     @optional_fig_ax
     def show_activities(self, ax: Axes = None, fig: Figure = None) -> (Figure, Axes):
         sns.distplot(self.ec.activities, kde=False, axlabel="activity", ax=ax)
-        ax.set(title="Activity distribution", ylabel="count")
+        ax.set(
+            title="Activity distribution",
+            ylabel="count",
+            xlim=(
+                np.min(np.append(self.ec.activities, 0)),
+                np.max(np.append(self.ec.activities, 1)),
+            ),
+        )
         return fig, ax
 
     @optional_fig_ax
     def show_opinions(
-        self, color_code=True, ax: Axes = None, fig: Figure = None
+        self, color_code=True, ax: Axes = None, fig: Figure = None, title: bool = True
     ) -> (Figure, Axes):
         b = colors.to_rgba("blue")
         r = colors.to_rgba("red")
@@ -67,17 +74,19 @@ class VisEchoChamber(object):
         ax.set_xlim(0, self.ec.result.t[-1])
         ax.set_xlabel(TIME_SYMBOL)
         ax.set_ylabel(OPINION_AGENT_TIME)
-        ax.set_title("Opinion dynamics")
+        if title:
+            ax.set_title("Opinion dynamics")
         return fig, ax
 
     @optional_fig_ax
     def show_opinions_snapshot(
-        self, ax: Axes = None, fig: Figure = None, **kwargs
+        self, ax: Axes = None, fig: Figure = None, title: bool = True, **kwargs
     ) -> (Figure, Axes):
         sns.distplot(self.ec.opinions, ax=ax, **kwargs)
         ax.set_xlabel(OPINION_SYMBOL)
         ax.set_ylabel(f"$P({OPINION_SYMBOL})$")
-        ax.set_title("Opinions distribution")
+        if title:
+            ax.set_title("Opinions distribution")
         return fig, ax
 
     @optional_fig_ax
@@ -87,7 +96,8 @@ class VisEchoChamber(object):
         sort=False,
         ax: Axes = None,
         fig: Figure = None,
-        colorbar=True,
+        colorbar: bool = True,
+        title: bool = True,
     ) -> (Figure, Axes):
         opinions = self.ec.opinions
         agents = np.arange(self.ec.N)
@@ -145,7 +155,8 @@ class VisEchoChamber(object):
             ax.set_xlabel(OPINION_SYMBOL)
         ax.set_ylabel("Agent $i$")
         ax.yaxis.set_major_locator(MaxNLocator(5))
-        ax.set_title("Agent opinions")
+        if title:
+            ax.set_title("Agent opinions")
         return fig, ax
 
     @optional_fig_ax
@@ -155,10 +166,13 @@ class VisEchoChamber(object):
         norm: Normalize = LogNorm(),
         ax: Axes = None,
         fig: Figure = None,
+        title: bool = True,
         **kwargs,
     ) -> (Figure, Axes):
         """
         Density scatter plot colored by 2d histogram
+
+        # TODO: adjust for density per activity level
 
         https://stackoverflow.com/a/53865762
 
@@ -166,6 +180,8 @@ class VisEchoChamber(object):
         :param norm: The scale of the density plot (normal, log, etc.)
         :param ax: Axes to use for plot. Created if none passed.
         :param fig: Figure to use for colorbar. Created if none passed.
+        :param title: Include a title for the axis.
+
         :return: (Figure, Axes) used.
         """
         # get density based on bin size
@@ -198,7 +214,8 @@ class VisEchoChamber(object):
 
         ax.set_xlabel(OPINION_SYMBOL)
         ax.set_ylabel(ACTIVITY_SYMBOL)
-        ax.set_title("Density of activity and opinions")
+        if title:
+            ax.set_title("Density of activity and opinions")
         return fig, ax
 
     @optional_fig_ax
@@ -209,6 +226,7 @@ class VisEchoChamber(object):
         norm=LogNorm(),
         ax: Axes = None,
         fig: Figure = None,
+        title: bool = True,
         **kwargs,
     ) -> (Figure or ClusterGrid, Axes):
         """
@@ -228,7 +246,8 @@ class VisEchoChamber(object):
         :param norm: The scale of the plot (normal, log, etc.).
         :param ax: Axes to use for plot. Created if none passed.
         :param fig: Figure to use for colorbar. Created if none passed.
-
+        :param title: Include title in the figure.
+        
         :keyword cbar_ax: Axes to use for plotting the colorbar.
 
         :return: (Figure, Axes) used.
@@ -257,6 +276,8 @@ class VisEchoChamber(object):
             )
 
         if map == "clustermap":
+            if fig:
+                plt.close(fig)
             fig = sns.clustermap(
                 total_interactions, norm=norm, cbar_kws=cbar_kws, **kwargs
             )
@@ -276,11 +297,13 @@ class VisEchoChamber(object):
             ax.set_ylim(0, self.ec.N)
             cax = cbar_kws.pop("cbar_ax", None) or cbar_kws.pop("cax", None)
             if cax is None:
+                # TODO: fix colorbar not using the correct cmap
                 colorbar_inset(
                     ScalarMappable(norm=norm, cmap=getattr(kwargs, "cmap", None)),
                     "outer right",
                     size="5%",
                     ax=ax,
+                    cmap=getattr(kwargs, "cmap", None),
                     **cbar_kws,
                 )
             else:
@@ -297,24 +320,29 @@ class VisEchoChamber(object):
             )
         ax.set_xlabel("Agent $i$")
         ax.set_ylabel("Agent $j$")
-        ax.set_title("Cumulative adjacency matrix")
+        if title:
+            if map == "clustermap":
+                fig.fig.suptitle("Cumulative adjacency matrix")
+            else:
+                ax.set_title("Cumulative adjacency matrix")
         return fig, ax
 
-    def show_nearest_neighbour(self, **kwargs,) -> sns.JointGrid:
+    def show_nearest_neighbour(self, title=True, **kwargs) -> sns.JointGrid:
         nn = self.ec.get_nearest_neighbours()
         g = sns.jointplot(self.ec.opinions, nn, kind="kde", **kwargs)
         g.ax_joint.set_xlabel(OPINION_SYMBOL)
         g.ax_joint.set_ylabel(MEAN_NEAREST_NEIGHBOUR)
-        g.fig.suptitle("Neighbour's opinions")
+        if title:
+            g.fig.suptitle("Neighbour's opinions")
         return g
 
-    def show_summary(self, single_fig=True, fig_kwargs=None):
+    def show_summary(self, single_fig=True, fig_kwargs=None) -> Tuple[Figure, Axes]:
         nrows = 3
         ncols = 2
         if single_fig:
             if fig_kwargs is None:
                 fig_kwargs = {
-                    "figsize": (8, 8),
+                    "figsize": (8, 11),
                 }
             fig, ax = plt.subplots(nrows, ncols, **fig_kwargs)
         else:
@@ -325,6 +353,9 @@ class VisEchoChamber(object):
                 .astype(Axes)
             )
             fig = None
+            # call other methods that create their own figures
+            self.show_nearest_neighbour()
+            self.show_adjacency_matrix("clustermap")
         # first column
         _, ax[0, 0] = self.show_opinions(ax=ax[0, 0])
         _, ax[1, 0] = self.show_adjacency_matrix("mesh", sort=True, ax=ax[1, 0])
