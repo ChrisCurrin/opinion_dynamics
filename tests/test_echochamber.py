@@ -4,9 +4,11 @@ import numpy as np
 
 from unittest import TestCase
 
-from opdynamics.echochamber import EchoChamber
+from opdynamics.dynamics.echochamber import EchoChamber
 
 # noinspection PyUnusedName
+from opdynamics.integrate.types import OdeResult
+
 logger = logging.getLogger("test_echochamber")
 
 
@@ -85,7 +87,7 @@ class TestEchoChamber(TestCase):
         )
 
     def test_set_social_interactions(self):
-        from opdynamics.socialinteraction import SocialInteraction
+        from opdynamics.dynamics.socialinteraction import SocialInteraction
         from scipy.stats import norm
 
         # this must be first (before setting activities and connection probabilities)
@@ -127,7 +129,7 @@ class TestEchoChamber(TestCase):
                 total,
                 self.ec.N * self.ec.m * (1 + r * 0.95),
                 f"expected every agent to interact with at least {self.ec.m} other agents. This means that for "
-                f"r={r}, there should be at least {self.ec.N * self.ec.m * (1 + r * 0.95)} interactions (within 95% "
+                f"r={r}, there should be at least {self.ec.N*self.ec.m*(1 + r*0.95)} interactions (within 95% "
                 f"to account for some overlap)",
             )
             self.assertLessEqual(
@@ -178,10 +180,73 @@ class TestEchoChamber(TestCase):
         )
 
     def test_run_network(self):
-        self.fail()
+        from opdynamics.utils.distributions import negpowerlaw
+        from opdynamics.integrate.types import SolverResult
+
+        self.ec.alpha = 3  # controversialness of issue (sigmoidal shape)
+        self.ec.K = 3  # social interaction strength
+        epsilon = 1e-2  # minimum activity level with another agent
+        gamma = 2.1  # power law distribution param
+        beta = 3  # power law decay of connection probability
+        r = 0.5  # probability of a mutual interaction
+        activity_distribution = negpowerlaw
+
+        dt = 0.01
+        T = 0.1
+        # this must be first (before setting activities and connection probabilities)
+        with self.assertRaises(RuntimeError):
+            self.ec.run_network()
+
+        # required setup
+        self.ec.set_activities(negpowerlaw, gamma, epsilon)
+        self.ec.set_connection_probabilities(beta=beta)
+        self.ec.set_social_interactions(r=r, lazy=True)
+        self.ec.set_dynamics()
+
+        # run network using scipy solver (Rk45) and custom solver (Euler)
+        min_total_iter = 0
+        for method in ["RK45", "Euler"]:
+            self.ec.run_network(dt=dt, t_end=T, method=method)
+            min_total_iter += T // dt
+            self.assertTrue(isinstance(self.ec.result, OdeResult))
+            self.assertTrue(hasattr(self.ec.result, "t"))
+            self.assertTrue(hasattr(self.ec.result, "y"))
+            self.assertGreaterEqual(self.ec.result.t.shape[0], min_total_iter)
+            self.assertGreaterEqual(self.ec.result.y.shape[1], min_total_iter)
+            self.assertEqual(self.ec.result.y.shape[0], self.ec.N)
 
     def test_get_mean_opinion(self):
-        self.fail()
+        from opdynamics.utils.distributions import negpowerlaw
+
+        self.ec.alpha = 0.05  # controversialness of issue (sigmoidal shape)
+        self.ec.K = 3  # social interaction strength
+        epsilon = 1e-2  # minimum activity level with another agent
+        gamma = 2.1  # power law distribution param
+        beta = 2  # power law decay of connection probability
+        r = 0.5  # probability of a mutual interaction
+
+        self.ec.N = 10000
+        self.ec.init_opinions(-1, 1)
+        self.assertAlmostEqual(np.mean(self.ec.opinions), 0, 2)
+
+        self.ec.set_activities(negpowerlaw, gamma, epsilon)
+        self.ec.set_connection_probabilities(beta=beta)
+        self.ec.set_social_interactions(r=r, lazy=True)
+        self.ec.set_dynamics()
+
+        T = 0.02
+        dt = 0.01
+        # run network for 2 time steps
+        self.ec.run_network(dt=dt, t_end=T, method="Euler")
+
+        t, opinion = self.ec.get_mean_opinion(0)
+        self.assertAlmostEqual(opinion, 0, 2)
+        t, opinion = self.ec.get_mean_opinion(dt)
+        self.assertAlmostEqual(opinion, 0, 2)
+        t, opinion = self.ec.get_mean_opinion(T)
+        t_last, opinion_last = self.ec.get_mean_opinion(-1)
+        self.assertAlmostEqual(opinion, 0, 2)
+        self.assertEqual(opinion, opinion_last)
 
     def test_get_nearest_neighbours(self):
         self.fail()

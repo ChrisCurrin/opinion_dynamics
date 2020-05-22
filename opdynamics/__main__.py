@@ -5,8 +5,8 @@ import logging
 
 from scipy.integrate._ivp.ivp import METHODS as SCIPY_METHODS
 
-from opdynamics.echochamber import EchoChamber, NoisyEchoChamber
-from opdynamics.simulation import Simulation
+from opdynamics.dynamics.echochamber import EchoChamber, NoisyEchoChamber
+from opdynamics.simulation import run_params
 from opdynamics.integrate.solvers import ODE_INTEGRATORS, SDE_INTEGRATORS
 from opdynamics.utils.distributions import negpowerlaw
 
@@ -212,7 +212,7 @@ else:
     ec_type = EchoChamber
 
 # Run simulation
-ec = Simulation.run_params(ec_type, **kwargs)
+ec = run_params(ec_type, **kwargs)
 
 if args.plot:
     import matplotlib.pyplot as plt

@@ -9,18 +9,18 @@ from typing import Callable, Tuple
 from matplotlib import colors
 from matplotlib.axes import Axes
 from matplotlib.cm import ScalarMappable
-from matplotlib.colors import LogNorm, Normalize
+from matplotlib.colors import LogNorm, Normalize, TwoSlopeNorm
 from matplotlib.figure import Figure
 from matplotlib.ticker import MaxNLocator
-from mpl_toolkits.axes_grid1 import make_axes_locatable
 
-from scipy.interpolate import interpn
 from seaborn.matrix import ClusterGrid
 
-from opdynamics.echochamber import EchoChamber
+from opdynamics.dynamics.echochamber import EchoChamber
 from opdynamics.utils.constants import *
 from opdynamics.utils.decorators import optional_fig_ax
-from opdynamics.utils.plot_utils import colorbar_inset
+from opdynamics.utils.plot_utils import use_self_args
+from opdynamics.utils.plot_utils import colorbar_inset, colorline
+from opdynamics.visualise.dense import show_activity_vs_opinion
 
 logger = logging.getLogger("visualise")
 logging.getLogger("matplotlib").setLevel(logging.WARNING)
@@ -29,6 +29,10 @@ logging.getLogger("matplotlib").setLevel(logging.WARNING)
 class VisEchoChamber(object):
     def __init__(self, echochamber: EchoChamber):
         self.ec = echochamber
+
+    show_activity_vs_opinion = use_self_args(
+        show_activity_vs_opinion, ["ec.opinions", "ec.activities"]
+    )
 
     @optional_fig_ax
     def show_activities(self, ax: Axes = None, fig: Figure = None) -> (Figure, Axes):
@@ -45,48 +49,75 @@ class VisEchoChamber(object):
 
     @optional_fig_ax
     def show_opinions(
-        self, color_code=True, ax: Axes = None, fig: Figure = None, title: bool = True
+        self,
+        color_code=True,
+        subsample: int = 1,
+        ax: Axes = None,
+        fig: Figure = None,
+        title: bool = True,
+        **kwargs,
     ) -> (Figure, Axes):
-        b = colors.to_rgba("blue")
-        r = colors.to_rgba("red")
+        """
+
+        :param color_code: Whether to color by valence (True) or by agent (False).
+            By default, a scatter plot is used, but a line plot with precise coloring can be specified with 'line'.
+        :param subsample: The number of agents to plot.
+            A subsample of 1 means every agent is plotted. 10 is every 10th agent, etc.
+        :param ax: Axes to use for plot. Created if none passed.
+        :param fig: Figure to use for colorbar. Created if none passed.
+        :param title: Include title in the figure.
+
+
+        :return: (Figure, Axes) used.
+        """
+        sm = ScalarMappable(
+            norm=TwoSlopeNorm(0, np.min(self.ec.result.y), np.max(self.ec.result.y)),
+            cmap=OPINIONS_CMAP,
+        )
         if color_code == "line" or color_code == "lines":
             # using the colorline method allows colors to be dependent on a value, in this case, opinion,
             # but takes much longer to display
-            for n in self.ec.result.y:
-                z = np.ndarray(shape=[len(n), 4])
-                mask = n >= 0
-                z[mask] = b
-                z[~mask] = r
-                colorline(self.ec.result.t, n, z, lw=0.1, ax=ax)
+            for n in self.ec.result.y[::subsample]:
+                c = sm.to_rgba(n)
+                lw = kwargs.pop("lw", 0.1)
+                colorline(self.ec.result.t, n, c, lw=lw, ax=ax, **kwargs)
         elif color_code:
-            for n in self.ec.result.y:
-                z = np.ndarray(shape=[len(n), 4])
-                mask = n >= 0
-                z[mask] = b
-                z[~mask] = r
-                ax.scatter(self.ec.result.t, n, c=z, s=0.1)
+            for n in self.ec.result.y[::subsample]:
+                c = sm.to_rgba(n)
+                s = kwargs.pop("s", 0.1)
+                ax.scatter(self.ec.result.t, n, c=c, s=s, **kwargs)
         else:
+            lw = kwargs.pop("lw", 0.1)
+            ls = kwargs.pop("ls", "-")
+            mec = kwargs.pop("mec", "None")
             sns.set_palette(sns.color_palette("Set1", n_colors=len(self.ec.result.y)))
-            for n in self.ec.result.y:
+            for n in self.ec.result.y[::subsample]:
                 sns.lineplot(
-                    self.ec.result.t, n, linestyle="-", mec="None", lw=0.1, ax=ax,
+                    self.ec.result.t, n, ls=ls, mec=mec, lw=lw, ax=ax,
                 )
         ax.set_xlim(0, self.ec.result.t[-1])
         ax.set_xlabel(TIME_SYMBOL)
         ax.set_ylabel(OPINION_AGENT_TIME)
+        ax.set_ylim(*self._get_equal_opinion_limits())
         if title:
-            ax.set_title("Opinion dynamics")
+            if type(title) is not bool:
+                ax.set_title(title)
+            else:
+                ax.set_title("Opinion dynamics")
         return fig, ax
 
     @optional_fig_ax
     def show_opinions_snapshot(
-        self, ax: Axes = None, fig: Figure = None, title: bool = True, **kwargs
+        self, ax: Axes = None, fig: Figure = None, title: bool = True, t=-1, **kwargs
     ) -> (Figure, Axes):
-        sns.distplot(self.ec.opinions, ax=ax, **kwargs)
+        idx = np.argmin(np.abs(t - self.ec.result.t)) if isinstance(t, float) else t
+        bins = kwargs.pop("bins", self.ec.N // 5)
+        sns.distplot(self.ec.result.y[:, idx], bins=bins, ax=ax, **kwargs)
         ax.set_xlabel(OPINION_SYMBOL)
         ax.set_ylabel(f"$P({OPINION_SYMBOL})$")
+        ax.set_xlim(*self._get_equal_opinion_limits())
         if title:
-            ax.set_title("Opinions distribution")
+            ax.set_title(title or "Opinions distribution")
         return fig, ax
 
     @optional_fig_ax
@@ -114,9 +145,10 @@ class VisEchoChamber(object):
             opinions = opinions[ind]
             # agents = agents[ind]
 
-        # center the colormap on 0 by equally spacing vmin and vmax
-        v = np.max(np.abs(opinions))  # largest value
-        sm = ScalarMappable(norm=Normalize(-v, v), cmap="seismic_r")
+        v = self._get_equal_opinion_limits()
+        sm = ScalarMappable(
+            norm=TwoSlopeNorm(0, np.min(opinions), np.max(opinions)), cmap=OPINIONS_CMAP
+        )
         color = sm.to_rgba(opinions)
 
         ax.barh(
@@ -149,7 +181,6 @@ class VisEchoChamber(object):
             cbar.set_label(OPINION_SYMBOL)
 
         ax.set_ylim(0, self.ec.N)
-        ax.set_xlim(-v, v)
         if not colorbar:
             # xlabel not part of colorbar
             ax.set_xlabel(OPINION_SYMBOL)
@@ -159,64 +190,18 @@ class VisEchoChamber(object):
             ax.set_title("Agent opinions")
         return fig, ax
 
-    @optional_fig_ax
-    def show_activity_vs_opinions(
-        self,
-        bins: int = 20,
-        norm: Normalize = LogNorm(),
-        ax: Axes = None,
-        fig: Figure = None,
-        title: bool = True,
-        **kwargs,
-    ) -> (Figure, Axes):
-        """
-        Density scatter plot colored by 2d histogram
-
-        # TODO: adjust for density per activity level
-
-        https://stackoverflow.com/a/53865762
-
-        :param bins: Number of bins to group opinions for determining density.
-        :param norm: The scale of the density plot (normal, log, etc.)
-        :param ax: Axes to use for plot. Created if none passed.
-        :param fig: Figure to use for colorbar. Created if none passed.
-        :param title: Include a title for the axis.
-
-        :return: (Figure, Axes) used.
-        """
-        # get density based on bin size
-        data, x_e, y_e = np.histogram2d(
-            self.ec.opinions, self.ec.activities, bins=bins, density=True
-        )
-        # interpolate so shape is same as x and y
-        z = interpn(
-            (0.5 * (x_e[1:] + x_e[:-1]), 0.5 * (y_e[1:] + y_e[:-1])),
-            data,
-            np.vstack([self.ec.opinions, self.ec.activities]).T,
-            method="splinef2d",
-            bounds_error=False,
+    def show_activity_vs_opinions(self, *args, **kwargs,) -> (Figure, Axes):
+        return show_activity_vs_opinion(
+            self.ec.opinions, self.ec.activities, *args, **kwargs
         )
 
-        # To be sure to plot all data
-        z[np.where(np.isnan(z))] = 0.0
-
-        # Sort the points by density, so that the densest points are plotted last
-
-        idx = z.argsort()
-        x, y, z = self.ec.opinions[idx], self.ec.activities[idx], z[idx]
-        marker_size = kwargs.pop("s", 1)
-        points = ax.scatter(x, y, s=marker_size, c=z, norm=norm, **kwargs)
-
-        # create colorbar axes without stealing from main ax
-        colorbar_inset(points, "outer right", size="5%", ax=ax, label=P_A_X)
-
-        # fig.colorbar(points, cax=cax, label=P_A_X)
-
-        ax.set_xlabel(OPINION_SYMBOL)
-        ax.set_ylabel(ACTIVITY_SYMBOL)
-        if title:
-            ax.set_title("Density of activity and opinions")
-        return fig, ax
+    def _get_equal_opinion_limits(self):
+        if self.ec.result is None:
+            opinions = self.ec.opinions
+        else:
+            opinions = self.ec.result.y
+        v = np.max(np.abs(opinions))
+        return -v, v
 
     @optional_fig_ax
     def show_adjacency_matrix(
@@ -224,6 +209,7 @@ class VisEchoChamber(object):
         map="clustermap",
         sort=False,
         norm=LogNorm(),
+        cmap=INTERACTIONS_CMAP,
         ax: Axes = None,
         fig: Figure = None,
         title: bool = True,
@@ -247,7 +233,7 @@ class VisEchoChamber(object):
         :param ax: Axes to use for plot. Created if none passed.
         :param fig: Figure to use for colorbar. Created if none passed.
         :param title: Include title in the figure.
-        
+
         :keyword cbar_ax: Axes to use for plotting the colorbar.
 
         :return: (Figure, Axes) used.
@@ -261,30 +247,32 @@ class VisEchoChamber(object):
             index=pd.Index(np.arange(self.ec.N), name="j"),
         )
 
+        if sort:
+            total_interactions = total_interactions.sort_values(
+                by=list(total_interactions.index), axis="index"
+            ).sort_values(by=list(total_interactions.columns), axis="columns")
+
         # default label for colorbar
         cbar_kws = {"label": "Number of interactions", **kwargs.pop("cbar_kws", {})}
 
         if isinstance(norm, LogNorm) and getattr(kwargs, "vmin", -1) <= 0:
             kwargs["vmin"] = 1
 
-        if sort:
-            total_interactions = total_interactions.sort_values(
-                by=list(total_interactions.index), axis="index"
-            )
-            total_interactions = total_interactions.sort_values(
-                by=list(total_interactions.columns), axis="columns"
-            )
-
         if map == "clustermap":
             if fig:
                 plt.close(fig)
             fig = sns.clustermap(
-                total_interactions, norm=norm, cbar_kws=cbar_kws, **kwargs
+                total_interactions, norm=norm, cmap=cmap, cbar_kws=cbar_kws, **kwargs
             )
             ax = fig.ax_heatmap
         elif map == "heatmap":
             sns.heatmap(
-                total_interactions, norm=norm, ax=ax, cbar_kws=cbar_kws, **kwargs
+                total_interactions,
+                norm=norm,
+                cmap=cmap,
+                ax=ax,
+                cbar_kws=cbar_kws,
+                **kwargs,
             )
             ax.invert_yaxis()
         elif map == "mesh":
@@ -292,25 +280,27 @@ class VisEchoChamber(object):
                 logger.warning(
                     "'mesh' loses agent index information when sorting adjacency matrix"
                 )
-            mesh = ax.pcolormesh(total_interactions, norm=norm, **kwargs)
+            mesh = ax.pcolormesh(total_interactions, norm=norm, cmap=cmap, **kwargs)
             ax.set_xlim(0, self.ec.N)
             ax.set_ylim(0, self.ec.N)
             cax = cbar_kws.pop("cbar_ax", None) or cbar_kws.pop("cax", None)
             if cax is None:
-                # TODO: fix colorbar not using the correct cmap
                 colorbar_inset(
-                    ScalarMappable(norm=norm, cmap=getattr(kwargs, "cmap", None)),
+                    ScalarMappable(norm=norm, cmap=cmap),
                     "outer right",
                     size="5%",
                     ax=ax,
-                    cmap=getattr(kwargs, "cmap", None),
+                    cmap=cmap,
                     **cbar_kws,
                 )
-            else:
-                # steal space from ax
+            elif isinstance(cax, Axes):
+                # using existing cax
                 fig.colorbar(
-                    mesh, cmap=getattr(kwargs, "cmap", None), ax=ax, **cbar_kws,
+                    mesh, cax=cax, **cbar_kws,
                 )
+            elif cax:
+                # steal space from ax if cax is anything else (i.e. unless None, False, or an Axes)
+                fig.colorbar(mesh, ax=ax, **cbar_kws)
         elif isinstance(map, Callable):
             map(total_interactions, ax=ax, norm=norm, **kwargs)
         else:
@@ -329,7 +319,12 @@ class VisEchoChamber(object):
 
     def show_nearest_neighbour(self, title=True, **kwargs) -> sns.JointGrid:
         nn = self.ec.get_nearest_neighbours()
-        g = sns.jointplot(self.ec.opinions, nn, kind="kde", **kwargs)
+        bw = kwargs.pop("bw", 0.5)
+        marginal_kws = kwargs.pop("marginal_kws", dict())
+        marginal_kws.update(bw=bw)
+        g = sns.jointplot(
+            self.ec.opinions, nn, kind="kde", bw=bw, marginal_kws=marginal_kws, **kwargs
+        )
         g.ax_joint.set_xlabel(OPINION_SYMBOL)
         g.ax_joint.set_ylabel(MEAN_NEAREST_NEIGHBOUR)
         if title:
@@ -369,78 +364,3 @@ class VisEchoChamber(object):
         ax[0, 1].set_xlim(*xlim)
         ax[2, 1].set_xlim(*xlim)
         return fig, ax
-
-
-# Methods which may be generally useful.
-
-
-def colorline(
-    x,
-    y,
-    z=None,
-    cmap="seismic",
-    norm=Normalize(0.0, 1.0),
-    linewidth=1.0,
-    ax=None,
-    **kwargs,
-):
-    """
-    Plot a colored line with coordinates x and y
-
-    Optionally specify colors in the array z
-
-    Optionally specify a colormap, a norm function and a line width
-
-    http://nbviewer.ipython.org/github/dpsanders/matplotlib-examples/blob/master/colorline.ipynb
-
-    http://matplotlib.org/examples/pylab_examples/multicolored_line.html
-
-    """
-
-    import matplotlib.collections as mcoll
-
-    # Default colors equally spaced on [0,1]:
-    if z is None:
-        z = np.linspace(0.0, 1.0, len(x))
-
-    # Special case if a single number:
-    # to check for numerical input -- this is a hack
-    if not hasattr(z, "__iter__"):
-        z = np.array([z])
-
-    z = np.asarray(z)
-
-    segments = _make_segments(x, y)
-    lc = mcoll.LineCollection(
-        segments, colors=z, cmap=cmap, norm=norm, linewidth=linewidth, **kwargs
-    )
-
-    if ax is None:
-        ax = plt.gca()
-    ax.add_collection(lc)
-
-    return lc
-
-
-@optional_fig_ax
-def show_K_alpha_phase(df: pd.DataFrame, ax=None, fig=None):
-    im = ax.pcolormesh(df.columns, df.index, np.abs(df.values))
-    fig.colorbar(im, label=ABS_MEAN_FINAL_OPINION)
-    ax.set_xlabel("$\\alpha$")
-    ax.set_ylabel("$K$")
-    return fig, ax
-
-
-# Methods used within this file only
-
-
-def _make_segments(x, y):
-    """
-    Create list of line segments from x and y coordinates, in the correct format
-    for LineCollection: an array of the form numlines x (points per line) x 2 (x
-    and y) array
-    """
-
-    points = np.array([x, y]).T.reshape(-1, 1, 2)
-    segments = np.concatenate([points[:-1], points[1:]], axis=1)
-    return segments

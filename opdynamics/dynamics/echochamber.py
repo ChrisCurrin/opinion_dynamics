@@ -1,6 +1,7 @@
 """"""
-
+import copy
 import numpy as np
+import pandas as pd
 import logging
 
 from typing import Callable, Tuple, Union
@@ -10,6 +11,7 @@ from scipy.stats import powerlaw
 
 from opdynamics.utils.distributions import negpowerlaw
 from opdynamics.integrate.types import SolverResult, diffeq
+from opdynamics.utils.errors import ECSetupError
 
 logger = logging.getLogger("echo chamber")
 
@@ -30,8 +32,18 @@ class EchoChamber(object):
     """
 
     # noinspection PyTypeChecker
-    def __init__(self, N, m, K, alpha, name="echochamber", seed=1337, *args, **kwargs):
-        from opdynamics.socialinteraction import SocialInteraction
+    def __init__(
+        self,
+        N: int,
+        m: int,
+        K: float,
+        alpha: float,
+        name="echochamber",
+        seed=1337,
+        *args,
+        **kwargs,
+    ):
+        from opdynamics.dynamics.socialinteraction import SocialInteraction
 
         # create a random number generator for this object (to be thread-safe)
         self.rn = default_rng(seed)
@@ -66,6 +78,7 @@ class EchoChamber(object):
         :param max_val: highest value (inclusive)
         """
         self.opinions = self.rn.uniform(min_val, max_val, size=self.N)
+        self.result = None
 
     def set_activities(self, distribution=negpowerlaw, *dist_args, dim: int = 1):
         """Sample activities from a given distribution
@@ -132,16 +145,16 @@ class EchoChamber(object):
         :param t_end: Last time point. Together with dt, determines the size of the social interaction array.
 
         """
-        from opdynamics.socialinteraction import SocialInteraction
+        from opdynamics.dynamics.socialinteraction import SocialInteraction
 
         if self.activities is None or self.p_conn is None:
             raise RuntimeError(
                 """Activities and connection probabilities need to be set. 
-                                                                        ec = EchoChamber(...)
-                                                                        ec.set_activities(...)
-                                                                        ec.set_connection_probabilities(...)
-                                                                        ec.set_social_interactions(...)
-                                                                        """
+                                                                                    ec = EchoChamber(...)
+                                                                                    ec.set_activities(...)
+                                                                                    ec.set_connection_probabilities(...)
+                                                                                    ec.set_social_interactions(...)
+                                                                                    """
             )
 
         self.adj_mat = SocialInteraction(self, r)
@@ -175,6 +188,44 @@ class EchoChamber(object):
 
         self.dy_dt = dy_dt
 
+    @property
+    def has_results(self):
+        """Check if this object has a results property with simulation data."""
+        return self.result is not None
+
+    def _setup_run(
+        self, dt: float = 0.01, t_end: float = 0.05
+    ) -> Tuple[Tuple[float, float], tuple]:
+        if (
+            self.activities is None
+            or self.p_conn is None
+            or self.adj_mat is None
+            or self.dy_dt is None
+        ):
+            raise ECSetupError
+
+        args = (self.K, self.alpha, self.N, self.m, self.p_conn, self.adj_mat, dt)
+
+        if not self.has_results:
+            t_start = 0
+            self.prev_result = None
+        else:
+            t_start = self.result.t[-1]
+            t_end += t_start
+            # noinspection PyTypeChecker
+            self.prev_result: SolverResult = copy.deepcopy(self.result)
+            logger.info(
+                f"continuing dynamics from {t_start} until {t_end}. Opinions can be reset using ec.init_opinions()."
+            )
+        return (t_start, t_end), args
+
+    def _post_run(self):
+        # reassign opinions to last time point
+        self.opinions = self.result.y[:, -1]
+        if self.result.t[0] > 0:
+            self.result = self.prev_result + self.result
+        logger.info(f"done running {self.name}")
+
     def run_network(
         self, dt: float = 0.01, t_end: float = 0.05, method: str = "RK45"
     ) -> None:
@@ -194,30 +245,13 @@ class EchoChamber(object):
         from scipy.integrate import solve_ivp
         from opdynamics.integrate.solvers import ODE_INTEGRATORS, solve_ode
 
-        if (
-            self.activities is None
-            or self.p_conn is None
-            or self.adj_mat is None
-            or self.dy_dt is None
-        ):
-            raise RuntimeError(
-                """Activities, connection probabilities, social interactions, and dynamics need to be set. 
-                                                                        ec = EchoChamber(...)
-                                                                        ec.set_activities(...)
-                                                                        ec.set_connection_probabilities(...)
-                                                                        ec.set_social_interactions(...)
-                                                                        ec.set_dynamics(...)
-                                                                        ec.run_network(...)
-                                                                        """
-            )
-
-        args = (self.K, self.alpha, self.N, self.m, self.p_conn, self.adj_mat, dt)
+        t_span, args = self._setup_run(dt, t_end)
 
         if method in ODE_INTEGRATORS:
             # use a custom method in `opdynamics.utils.integrators`
             self.result: SolverResult = solve_ode(
                 self.dy_dt,
-                t_span=[0, t_end],
+                t_span=t_span,
                 y0=self.opinions,
                 method=method,
                 dt=dt,
@@ -225,22 +259,26 @@ class EchoChamber(object):
             )
         else:
             # use a method in `scipy.integrate`
-            self.result: SolverResult = solve_ivp(
-                self.dy_dt,
-                t_span=[0, t_end],
-                y0=self.opinions,
-                method=method,
-                vectorized=True,
-                args=args,
-                first_step=dt,
-                max_step=dt,
+            # use custom OdeResult (which SolverResult inherits from) for type
+            from opdynamics.integrate.types import OdeResult
+
+            # noinspection PyTypeChecker
+            self.result = OdeResult(
+                solve_ivp(
+                    self.dy_dt,
+                    t_span=t_span,
+                    y0=self.opinions,
+                    method=method,
+                    vectorized=True,
+                    args=args,
+                    first_step=dt,
+                    max_step=dt,
+                )
             )
-        # reassign opinions to last time point
-        self.opinions = self.result.y[:, -1]
-        logger.debug(f"done running {self.name}")
+        self._post_run()
 
     def get_mean_opinion(
-        self, t: Union[np.number, np.ndarray] = -1
+        self, t: Union[float, np.ndarray] = -1
     ) -> Tuple[float, np.ndarray]:
         """Calculate the average opinion at time point `t`.
 
@@ -258,14 +296,14 @@ class EchoChamber(object):
             raise RuntimeError(
                 f"{self.name} has not been run. call `.run_network` first."
             )
-        if isinstance(t, np.number):
-            idx = -1 if t == -1 else np.argmin(np.abs(t - self.result.t))
+        if isinstance(t, float):
+            idx = np.argmin(np.abs(t - self.result.t))
         else:
             idx = t if t is not None else np.arange(len(self.result.t))
         time_point, average = self.result.t[idx], np.mean(self.result.y[:, idx], axis=0)
         return time_point, average
 
-    def get_nearest_neighbours(self):
+    def get_nearest_neighbours(self, t: int or float = -1):
         """Calculate mean value of every agents' nearest neighbour.
 
         .. math::
@@ -281,13 +319,32 @@ class EchoChamber(object):
         is the degree of node `i`.
 
         """
-        snapshot_adj_mat = self.adj_mat[-1]
+        idx = np.argmin(np.abs(t - self.result.t)) if isinstance(t, float) else t
+        snapshot_adj_mat = self.adj_mat[idx]
         out_degree_i = np.sum(snapshot_adj_mat, axis=0)
         close_opinions = np.sum(snapshot_adj_mat * self.opinions, axis=0)
         with np.errstate(divide="ignore", invalid="ignore"):
             # suppress warnings about dividing by nan or 0
             nn = close_opinions / out_degree_i
         return nn
+
+    def _result_df(self):
+        if self.result is None:
+            raise RuntimeError(
+                f"{self.name} has not been run. call `.run_network` first."
+            )
+        return pd.DataFrame(self.result.y, index=self.result.t)
+
+    def get_change_in_opinions(self, dt=0.01):
+        df = self._result_df()
+        # create time array with constant dt (variable dt may have been used in the numerical integration method)
+        t_indices = [
+            np.nanargmin(np.abs(t - self.result.t))
+            for t in np.arange(0, self.result.t[-1] + dt, dt)
+        ]
+        t = self.result.t[t_indices]
+        opinions = self.result.y[:, t_indices]
+        return np.diff(opinions, axis=1)
 
 
 class NoisyEchoChamber(EchoChamber):
@@ -303,32 +360,17 @@ class NoisyEchoChamber(EchoChamber):
         super().set_dynamics()
 
         # create new diffusion term
-        self.diffusion = lambda t, y, *diff_args: np.sqrt(D)
+        self.diffusion = lambda t, y, *diff_args: D
         self.wiener_process = lambda: self.rn.normal(0, 1, size=self.N)
 
-    def run_network(self, dt=0.01, t_end=0.05, method="Euler–Maruyama", r=None):
+    def run_network(
+        self, dt: float = 0.01, t_end: float = 0.05, method: str = "Euler-Maruyama",
+    ):
         """Dynamics are no longer of an ordinary differential equation so we can't use scipy.solve_ivp anymore"""
 
         from opdynamics.integrate.solvers import SDE_INTEGRATORS, solve_sde
 
-        if (
-            self.activities is None
-            or self.p_conn is None
-            or self.adj_mat is None
-            or self.dy_dt is None
-        ):
-            raise RuntimeError(
-                """Activities, connection probabilities, social interactions, and dynamics need to be set. 
-                                                                            ec = EchoChamber(...)
-                                                                            ec.set_activities(...)
-                                                                            ec.set_connection_probabilities(...)
-                                                                            ec.set_social_interactions(...)
-                                                                            ec.set_dynamics(...)
-                                                                            ec.run_network(...)
-                                                                            """
-            )
-
-        args = (self.K, self.alpha, self.N, self.m, self.p_conn, self.adj_mat, dt)
+        t_span, args = self._setup_run(dt, t_end)
 
         if method in SDE_INTEGRATORS:
             # use a custom method in `opdynamics.utils.integrators`
@@ -336,22 +378,36 @@ class NoisyEchoChamber(EchoChamber):
                 self.dy_dt,
                 self.diffusion,
                 self.wiener_process,
-                t_span=[0, t_end],
+                t_span=t_span,
                 y0=self.opinions,
                 method=method,
                 dt=dt,
                 args=args,
+                diff_args=(),
             )
         else:
             raise NotImplementedError()
-        # reassign opinions to last time point
-        self.opinions = self.result.y[:, -1]
-        logger.debug(f"done running {self.name}")
+        self._post_run()
+
+
+class NoisyAgentEchoChamber(NoisyEchoChamber):
+    def set_dynamics(self, D=0.01, *args, **kwargs):
+        self._idx = self.rn.uniform(0, self.N, 1)
+
+        def diffusion(t, y, *diff_args):
+            k_steps = diff_args
+            if t % k_steps == 0:
+                # TODO: agent with opposite opinion
+                self._idx = self.rn.uniform(0, self.N, size=self.N)
+            return D * (y - y[self._idx])
+
+        self.diffusion = diffusion
+        self.wiener_process = lambda: 1
 
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
-    from opdynamics.visualise import VisEchoChamber
+    from opdynamics.visualise.visechochamber import VisEchoChamber
 
     logging.basicConfig(level=logging.DEBUG)
 
@@ -372,6 +428,7 @@ if __name__ == "__main__":
 
     ec.set_activities(activity_distribution, gamma, epsilon, 1)
     vis.show_activities()
+    vis.show_activity_vs_opinion()
 
     ec.set_connection_probabilities(beta=beta)
     ec.set_social_interactions(r=r, dt=dt, t_end=t_end)
@@ -379,5 +436,4 @@ if __name__ == "__main__":
 
     ec.run_network(dt=dt, t_end=t_end)
     vis.show_opinions(color_code=False)
-
     plt.show()

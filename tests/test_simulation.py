@@ -1,0 +1,37 @@
+# Integration tests
+import logging
+
+from unittest import TestCase
+
+import numpy as np
+from scipy.stats import powerlaw
+
+from opdynamics.simulation import run_periodic_noise
+from opdynamics.visualise import VisEchoChamber
+from opdynamics.utils.distributions import negpowerlaw
+
+logging.getLogger().setLevel(logging.DEBUG)
+
+
+class TestSimulation(TestCase):
+    def test_run_periodic_noise(self):
+        kwargs = dict(
+            N=1000,
+            m=10,
+            activity_distribution=negpowerlaw,
+            epsilon=1e-2,
+            gamma=2.1,
+            dt=0.01,
+            K=3,
+            beta=3,
+            alpha=3,
+            r=0.65,
+        )
+        D = 1
+
+        noise_start = 1.0
+        noise_length = 2.0
+        recovery = 0.5
+        lazy = True
+        nec = run_periodic_noise(noise_start, noise_length, recovery, D=D, **kwargs)
+        vis = VisEchoChamber(nec)

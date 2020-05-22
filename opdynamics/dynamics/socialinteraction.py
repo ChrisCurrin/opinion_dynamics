@@ -3,7 +3,7 @@ import logging
 import numpy as np
 from tqdm import tqdm
 
-from opdynamics.echochamber import EchoChamber
+from opdynamics.dynamics.echochamber import EchoChamber
 
 logger = logging.getLogger("social interaction")
 
@@ -49,7 +49,7 @@ class SocialInteraction(object):
 
     def eager(self, t_end: float, dt: float):
         """Pre-compute social interactions (the adjacency matrix) for each time step until t_end."""
-        logger.info(f"eagerly computing {1+int(t_end/dt)} adjacency matrices...")
+        logger.info(f"eagerly computing {1 + int(t_end/dt)} adjacency matrices...")
         t_arr = np.arange(0, t_end + dt, dt)
         self._time_mat = np.zeros((len(t_arr), self.ec.N, self.ec.N), dtype=int)
         active_thresholds = self.ec.rn.random(size=len(t_arr))
@@ -59,15 +59,19 @@ class SocialInteraction(object):
             )
         logger.debug(f"adjacency matrix has shape = {self._time_mat.shape}")
 
-    @property
-    def accumulator(self):
+    def accumulate(self, t_idx=None):
         """The total number of interactions between agents i and j (matrix)"""
         if self._time_mat is not None:
-            return np.sum(self._time_mat, axis=0)
+            if t_idx is None:
+                return np.sum(self._time_mat, axis=0)
+            return np.sum(self._time_mat[:t_idx], axis=0)
         return self._accumulator
 
+    # create a property for t_idx=None
+    accumulator = property(accumulate)
+
     @lru_cache(maxsize=128)
-    def __getitem__(self, item):
+    def __getitem__(self, item: int):
         if self._time_mat is not None:
             return self._time_mat[item]
 

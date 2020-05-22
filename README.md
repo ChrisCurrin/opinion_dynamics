@@ -13,15 +13,59 @@ Target Python version: >= 3.6
 
 `jupter notebook opdynamics.ipynb`
 
-## 3. Use as a module
+## 3. Use as a module from the terminal
 
-`python -m opdynamics 1000 10 2 3 -beta 2 --activity negpowerlaw 2.1 1e-2 -r 0.5 -T 10 --plot summary --save -v`
-`python -m opdynamics 1000 10 2 3 -D 0.01 -beta 2 --activity negpowerlaw 2.1 1e-2 -r 0.5 -T 10 --plot summary --save -v`
+e.g.
+ 
+```bash
+python -m opdynamics 1000 10 2 3 -beta 2 --activity negpowerlaw 2.1 1e-2 -r 0.5 -T 10 --plot summary --save -v
+```
+```bash
+python -m opdynamics 1000 10 2 3 -D 0.01 -beta 2 --activity negpowerlaw 2.1 1e-2 -r 0.5 -T 10 --plot summary --save -v
+```
 
+---
+# Notes
+This module uses Euler-Maruyama to solve sochastic differential equations.
+Additional methods can be specified using https://pypi.org/project/diffeqpy/, but require extra steps to set up (e.g. installing Julia).
+
+1. Download Julia and add `julia` to system path.
+2. `pip install diffeqpy numba`
+
+3. Install Python compatibility
+    ```python
+   import julia
+   julia.install()
+   import diffeqpy
+   diffeqpy.install()
+   ```
+4. Test it works
+   ```python
+   from diffeqpy import de
+   ```
+
+---
 # Development
 
 Note that the code is formatted using the [black](https://pypi.org/project/black/) Python module.
 
 Update `environment.yml` using `conda env export --from-history > environment.yml`
+
+---
+## TODO:
+
+* Implement other SDE solvers using https://pypi.org/project/diffeqpy/
+* change density activity vs opinion plot to be density per activity
+* Apply noise after time $t$ for $\Delta t$
+* Calculate $v = \frac{dx_i}{dt}$ and $\lbracket v \rbracket$
+* plot $D$ vs $x$
+    - D from $t_0$
+    - D from $t_10$
+    - with different $\beta$ values
+    - with different $\alpha$ values
+    - with different $K$ values
+    - with different $dt$ values
+    - with different $r$ values
+
 
 
