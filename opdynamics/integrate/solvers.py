@@ -1,7 +1,8 @@
 import logging
 import numpy as np
 from typing import Callable, Tuple
-from tqdm import tqdm
+from tqdm.contrib import tenumerate
+
 from opdynamics.integrate.types import SolverResult
 from opdynamics.integrate.methods import Euler, EulerMaruyama
 
@@ -17,7 +18,7 @@ def _run_solver(solver, t_span: Tuple[float, float], dt: float) -> SolverResult:
     t_arr = np.arange(t_start, t_end + dt, dt)
     y_arr = np.zeros(shape=(len(t_arr), len(solver.y)))
     logger.info(f"{len(t_arr)} iterations to do...")
-    for i, t in tqdm(enumerate(t_arr)):
+    for i, t in tenumerate(t_arr, desc="solver"):
         y_arr[i] = solver.y
         solver.step(t, dt)
     # add final y

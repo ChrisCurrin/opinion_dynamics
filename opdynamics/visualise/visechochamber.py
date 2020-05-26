@@ -6,33 +6,141 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import Callable, Tuple
 
-from matplotlib import colors
 from matplotlib.axes import Axes
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import LogNorm, Normalize, TwoSlopeNorm
 from matplotlib.figure import Figure
 from matplotlib.ticker import MaxNLocator
 
-from seaborn.matrix import ClusterGrid
-
 from opdynamics.dynamics.echochamber import EchoChamber
 from opdynamics.utils.constants import *
 from opdynamics.utils.decorators import optional_fig_ax
 from opdynamics.utils.plot_utils import use_self_args
 from opdynamics.utils.plot_utils import colorbar_inset, colorline
-from opdynamics.visualise.dense import show_activity_vs_opinion
+from opdynamics.visualise.dense import show_activity_vs_opinion, show_matrix
 
 logger = logging.getLogger("visualise")
 logging.getLogger("matplotlib").setLevel(logging.WARNING)
 
 
 class VisEchoChamber(object):
+    """Class used to visualise attached EchoChamber object.
+
+    Visualisations
+    =====
+    - `show_activities`
+    - `show_opinions`
+    - `show_opinions_snapshot`
+    - `show_agent_opinions`
+    - `show_adjacency_matrix`
+    - `show_nearest_neighbour`
+    - `show_summary`
+
+
+    Private methods
+    ----
+     - `_get_equal_opinion_limits`
+
+    Examples
+    =====
+
+    Normal usage
+    -----
+
+    .. code-block :: python
+
+        vis = VisEchoChamber(ec)
+        vis.show_opinions()
+
+    One-time use
+    -----
+
+    .. code-block :: python
+
+        VisEchoChamber(ec).show_opinions()
+
+    """
+
     def __init__(self, echochamber: EchoChamber):
         self.ec = echochamber
 
     show_activity_vs_opinion = use_self_args(
         show_activity_vs_opinion, ["ec.opinions", "ec.activities"]
     )
+
+    def show_connection_probabilities(
+        self, *args, title="Connection probabilities", **kwargs
+    ) -> Tuple[Figure, Axes]:
+        """
+        Plot connection probability matrix.
+
+        :keyword map: How to plot the matrix.
+                * 'clustermap' - `sns.clustermap`
+                * 'heatmap' - `sns.heatmap`
+                * 'mesh' - `matplotlib.pcolormesh`
+                * callable - calls the function using the (potentially generated) ax, norm, and keywords.
+        :keyword sort: Sort the matrix by most interactions.
+        :keyword norm: The scale of the plot (normal, log, etc.).
+        :keyword cmap: Colormap to use.
+        :keyword ax: Axes to use for plot. Created if none passed.
+        :keyword fig: Figure to use for colorbar. Created if none passed.
+        :keyword title: Include title in the figure.
+
+        :keyword cbar_ax: Axes to use for plotting the colorbar.
+
+        :return: (Figure, Axes) used.
+
+        """
+        return show_matrix(
+            self.ec.p_conn,
+            "$P_{ij}$",
+            *args,
+            # min value must be > 0 when LogNorm is used
+            vmin=np.min(self.ec.p_conn[self.ec.p_conn > 0]),
+            vmax=1,
+            title=title,
+            **kwargs,
+        )
+
+    def show_adjacency_matrix(
+        self, *args, title="Cumulative adjacency matrix", **kwargs
+    ) -> Tuple[Figure, Axes]:
+        """
+        Plot adjacency matrix.
+
+        If matrix `ec.adj_mat` is 3D (first dimension is time), the sum of the interactions is computed over time.
+        The total adjacency matrix
+
+        > Note adj_mat is indexed ji but represents Aij (if there is input from agent j to agent i)
+
+        :keyword map: How to plot the matrix.
+                * 'clustermap' - `sns.clustermap`
+                * 'heatmap' - `sns.heatmap`
+                * 'mesh' - `matplotlib.pcolormesh`
+                * callable - calls the function using the (potentially generated) ax, norm, and keywords.
+        :keyword sort: Sort the matrix by most interactions.
+        :keyword norm: The scale of the plot (normal, log, etc.).
+        :keyword cmap: Colormap to use.
+        :keyword ax: Axes to use for plot. Created if none passed.
+        :keyword fig: Figure to use for colorbar. Created if none passed.
+        :keyword title: Include title in the figure.
+
+        :keyword cbar_ax: Axes to use for plotting the colorbar.
+
+        :return: (Figure, Axes) used.
+
+        """
+        return show_matrix(
+            self.ec.adj_mat.accumulator,
+            "Number of interactions",
+            *args,
+            vmin=1,
+            title=title,
+            **kwargs,
+        )
+
+    # alias
+    show_interactions = show_adjacency_matrix
 
     @optional_fig_ax
     def show_activities(self, ax: Axes = None, fig: Figure = None) -> (Figure, Axes):
@@ -54,7 +162,7 @@ class VisEchoChamber(object):
         subsample: int = 1,
         ax: Axes = None,
         fig: Figure = None,
-        title: bool = True,
+        title: str = "Opinion dynamics",
         **kwargs,
     ) -> (Figure, Axes):
         """
@@ -100,24 +208,33 @@ class VisEchoChamber(object):
         ax.set_ylabel(OPINION_AGENT_TIME)
         ax.set_ylim(*self._get_equal_opinion_limits())
         if title:
-            if type(title) is not bool:
-                ax.set_title(title)
-            else:
-                ax.set_title("Opinion dynamics")
+            ax.set_title(title)
         return fig, ax
 
     @optional_fig_ax
     def show_opinions_snapshot(
-        self, ax: Axes = None, fig: Figure = None, title: bool = True, t=-1, **kwargs
+        self,
+        ax: Axes = None,
+        fig: Figure = None,
+        title: str = "Opinions distribution",
+        t=-1,
+        **kwargs,
     ) -> (Figure, Axes):
         idx = np.argmin(np.abs(t - self.ec.result.t)) if isinstance(t, float) else t
         bins = kwargs.pop("bins", self.ec.N // 5)
         sns.distplot(self.ec.result.y[:, idx], bins=bins, ax=ax, **kwargs)
-        ax.set_xlabel(OPINION_SYMBOL)
-        ax.set_ylabel(f"$P({OPINION_SYMBOL})$")
-        ax.set_xlim(*self._get_equal_opinion_limits())
+
+        vertical = kwargs.get("vertical", False)
+        if vertical:
+            ax.set_ylabel(OPINION_SYMBOL)
+            ax.set_xlabel(f"$P({OPINION_SYMBOL})$")
+            ax.set_ylim(*self._get_equal_opinion_limits())
+        else:
+            ax.set_xlabel(OPINION_SYMBOL)
+            ax.set_ylabel(f"$P({OPINION_SYMBOL})$")
+            ax.set_xlim(*self._get_equal_opinion_limits())
         if title:
-            ax.set_title(title or "Opinions distribution")
+            ax.set_title(title)
         return fig, ax
 
     @optional_fig_ax
@@ -128,7 +245,7 @@ class VisEchoChamber(object):
         ax: Axes = None,
         fig: Figure = None,
         colorbar: bool = True,
-        title: bool = True,
+        title: str = "Agent opinions",
     ) -> (Figure, Axes):
         opinions = self.ec.opinions
         agents = np.arange(self.ec.N)
@@ -146,9 +263,7 @@ class VisEchoChamber(object):
             # agents = agents[ind]
 
         v = self._get_equal_opinion_limits()
-        sm = ScalarMappable(
-            norm=TwoSlopeNorm(0, np.min(opinions), np.max(opinions)), cmap=OPINIONS_CMAP
-        )
+        sm = ScalarMappable(norm=Normalize(*v), cmap=OPINIONS_CMAP)
         color = sm.to_rgba(opinions)
 
         ax.barh(
@@ -162,8 +277,8 @@ class VisEchoChamber(object):
         ax.axvline(x=0, ls="-", color="k", alpha=0.5, lw=1)
         if sort:
             min_idx = np.argmin(np.abs(opinions))
-            ax.axhline(
-                y=min_idx, ls="--", color="k", alpha=0.5, lw=1,
+            ax.hlines(
+                y=min_idx, xmin=v[0], xmax=v[1], ls="--", color="k", alpha=0.5, lw=1,
             )
             ax.annotate(
                 f"{min_idx}",
@@ -176,24 +291,21 @@ class VisEchoChamber(object):
             )
         if colorbar:
             # create colorbar axes without stealing from main ax
-            cbar = colorbar_inset(sm, "outer bottom", size="5%", ax=ax,)
-            ax.set_xticklabels([])
+            cbar = colorbar_inset(sm, "outer bottom", size="5%", pad=0.01, ax=ax)
+            sns.despine(ax=ax, bottom=True)
+            ax.tick_params(axis="x", bottom=False, labelbottom=False)
             cbar.set_label(OPINION_SYMBOL)
 
         ax.set_ylim(0, self.ec.N)
+        ax.set_xlim(*v)
         if not colorbar:
             # xlabel not part of colorbar
             ax.set_xlabel(OPINION_SYMBOL)
         ax.set_ylabel("Agent $i$")
         ax.yaxis.set_major_locator(MaxNLocator(5))
         if title:
-            ax.set_title("Agent opinions")
+            ax.set_title(title)
         return fig, ax
-
-    def show_activity_vs_opinions(self, *args, **kwargs,) -> (Figure, Axes):
-        return show_activity_vs_opinion(
-            self.ec.opinions, self.ec.activities, *args, **kwargs
-        )
 
     def _get_equal_opinion_limits(self):
         if self.ec.result is None:
@@ -202,120 +314,6 @@ class VisEchoChamber(object):
             opinions = self.ec.result.y
         v = np.max(np.abs(opinions))
         return -v, v
-
-    @optional_fig_ax
-    def show_adjacency_matrix(
-        self,
-        map="clustermap",
-        sort=False,
-        norm=LogNorm(),
-        cmap=INTERACTIONS_CMAP,
-        ax: Axes = None,
-        fig: Figure = None,
-        title: bool = True,
-        **kwargs,
-    ) -> (Figure or ClusterGrid, Axes):
-        """
-        Plot adjacency matrix.
-
-        If matrix `ec.adj_mat` is 3D (first dimension is time), the sum of the interactions is computed over time.
-        The total adjacency matrix
-
-        > Note adj_mat is indexed ji but represents Aij (if there is input from agent j to agent i)
-
-        :param map: How to plot the matrix.
-            * 'clustermap' - `sns.clustermap`
-            * 'heatmap' - `sns.heatmap`
-            * 'mesh' - `matplotlib.pcolormesh`
-            * callable - calls the function using the (potentially generated) ax, norm, and keywords.
-        :param sort: Sort the matrix by most interactions.
-        :param norm: The scale of the plot (normal, log, etc.).
-        :param ax: Axes to use for plot. Created if none passed.
-        :param fig: Figure to use for colorbar. Created if none passed.
-        :param title: Include title in the figure.
-
-        :keyword cbar_ax: Axes to use for plotting the colorbar.
-
-        :return: (Figure, Axes) used.
-        """
-
-        # cast to DataFrame to keep agent index information when sorting.
-        # convert definition of Aij input from j to i to number of interactions by agent i with agent j
-        total_interactions = pd.DataFrame(
-            self.ec.adj_mat.accumulator,
-            columns=pd.Index(np.arange(self.ec.N), name="i"),
-            index=pd.Index(np.arange(self.ec.N), name="j"),
-        )
-
-        if sort:
-            total_interactions = total_interactions.sort_values(
-                by=list(total_interactions.index), axis="index"
-            ).sort_values(by=list(total_interactions.columns), axis="columns")
-
-        # default label for colorbar
-        cbar_kws = {"label": "Number of interactions", **kwargs.pop("cbar_kws", {})}
-
-        if isinstance(norm, LogNorm) and getattr(kwargs, "vmin", -1) <= 0:
-            kwargs["vmin"] = 1
-
-        if map == "clustermap":
-            if fig:
-                plt.close(fig)
-            fig = sns.clustermap(
-                total_interactions, norm=norm, cmap=cmap, cbar_kws=cbar_kws, **kwargs
-            )
-            ax = fig.ax_heatmap
-        elif map == "heatmap":
-            sns.heatmap(
-                total_interactions,
-                norm=norm,
-                cmap=cmap,
-                ax=ax,
-                cbar_kws=cbar_kws,
-                **kwargs,
-            )
-            ax.invert_yaxis()
-        elif map == "mesh":
-            if sort:
-                logger.warning(
-                    "'mesh' loses agent index information when sorting adjacency matrix"
-                )
-            mesh = ax.pcolormesh(total_interactions, norm=norm, cmap=cmap, **kwargs)
-            ax.set_xlim(0, self.ec.N)
-            ax.set_ylim(0, self.ec.N)
-            cax = cbar_kws.pop("cbar_ax", None) or cbar_kws.pop("cax", None)
-            if cax is None:
-                colorbar_inset(
-                    ScalarMappable(norm=norm, cmap=cmap),
-                    "outer right",
-                    size="5%",
-                    ax=ax,
-                    cmap=cmap,
-                    **cbar_kws,
-                )
-            elif isinstance(cax, Axes):
-                # using existing cax
-                fig.colorbar(
-                    mesh, cax=cax, **cbar_kws,
-                )
-            elif cax:
-                # steal space from ax if cax is anything else (i.e. unless None, False, or an Axes)
-                fig.colorbar(mesh, ax=ax, **cbar_kws)
-        elif isinstance(map, Callable):
-            map(total_interactions, ax=ax, norm=norm, **kwargs)
-        else:
-            raise NotImplementedError(
-                f"Method {map} not implemented. Try one of 'clustermap' 'heatmap' 'mesh' or a "
-                f"function."
-            )
-        ax.set_xlabel("Agent $i$")
-        ax.set_ylabel("Agent $j$")
-        if title:
-            if map == "clustermap":
-                fig.fig.suptitle("Cumulative adjacency matrix")
-            else:
-                ax.set_title("Cumulative adjacency matrix")
-        return fig, ax
 
     def show_nearest_neighbour(self, title=True, **kwargs) -> sns.JointGrid:
         nn = self.ec.get_nearest_neighbours()
@@ -358,7 +356,7 @@ class VisEchoChamber(object):
         # second column has opinion as x-axis
         _, ax[0, 1] = self.show_opinions_snapshot(ax=ax[0, 1])
         _, ax[1, 1] = self.show_agent_opinions(ax=ax[1, 1], sort=True)
-        _, ax[2, 1] = self.show_activity_vs_opinions(ax=ax[2, 1])
+        _, ax[2, 1] = self.show_activity_vs_opinion(ax=ax[2, 1])
         # `show_agent_opinions` already calculates optimal limits
         xlim = ax[1, 1].get_xlim()
         ax[0, 1].set_xlim(*xlim)

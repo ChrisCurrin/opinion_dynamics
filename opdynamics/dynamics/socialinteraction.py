@@ -85,6 +85,40 @@ class SocialInteraction(object):
         return self._last_adj_mat
 
 
+# TODO: Test
+def get_connection_probabilities(ec: EchoChamber, beta: float = 0.0):
+    """For agent `i`, the probability of connecting to agent `j` is a function of the absolute strength of
+    their opinions and a beta param, relative to all of the differences between an agent i and every other agent.
+
+    .. math::
+        p_{ij} = \\frac{|x_i - x_j|^{-\\beta}}{\sum_j |x_i - x_j|^{-\\beta}}
+
+    :param ec: Echo chamber object so we know
+        1) number of agents
+        2) agent opinions
+    :param beta: Power law decay of connection probability. Decay when beta>0, increase when beta<0.
+        When beta=0, then connection probabilities are uniform.
+
+    """
+    # create N * N matrix of opinions
+    mat_opinions = np.tile(ec.opinions, ec.N)
+    # compute magnitude (between agent i and every other agent)*N agents
+    mag = np.abs(ec.opinions - mat_opinions)
+    self_mask = np.identity(ec.N)
+    mag[self_mask] = 0
+    p_conn = np.power(mag, -beta)
+    p_conn /= np.sum(p_conn, axis=1)
+
+    p_conn = np.zeros(shape=(ec.N, ec.N))
+    # for i in range(ec.N):
+    #     mag = np.abs(ec.opinions[i] - ec.opinions)
+    #     mag[i] = np.nan
+    #     p_conn[i] = np.power(mag, -beta)
+    #     p_conn[i, i] = 0
+    #     p_conn[i] /= np.sum(p_conn[i])
+    return p_conn
+
+
 def get_social_interaction(
     ec: EchoChamber, active_threshold: float, p_mutual_interaction: float
 ):
@@ -94,7 +128,7 @@ def get_social_interaction(
     :param ec: Echo chamber object so we know
         1) number of agents
         2) number of other agents to interact with
-        3) the probability of interacting with each other agent (choose from 2).
+        3) the probability of interacting with each other agent
     :param active_threshold: Threshold for an agent to be active.
     :param p_mutual_interaction: Probability that an interaction is mutual (matrix becomes symmetrical if all
         interactions are mutual).
@@ -105,7 +139,7 @@ def get_social_interaction(
     """
     adj_mat = np.zeros((ec.N, ec.N), dtype=int)
     active_agents = np.where(ec.activities >= active_threshold)[0]
-    is_mutual = np.random.random(size=(len(active_agents), ec.m)) < p_mutual_interaction
+    is_mutual = ec.rn.random(size=(len(active_agents), ec.m)) < p_mutual_interaction
     for loop_i, a_i in enumerate(active_agents):
         # loop_i is how far through the active_agents the loop is
         # a_i is the index of the agent
@@ -120,4 +154,51 @@ def get_social_interaction(
         # reciprocal interaction (agent i is influenced by agents j, Aij = 1), given `p_mutual_interaction`
         # keep an interaction if it exists already, or add a new mutual interaction
         adj_mat[a_i, ind] = np.logical_or(adj_mat[a_i, ind], is_mutual[loop_i])
+    return adj_mat
+
+
+def get_social_interaction_exp(
+    ec: EchoChamber, active_threshold: float, p_mutual_interaction: float
+):
+    """
+        Compute the social interactions to occur within an EchoChamber.
+
+        ** Experimental vectorised version **
+
+        https://stackoverflow.com/questions/20103779/index-2d-numpy-array-by-a-2d-array-of-indices-without-loops
+
+        :param ec: Echo chamber object so we know
+            1) number of agents
+            2) number of other agents to interact with
+            3) the probability of interacting with each other agent
+        :param active_threshold: Threshold for an agent to be active.
+        :param p_mutual_interaction: Probability that an interaction is mutual (matrix becomes symmetrical if all
+            interactions are mutual).
+            If 1: create symmetric matrix by not distinguishing between i->j  and j->i
+            If 0: a non-symmetric matrix means an agent ignores external interactions
+        :return: Adjacency matrix for interactions between agents.
+        :rtype: np.ndarray
+        """
+    adj_mat = np.zeros((ec.N, ec.N), dtype=int)
+    active_agents = np.where(ec.activities >= active_threshold)[0]
+    is_mutual = ec.rn.random(size=(len(active_agents), ec.m)) < p_mutual_interaction
+    p = ec.p_conn[active_agents].ravel() / np.sum(ec.p_conn[active_agents])
+    a = np.tile(np.arange(ec.N), len(active_agents)).ravel()
+
+    ind: np.ndarray = ec.rn.choice(
+        a,  # choose indices for
+        size=(len(active_agents), ec.m),  # other distinct agents
+        replace=False,  # (which must be unique)
+        p=p,  # with these probabilities
+        shuffle=False,
+    )
+
+    # agent i influences agents j (i -> j, Aji = 1)
+    adj_mat[ind, np.arange(adj_mat.shape[0])[:, None]] = 1
+    # reciprocal interaction (agent i is influenced by agents j, Aij = 1), given `p_mutual_interaction`
+    # keep an interaction if it exists already, or add a new mutual interaction
+    adj_mat[np.arange(adj_mat.shape[0])[:, None], ind] = np.logical_or(
+        adj_mat[np.arange(adj_mat.shape[0])[:, None], ind], is_mutual
+    )
+
     return adj_mat

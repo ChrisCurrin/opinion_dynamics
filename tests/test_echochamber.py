@@ -1,5 +1,8 @@
+import copy
 import logging
 import inspect
+import os
+
 import numpy as np
 
 from unittest import TestCase
@@ -9,6 +12,7 @@ from opdynamics.dynamics.echochamber import EchoChamber
 # noinspection PyUnusedName
 from opdynamics.integrate.types import OdeResult
 
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("test_echochamber")
 
 
@@ -251,5 +255,64 @@ class TestEchoChamber(TestCase):
     def test_get_nearest_neighbours(self):
         self.fail()
 
-    def test_run_params(self):
-        self.fail()
+    def test_save_load(self):
+        from opdynamics.utils.distributions import negpowerlaw
+
+        self.ec.alpha = 3  # controversialness of issue (sigmoidal shape)
+        self.ec.K = 3  # social interaction strength
+        epsilon = 1e-2  # minimum activity level with another agent
+        gamma = 2.1  # power law distribution param
+        beta = 3  # power law decay of connection probability
+        r = 0.5  # probability of a mutual interaction
+        activity_distribution = negpowerlaw
+
+        dt = 0.01
+        T = 0.1
+
+        self.ec.set_activities(activity_distribution, gamma, epsilon)
+        self.ec.set_connection_probabilities(beta=beta)
+        self.ec.set_social_interactions(r=r, lazy=True)
+        self.ec.set_dynamics()
+        filename = self.ec._get_filename()
+        logger.info(f"hashed {self.ec} = {filename}")
+        self.assertFalse(os.path.exists(filename))
+        self.assertFalse(self.ec.load(dt, T))
+
+        self.ec.run_network(dt, T)
+        prev_result = copy.deepcopy(self.ec.result)
+        prev_act = copy.deepcopy(self.ec.activities)
+        prev_p_conn = copy.deepcopy(self.ec.p_conn)
+        prev_adj_acc = copy.deepcopy(self.ec.adj_mat.accumulator)
+        try:
+            self.ec.save()
+            self.assertTrue(os.path.exists(filename))
+
+            new_ec = EchoChamber(
+                self.ec.N, self.ec.m, self.ec.K, self.ec.alpha, name=self.ec.name
+            )
+            new_ec.set_activities(activity_distribution, gamma, epsilon)
+            new_ec.set_connection_probabilities(beta=beta)
+            new_ec.set_social_interactions(r=r, lazy=True)
+            new_ec.set_dynamics()
+            self.assertTrue(
+                new_ec.result is None, "expected results to be None before loading"
+            )
+            self.assertTrue(new_ec.load(dt, T), "did not load results as expected")
+            self.assertTrue(new_ec.result is not None, "expected results to loaded")
+            self.assertTrue(
+                np.all(prev_result.y == new_ec.result.y),
+                "expected results to be the same",
+            )
+            self.assertTrue(
+                np.all(prev_act == new_ec.activities),
+                "expected activities to be the same",
+            )
+            self.assertTrue(
+                np.all(prev_p_conn == new_ec.p_conn), "expected p_conn to be the same"
+            )
+            self.assertTrue(
+                np.all(prev_adj_acc == new_ec.adj_mat.accumulator),
+                "expected adj_mat to be the same",
+            )
+        finally:
+            os.remove(filename)

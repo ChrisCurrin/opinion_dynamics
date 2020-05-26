@@ -1,5 +1,7 @@
 import time
 import logging
+import numpy as np
+import pandas as pd
 from functools import wraps
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
@@ -72,3 +74,42 @@ def timefunc(f):
         return result
 
     return wrapper
+
+
+def hashable(cls):
+    """Make a class hashable by using its `__str__` (or `__repr__` if there's no `__str__`) method.
+    This generates the same hash for the same input across sessions.
+    (Python, by default, does not due to security reasons).
+
+    Properties
+    ======
+    - __hash__
+    = hash_extra
+
+    Examples
+    ======
+
+    .. code-block :: python
+
+        @hashable
+        class MyClass(object):
+            def __init__(self, a):
+                self.a = a
+            def __str__(self):
+                return f"MyClass({a})"
+        hash(MyClass("first a"))==hash(MyClass("first a")) # True
+        hash(MyClass("first a"))==hash(MyClass("second a")) # False
+
+    """
+    import hashlib
+
+    def __hash__(self):
+        return int(hashlib.sha256(str(self).encode("utf-8")).hexdigest(), 16)
+
+    def hash_extra(self, extra=""):
+        full_str = str(self) + extra
+        return hashlib.md5(full_str.encode("utf-8")).hexdigest()
+
+    cls.__hash__ = __hash__
+    cls.hash_extra = hash_extra
+    return cls

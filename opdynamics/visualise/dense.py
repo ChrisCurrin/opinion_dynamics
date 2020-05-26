@@ -1,14 +1,22 @@
+import logging
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 from matplotlib.axes import Axes
+from matplotlib.cm import ScalarMappable
 from matplotlib.colors import LogNorm, Normalize
 from matplotlib.figure import Figure
 from scipy.interpolate import interpn
+from seaborn.matrix import ClusterGrid
+from typing import Callable
 
-from opdynamics.utils.constants import ABS_MEAN_FINAL_OPINION
-from opdynamics.utils.constants import ACTIVITY_SYMBOL, OPINION_SYMBOL, P_A_X
+from opdynamics.dynamics.echochamber import EchoChamber
 from opdynamics.utils.decorators import optional_fig_ax
 from opdynamics.utils.plot_utils import get_equal_limits, colorbar_inset
+from opdynamics.utils.constants import *
+
+logger = logging.getLogger("dense plots")
 
 
 @optional_fig_ax
@@ -28,7 +36,7 @@ def show_activity_vs_opinion(
     norm: Normalize = LogNorm(),
     ax: Axes = None,
     fig: Figure = None,
-    title: bool = True,
+    title: str = "Density of activity and opinions",
     **kwargs,
 ) -> (Figure, Axes):
     """
@@ -91,5 +99,115 @@ def show_activity_vs_opinion(
     ax.set_ylabel(ACTIVITY_SYMBOL)
     ax.set_xlim(*get_equal_limits(opinions))
     if title:
-        ax.set_title("Density of activity and opinions")
+        ax.set_title(title)
+    return fig, ax
+
+
+@optional_fig_ax
+def show_matrix(
+    mat: np.ndarray,
+    label: str,
+    map: str = "clustermap",
+    sort: bool = False,
+    norm: Normalize = LogNorm(),
+    cmap: str = INTERACTIONS_CMAP,
+    ax: Axes = None,
+    fig: Figure = None,
+    title: str = "matrix",
+    **kwargs,
+) -> (Figure or ClusterGrid, Axes):
+    """
+    Plot matrix.
+
+    :param mat: Matrix to plot.
+    :param label: The data represented by the matrix. E.g. Number of interactions.
+    :param map: How to plot the matrix.
+        * 'clustermap' - `sns.clustermap`
+        * 'heatmap' - `sns.heatmap`
+        * 'mesh' - `matplotlib.pcolormesh`
+        * callable - calls the function using the (potentially generated) ax, norm, and keywords.
+    :param sort: Sort the matrix by most interactions.
+    :param norm: The scale of the plot (normal, log, etc.).
+    :param cmap: Colormap to use.
+    :param ax: Axes to use for plot. Created if none passed.
+    :param fig: Figure to use for colorbar. Created if none passed.
+    :param title: Include title in the figure.
+
+    :keyword cbar_ax: Axes to use for plotting the colorbar.
+
+    :return: (Figure, Axes) used.
+    """
+
+    N, M = mat.shape
+    agent_mat = pd.DataFrame(
+        mat,
+        columns=pd.Index(np.arange(M), name="i"),
+        index=pd.Index(np.arange(N), name="j"),
+    )
+
+    if sort:
+        agent_mat = agent_mat.sort_values(
+            by=list(agent_mat.index), axis="index"
+        ).sort_values(by=list(agent_mat.columns), axis="columns")
+
+    # default label for colorbar
+    cbar_kws = {"label": label, **kwargs.pop("cbar_kws", {})}
+
+    if "vmin" in kwargs:
+        norm.vmin = kwargs["vmin"]
+    if "vmax" in kwargs:
+        norm.vmax = kwargs["vmax"]
+
+    if map == "clustermap":
+        if fig:
+            plt.close(fig)
+        fig = sns.clustermap(
+            agent_mat, norm=norm, cmap=cmap, cbar_kws=cbar_kws, **kwargs
+        )
+        ax = fig.ax_heatmap
+    elif map == "heatmap":
+        sns.heatmap(
+            agent_mat, norm=norm, cmap=cmap, ax=ax, cbar_kws=cbar_kws, **kwargs,
+        )
+        ax.invert_yaxis()
+    elif map == "mesh":
+        if sort:
+            logger.warning(
+                "'mesh' loses agent index information when sorting adjacency matrix"
+            )
+        mesh = ax.pcolormesh(agent_mat, norm=norm, cmap=cmap, **kwargs)
+        ax.set_xlim(0, N)
+        ax.set_ylim(0, M)
+        cax = cbar_kws.pop("cbar_ax", None) or cbar_kws.pop("cax", None)
+        if cax is None:
+            colorbar_inset(
+                ScalarMappable(norm=norm, cmap=cmap),
+                "outer right",
+                size="5%",
+                ax=ax,
+                cmap=cmap,
+                **cbar_kws,
+            )
+        elif isinstance(cax, Axes):
+            # using existing cax
+            fig.colorbar(
+                mesh, cax=cax, **cbar_kws,
+            )
+        elif cax:
+            # steal space from ax if cax is anything else (i.e. unless None, False, or an Axes)
+            fig.colorbar(mesh, ax=ax, **cbar_kws)
+    elif isinstance(map, Callable):
+        map(agent_mat, ax=ax, norm=norm, **kwargs)
+    else:
+        raise NotImplementedError(
+            f"Method {map} not implemented. Try one of 'clustermap' 'heatmap' 'mesh' or a "
+            f"function."
+        )
+    ax.set_xlabel("Agent $i$")
+    ax.set_ylabel("Agent $j$")
+    if title:
+        if map == "clustermap":
+            fig.fig.suptitle(title)
+        else:
+            ax.set_title(title)
     return fig, ax

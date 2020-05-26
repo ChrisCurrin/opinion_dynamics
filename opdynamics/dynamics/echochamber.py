@@ -1,5 +1,7 @@
 """"""
 import copy
+import os
+
 import numpy as np
 import pandas as pd
 import logging
@@ -9,6 +11,7 @@ from typing import Callable, Tuple, Union
 from numpy.random import default_rng
 from scipy.stats import powerlaw
 
+from opdynamics.utils.decorators import hashable
 from opdynamics.utils.distributions import negpowerlaw
 from opdynamics.integrate.types import SolverResult, diffeq
 from opdynamics.utils.errors import ECSetupError
@@ -16,18 +19,24 @@ from opdynamics.utils.errors import ECSetupError
 logger = logging.getLogger("echo chamber")
 
 
+@hashable
 class EchoChamber(object):
     """
     A network of agents interacting with each other.
 
-    * N - number of agents
-    * m - number of other agents to interact with
-    * alpha - controversialness of issue (sigmoidal shape)
-    * K - social interaction strength
-    * epsilon - minimum activity level with another agent
-    * gamma - power law distribution param
-    * beta - power law decay of connection probability
-    * p_mutual_interaction - probability of a p_mutual_interaction interaction
+    :ivar int N: initial value: number of agents
+    :ivar int m: number of other agents to interact with
+    :ivar float alpha: controversialness of issue (sigmoidal shape)
+    :ivar float K: social interaction strength
+    :ivar float epsilon: minimum activity level with another agent
+    :ivar float gamma: power law distribution param
+    :ivar float beta: power law decay of connection probability
+    :ivar p_mutual_interaction: probability of a p_mutual_interaction interaction
+    :ivar np.ndarray p_conn: connection probabilities (matrix)
+    :ivar np.ndarray activities: activities of agents (vector)
+    :ivar SocialInteraction adj_mat: interactions of agents
+    :ivar np.ndarray opinions: opinions of agents (vector)
+    :ivar SolverResult result: post-simulation result with 't' time (vector) and 'y' opinion (agent x time) attrs
 
     """
 
@@ -47,6 +56,7 @@ class EchoChamber(object):
 
         # create a random number generator for this object (to be thread-safe)
         self.rn = default_rng(seed)
+        self._seed = seed
 
         # create a human-readable name for ths object
         self.name = name
@@ -56,6 +66,11 @@ class EchoChamber(object):
         self.m = m
         self.K = K
         self.alpha = alpha
+
+        # private attributes
+        self._dist: str = None
+        self._beta: float = None
+
         # quick checks
         assert N > 0 and type(N) is int
         assert 0 < m < N and type(m) is int
@@ -109,6 +124,7 @@ class EchoChamber(object):
             dist_args = (*dist_args[:2], max_val - min_val)
 
         self.activities = distribution.rvs(*dist_args, size=size)
+        self._dist = f"{negpowerlaw.__name__}({dist_args})"
 
     def set_connection_probabilities(self, beta: float = 0.0):
         """For agent `i`, the probability of connecting to agent `j` is a function of the absolute strength of
@@ -129,6 +145,7 @@ class EchoChamber(object):
             p_conn[i, i] = 0
             p_conn[i] /= np.sum(p_conn[i])
         self.p_conn = p_conn
+        self._beta = beta
 
     def set_social_interactions(
         self, r: float = 0.5, lazy=False, dt: float = None, t_end: float = None
@@ -215,7 +232,8 @@ class EchoChamber(object):
             # noinspection PyTypeChecker
             self.prev_result: SolverResult = copy.deepcopy(self.result)
             logger.info(
-                f"continuing dynamics from {t_start} until {t_end}. Opinions can be reset using ec.init_opinions()."
+                f"continuing dynamics from {t_start:.3f} until {t_end:.3f}. Opinions can be reset using "
+                f"ec.init_opinions()."
             )
         return (t_start, t_end), args
 
@@ -328,15 +346,17 @@ class EchoChamber(object):
             nn = close_opinions / out_degree_i
         return nn
 
-    def _result_df(self):
+    def result_df(self):
         if self.result is None:
             raise RuntimeError(
                 f"{self.name} has not been run. call `.run_network` first."
             )
-        return pd.DataFrame(self.result.y, index=self.result.t)
+        df = pd.DataFrame(self.result.y.T, index=self.result.t)
+        df.name = "opinions"
+        return df
 
     def get_change_in_opinions(self, dt=0.01):
-        df = self._result_df()
+        df = self.result_df()
         # create time array with constant dt (variable dt may have been used in the numerical integration method)
         t_indices = [
             np.nanargmin(np.abs(t - self.result.t))
@@ -345,6 +365,76 @@ class EchoChamber(object):
         t = self.result.t[t_indices]
         opinions = self.result.y[:, t_indices]
         return np.diff(opinions, axis=1)
+
+    def _get_filename(self):
+        return os.path.join(".cache", f"{hash(self)}.h5")
+
+    def save(self):
+        # TODO: dt and T
+        try:
+            os.makedirs("cache")
+        except FileExistsError:
+            pass
+        filename = self._get_filename()
+
+        df_opinions = self.result_df()
+        df_conn = pd.DataFrame(self.p_conn)
+        df_conn.name = "p_conn"
+        df_act = pd.Series(self.activities)
+        df_act.name = "activities"
+        df_adj_mat = pd.DataFrame(self.adj_mat.accumulator)
+        df_adj_mat.name = f"adj_mat-{self.adj_mat.p_mutual_interaction}"
+
+        for df in [df_opinions, df_conn, df_act, df_adj_mat]:
+            df.to_hdf(filename, df.name)
+        return filename
+
+    def load(self, dt, T):
+        import pandas as pd
+
+        filename = self._get_filename()
+
+        if os.path.exists(filename):
+            with pd.HDFStore(filename) as hdf:
+                keys = hdf.keys()
+                # retrieve opinions for the time info first
+                df = hdf.get("opinions")
+                t_arr = df.index.values
+                y_arr = df.values
+                self.result = SolverResult(
+                    t_arr, y_arr.T, None, None, None, 0, 0, 0, 1, "success", True,
+                )
+                _dt = np.max(np.diff(self.result.t))
+                _t_end = self.result.t[-1]
+                if np.round(T - _t_end, 2) != 0.00 or np.round(dt - _dt, 5) != 0:
+                    return False
+                self._post_run()
+                for key in keys:
+                    df = hdf.get(key)
+                    if "opinions" in key:
+                        pass
+                    elif "p_conn" in key:
+                        self.p_conn = df.values
+                    elif "activities" in key:
+                        self.activities = df.values
+                    elif "adj_mat" in key:
+                        from opdynamics.dynamics.socialinteraction import (
+                            SocialInteraction,
+                        )
+
+                        self.adj_mat = SocialInteraction(
+                            self, float(key.split("-")[-1])
+                        )
+                        self.adj_mat._accumulator = df.values
+
+            return True
+        return False
+
+    def __repr__(self):
+        return (
+            f"{self.name}={self.__class__.__name__}(N={self.N},m={self.m},K={self.K},alpha={self.alpha})"
+            f"{self._dist}, beta={self._beta}"
+        )
 
 
 class NoisyEchoChamber(EchoChamber):
@@ -355,7 +445,12 @@ class NoisyEchoChamber(EchoChamber):
         self.wiener_process: Callable = None
 
     def set_dynamics(self, D=0.01, *args, **kwargs):
-        """Set up Stochastic ordinary differential equation. See `run_network` for changes to the integration."""
+        """Network with external noise.
+
+        .. math::
+            \dot{x}_i = - x_i + K \cdot \sum_{j=1} A_{ij}(t) \cdot \\tanh{(\\alpha \cdot x_j)} + D \cdot \\xi (t)
+
+        """
         # assign drift as before, aka dy_dt
         super().set_dynamics()
 
@@ -389,9 +484,20 @@ class NoisyEchoChamber(EchoChamber):
             raise NotImplementedError()
         self._post_run()
 
+    def __repr__(self):
+        return f"{super().__repr__()}, diff={self.diffusion(0,0)}"
+
 
 class NoisyAgentEchoChamber(NoisyEchoChamber):
     def set_dynamics(self, D=0.01, *args, **kwargs):
+        """
+        Input from a random agent. Noise is internal to the network.
+
+        .. math::
+            \dot{x}_i = - x_i + K \cdot \sum_j A_{ij}(t) \cdot \\tanh{(\\alpha \cdot x_j)} + D \cdot (x_i - x_k)
+
+        :param D: strength of noise
+        """
         self._idx = self.rn.uniform(0, self.N, 1)
 
         def diffusion(t, y, *diff_args):

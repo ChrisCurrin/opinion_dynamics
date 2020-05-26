@@ -10,6 +10,7 @@ from matplotlib.axes import Axes
 from matplotlib.cm import ScalarMappable
 from matplotlib.colorbar import Colorbar
 from matplotlib.colors import Normalize
+from matplotlib.figure import Figure
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 logger = logging.getLogger("plot utils")
@@ -41,7 +42,7 @@ def colorbar_inset(
     fig = ax.figure
     if inset_axes_kwargs is None:
         if "outer" in position:
-            inset_axes_kwargs = {}
+            inset_axes_kwargs = {"borderpad": 0.0}
         else:
             inset_axes_kwargs = {"borderpad": pad}
     if "top" in position or "bottom" in position and orientation is None:
@@ -214,3 +215,18 @@ def get_equal_limits(values: Iterable) -> Tuple[float, float]:
     """Return 0-centered limits based on the absolute maximum value in values"""
     v = np.max(np.abs(values))
     return -v, v
+
+
+def move_cbar_label_to_title(cbar_ax: Axes):
+    """Takes the colorbar label and moves it to the title position at the top.
+
+    :param cbar_ax: Colorbar axis. A figure can also be provided, whereby the last axes will be assumed to be the
+        colorbar axis.
+    """
+    if isinstance(cbar_ax, Figure):
+        logger.debug(
+            "move_cbar_label_to_title: guessing last axes in the fig is the cbar_ax"
+        )
+        cbar_ax = cbar_ax.axes[-1]
+    cbar_ax.set_title(cbar_ax.get_ylabel(), rotation=0)
+    cbar_ax.set_ylabel("")
