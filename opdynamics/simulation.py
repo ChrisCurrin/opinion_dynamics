@@ -28,8 +28,8 @@ def run_params(
     r: float = 0.5,
     method: str = None,
     plot_opinion: Union[bool, str] = False,
-    lazy: bool = False,
-    cache=True,
+    lazy: bool = True,
+    cache: bool = True,
     *sim_args,
     **sim_kwargs,
 ) -> EC:

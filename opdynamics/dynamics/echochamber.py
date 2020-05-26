@@ -124,7 +124,7 @@ class EchoChamber(object):
             dist_args = (*dist_args[:2], max_val - min_val)
 
         self.activities = distribution.rvs(*dist_args, size=size)
-        self._dist = f"{negpowerlaw.__name__}({dist_args})"
+        self._dist = f"{distribution.__name__}{dist_args}"
 
     def set_connection_probabilities(self, beta: float = 0.0):
         """For agent `i`, the probability of connecting to agent `j` is a function of the absolute strength of
@@ -370,9 +370,8 @@ class EchoChamber(object):
         return os.path.join(".cache", f"{hash(self)}.h5")
 
     def save(self):
-        # TODO: dt and T
         try:
-            os.makedirs("cache")
+            os.makedirs(".cache")
         except FileExistsError:
             pass
         filename = self._get_filename()
@@ -432,8 +431,8 @@ class EchoChamber(object):
 
     def __repr__(self):
         return (
-            f"{self.name}={self.__class__.__name__}(N={self.N},m={self.m},K={self.K},alpha={self.alpha})"
-            f"{self._dist}, beta={self._beta}"
+            f"{self.name}={self.__class__.__name__}(N={self.N},m={self.m},K={self.K},alpha={self.alpha},"
+            f"seed={self._seed}) {self._dist} p_conn(beta={self._beta}) adj_mat(r={self.adj_mat.p_mutual_interaction})"
         )
 
 
@@ -485,7 +484,7 @@ class NoisyEchoChamber(EchoChamber):
         self._post_run()
 
     def __repr__(self):
-        return f"{super().__repr__()}, diff={self.diffusion(0,0)}"
+        return f"{super().__repr__()} diff={self.diffusion(0,0)}"
 
 
 class NoisyAgentEchoChamber(NoisyEchoChamber):
@@ -498,7 +497,7 @@ class NoisyAgentEchoChamber(NoisyEchoChamber):
 
         :param D: strength of noise
         """
-        self._idx = self.rn.uniform(0, self.N, 1)
+        self._idx = self.rn.uniform(0, self.N, self.N)
 
         def diffusion(t, y, *diff_args):
             k_steps = diff_args
