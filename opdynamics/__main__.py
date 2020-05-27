@@ -6,7 +6,7 @@ import logging
 from scipy.integrate._ivp.ivp import METHODS as SCIPY_METHODS
 
 from opdynamics.dynamics.echochamber import EchoChamber, NoisyEchoChamber
-from opdynamics.simulation import run_params
+from opdynamics.simulation import run_noise_range, run_params
 from opdynamics.integrate.solvers import ODE_INTEGRATORS, SDE_INTEGRATORS
 from opdynamics.utils.distributions import negpowerlaw
 
@@ -73,7 +73,7 @@ parser.add_argument(
 )
 parser.add_argument("K", type=float, default=K, help="Social interaction strength.")
 parser.add_argument(
-    "-D", "--noise", type=float, default=None, help="Noise in dynamics."
+    "-D", "--noise", nargs="*", type=float, default=None, help="Noise in dynamics.",
 )
 parser.add_argument(
     "-a",
@@ -207,12 +207,20 @@ kwargs = dict(
 )
 if args.noise:
     ec_type = NoisyEchoChamber
-    kwargs["D"] = args.noise
+    if len(args.noise) == 1:
+        kwargs["D"] = args.noise[0]
+    else:
+        kwargs["D"] = args.noise
+
 else:
     ec_type = EchoChamber
 
 # Run simulation
-ec = run_params(ec_type, **kwargs)
+if type(kwargs["D"]) is list:
+    D_range = kwargs.pop("D")
+    run_noise_range(D_range, **kwargs)
+else:
+    ec = run_params(ec_type, **kwargs)
 
 if args.plot:
     import matplotlib.pyplot as plt

@@ -168,31 +168,26 @@ class Animator(object):
 
 
 if __name__ == "__main__":
+    import opdynamics.simulation as Simulation
+
     logging.basicConfig(level=logging.DEBUG)
 
-    num_agents = 1000
-    m = 10  # number of other agents to interact with
-    alpha = 2  # controversialness of issue (sigmoidal shape)
-    K = 3  # social interaction strength
-    epsilon = 1e-2  # minimum activity level with another agent
-    gamma = 2.1  # power law distribution param
-    beta = 2  # power law decay of connection probability
-    activity_distribution = negpowerlaw
-    r = 0.5
-    dt = 0.01
-    t_end = 5
+    _kwargs = dict(
+        N=1000,  # number of agents
+        m=10,  # number of other agents to interact with
+        alpha=2,  # controversialness of issue (sigmoidal shape)
+        K=3,  # social interaction strength
+        epsilon=1e-2,  # minimum activity level with another agent
+        gamma=2.1,  # power law distribution param
+        beta=2,  # power law decay of connection probability
+        activity_distribution=negpowerlaw,
+        r=0.5,
+        dt=0.01,
+        t_end=5,
+    )
 
-    ec = EchoChamber(num_agents, m, K, alpha, seed=1337)
-    vis = VisEchoChamber(ec)
+    ec = Simulation.run_params(EchoChamber, plot_opinions=False, **_kwargs)
     animator = Animator(ec)
-
-    ec.set_activities(negpowerlaw, gamma, epsilon, 1)
-
-    ec.set_connection_probabilities(beta=beta)
-    ec.set_social_interactions(r=r, dt=dt, t_end=t_end)
-
-    ec.set_dynamics()
-    ec.run_network(dt=dt, t_end=t_end, method="Euler")
     # _fig, _ax = plt.subplots(1, 2)
     # animator.animate_social_interactions()
     # animator.animate_opinions()

@@ -7,13 +7,26 @@ import numpy as np
 
 from unittest import TestCase
 
-from opdynamics.dynamics.echochamber import EchoChamber
+from opdynamics.dynamics.echochamber import EchoChamber, NoisyEchoChamber
 
 # noinspection PyUnusedName
 from opdynamics.integrate.types import OdeResult
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("test_echochamber")
+
+
+def _predictable_interaction(ec, lazy=True):
+    """Set up consistent interactions by manipulating probabilities.
+    Activities: Set every agent to 100% active (mean of 1 and SD of 0).
+    Connection probability: Equal probability (beta=0 yields p=1/m).
+    Social Interaction: No mutual interactions (r=0).
+    """
+    from scipy.stats import norm
+
+    ec.set_activities(norm, 1, 0)
+    ec.set_connection_probabilities(beta=0.0)
+    ec.set_social_interactions(0.0, lazy=lazy)
 
 
 class TestEchoChamber(TestCase):
@@ -34,7 +47,7 @@ class TestEchoChamber(TestCase):
         )
 
     def test_set_activities(self):
-        from scipy.stats import powerlaw
+        from scipy.stats import powerlaw, norm
         from opdynamics.utils.distributions import negpowerlaw
 
         gamma = 2
@@ -55,13 +68,13 @@ class TestEchoChamber(TestCase):
             "each agent in the echo chamber must have an activity probability",
         )
 
-        # TODO: test other distributions
-        # mu = 1
-        # sigma = 2
-        # self.ec.N = 100000  # just for distribution purpose
-        # self.ec.set_activities(norm, mu, sigma, dim=1, inverse=False)
-        # self.assertAlmostEquals(np.mean(self.ec.activities), mu)
-        # self.assertAlmostEquals(np.std(self.ec.activities), sigma)
+        # Normal
+        mu = 1
+        sigma = 0
+        self.ec.N = 100
+        self.ec.set_activities(norm, mu, sigma, dim=1)
+        self.assertAlmostEquals(np.mean(self.ec.activities), mu)
+        self.assertAlmostEquals(np.std(self.ec.activities), sigma)
 
     def test_set_connection_probabilities(self):
 
@@ -260,59 +273,259 @@ class TestEchoChamber(TestCase):
 
         self.ec.alpha = 3  # controversialness of issue (sigmoidal shape)
         self.ec.K = 3  # social interaction strength
-        epsilon = 1e-2  # minimum activity level with another agent
-        gamma = 2.1  # power law distribution param
-        beta = 3  # power law decay of connection probability
-        r = 0.5  # probability of a mutual interaction
-        activity_distribution = negpowerlaw
 
         dt = 0.01
         T = 0.1
 
-        self.ec.set_activities(activity_distribution, gamma, epsilon)
-        self.ec.set_connection_probabilities(beta=beta)
-        self.ec.set_social_interactions(r=r, lazy=True)
+        _predictable_interaction(self.ec)
         self.ec.set_dynamics()
-        filename = self.ec._get_filename()
-        logger.info(f"hashed {self.ec} = {filename}")
-        self.assertFalse(os.path.exists(filename))
+
+        ec_T1 = EchoChamber(
+            self.ec.N, self.ec.m, self.ec.K, self.ec.alpha, name=self.ec.name
+        )
+        _predictable_interaction(ec_T1)
+        ec_T1.set_dynamics()
+
+        ec_T2 = EchoChamber(
+            self.ec.N, self.ec.m, self.ec.K, self.ec.alpha, name=self.ec.name
+        )
+        _predictable_interaction(ec_T2)
+        ec_T2.set_dynamics()
+
+        filename_T0 = self.ec._get_filename()
+        self.assertFalse(os.path.exists(filename_T0))
         self.assertFalse(self.ec.load(dt, T))
 
         self.ec.run_network(dt, T)
-        prev_result = copy.deepcopy(self.ec.result)
-        prev_act = copy.deepcopy(self.ec.activities)
-        prev_p_conn = copy.deepcopy(self.ec.p_conn)
-        prev_adj_acc = copy.deepcopy(self.ec.adj_mat.accumulator)
+        filename = self.ec._get_filename()
         try:
-            self.ec.save()
+            saved_filename = self.ec.save()
+            self.assertTrue(saved_filename, filename)
             self.assertTrue(os.path.exists(filename))
 
-            new_ec = EchoChamber(
-                self.ec.N, self.ec.m, self.ec.K, self.ec.alpha, name=self.ec.name
-            )
-            new_ec.set_activities(activity_distribution, gamma, epsilon)
-            new_ec.set_connection_probabilities(beta=beta)
-            new_ec.set_social_interactions(r=r, lazy=True)
-            new_ec.set_dynamics()
             self.assertTrue(
-                new_ec.result is None, "expected results to be None before loading"
+                ec_T1.result is None, "expected results to be None before loading"
             )
-            self.assertTrue(new_ec.load(dt, T), "did not load results as expected")
-            self.assertTrue(new_ec.result is not None, "expected results to loaded")
-            self.assertTrue(
-                np.all(prev_result.y == new_ec.result.y),
-                "expected results to be the same",
+            self.assertTrue(ec_T1.load(dt, T), "did not load results as expected")
+            self.assertTrue(ec_T1.result is not None, "expected results to loaded")
+            self.assertFalse(ec_T2.has_results, "ec_T2 should still be a shell")
+
+            self.assertListEqual(
+                list(self.ec.result.y.ravel()),
+                list(ec_T1.result.y.ravel()),
+                "T1: expected results to be the same",
             )
-            self.assertTrue(
-                np.all(prev_act == new_ec.activities),
-                "expected activities to be the same",
+            self.assertListEqual(
+                list(self.ec.activities),
+                list(ec_T1.activities),
+                "T1: expected activities to be the same",
             )
-            self.assertTrue(
-                np.all(prev_p_conn == new_ec.p_conn), "expected p_conn to be the same"
+            self.assertListEqual(
+                list(self.ec.p_conn.ravel()),
+                list(ec_T1.p_conn.ravel()),
+                "T1: expected p_conn to be the same",
             )
-            self.assertTrue(
-                np.all(prev_adj_acc == new_ec.adj_mat.accumulator),
-                "expected adj_mat to be the same",
+            self.assertListEqual(
+                list(self.ec.adj_mat.accumulator.ravel()),
+                list(ec_T1.adj_mat.accumulator.ravel()),
+                "T1: expected adj_mat to be the same",
             )
         finally:
             os.remove(filename)
+
+        # run an extra few steps
+        T_more = 0.05
+        T2 = np.round(T + T_more, 5)
+        self.ec.run_network(dt, T_more, method="Euler")
+        ec_T1.run_network(dt, T_more, method="Euler")
+        filename_T2 = self.ec._get_filename()
+        filename_T2_new_ec = ec_T1._get_filename()
+
+        self.assertEqual(
+            filename,
+            filename_T2,
+            f"expected hashes at {T} and {T_more} to be the same (everything else being equal)."
+            f"\nec={self.ec}\nec_T1={ec_T1}\nec_T2={ec_T2}",
+        )
+
+        self.assertEqual(
+            filename_T2,
+            filename_T2_new_ec,
+            f"expected hashes to be the same for self and new_ec."
+            f"\nec={self.ec}\nec_T1={ec_T1}\nec_T2={ec_T2}",
+        )
+
+        self.ec.save()
+        try:
+            self.assertFalse(
+                ec_T2.load(dt, T_more),
+                f"expected no results to load for T_more={T_more}",
+            )
+            self.assertTrue(ec_T2.load(dt, T2), f"expected results to load for T2={T2}")
+            self.assertTrue(ec_T2.result is not None, "expected results to loaded")
+            self.assertListEqual(
+                list(self.ec.result.y.ravel()),
+                list(ec_T2.result.y.ravel()),
+                "T2: expected results to be the same",
+            )
+            self.assertListEqual(
+                list(self.ec.activities),
+                list(ec_T2.activities),
+                "T2: expected activities to be the same",
+            )
+            self.assertListEqual(
+                list(self.ec.p_conn.ravel()),
+                list(ec_T2.p_conn.ravel()),
+                "T2: expected p_conn to be the same",
+            )
+            self.assertListEqual(
+                list(self.ec.adj_mat.accumulator.ravel()),
+                list(ec_T2.adj_mat.accumulator.ravel()),
+                "T2: expected adj_mat to be the same",
+            )
+            self.assertFalse(
+                np.all(self.ec.result.y == ec_T1.result.y),
+                "T2: expected results to be different when loading a simulation halfway and continuing "
+                "independently (due to randomness)",
+            )
+        finally:
+            os.remove(filename_T2)
+
+
+class TestNoisyEchoChamber(TestCase):
+    def setUp(self) -> None:
+        self.ec = NoisyEchoChamber(1000, m=10, K=3.0, alpha=3.0)
+
+    def test_save_load(self):
+        from opdynamics.utils.distributions import negpowerlaw
+
+        self.ec.alpha = 3  # controversialness of issue (sigmoidal shape)
+        self.ec.K = 3  # social interaction strength
+
+        dt = 0.01
+        T = 0.1
+
+        _predictable_interaction(self.ec)
+        self.ec.set_dynamics(D=0.1)
+
+        ec_D_const = NoisyEchoChamber(
+            self.ec.N, self.ec.m, self.ec.K, self.ec.alpha, name=self.ec.name
+        )
+        _predictable_interaction(ec_D_const)
+        ec_D_const.set_dynamics(D=0.1)
+
+        filename_T0 = self.ec._get_filename()
+        self.assertFalse(os.path.exists(filename_T0))
+        self.assertFalse(self.ec.load(dt, T))
+
+        self.ec.run_network(dt, T)
+        filename = self.ec._get_filename()
+        filename_ec_D = ec_D_const._get_filename()
+        try:
+            saved_filename = self.ec.save()
+            self.assertTrue(saved_filename, filename)
+            self.assertTrue(os.path.exists(filename))
+
+            self.assertFalse(
+                ec_D_const.has_results, "expected results to be None before loading"
+            )
+            self.assertTrue(ec_D_const.load(dt, T), "did not load results as expected")
+            self.assertTrue(ec_D_const.has_results, "expected results to loaded")
+
+            self.assertListEqual(
+                list(self.ec.result.y.ravel()),
+                list(ec_D_const.result.y.ravel()),
+                "T1: expected results to be the same",
+            )
+            self.assertListEqual(
+                list(self.ec.activities),
+                list(ec_D_const.activities),
+                "T1: expected activities to be the same",
+            )
+            self.assertListEqual(
+                list(self.ec.p_conn.ravel()),
+                list(ec_D_const.p_conn.ravel()),
+                "T1: expected p_conn to be the same",
+            )
+            self.assertListEqual(
+                list(self.ec.adj_mat.accumulator.ravel()),
+                list(ec_D_const.adj_mat.accumulator.ravel()),
+                "T1: expected adj_mat to be the same",
+            )
+        finally:
+            os.remove(filename)
+
+        # run an extra few steps
+        T_more = 0.05
+        T2 = np.round(T + T_more, 5)
+        # change nosie
+        self.ec.set_dynamics(D=0.5)
+        self.ec.run_network(dt, T_more)
+        # keep noise the same
+        ec_D_const.run_network(dt, T_more)
+        filename_T2 = self.ec._get_filename()
+        filename_ec_D_T2 = ec_D_const._get_filename()
+
+        self.assertNotEqual(
+            filename,
+            filename_T2,
+            f"expected hashes at {T} and {T_more} to be different when changing noise."
+            f"\n{self.ec}",
+        )
+
+        self.assertEqual(
+            filename_ec_D,
+            filename_ec_D_T2,
+            f"expected hashes to be the same when keeping noise constant."
+            f"\n{ec_D_const}",
+        )
+
+        files_to_del = [self.ec.save(), ec_D_const.save()]
+
+        ec_D_T2 = NoisyEchoChamber(
+            self.ec.N, self.ec.m, self.ec.K, self.ec.alpha, name=self.ec.name
+        )
+        _predictable_interaction(ec_D_T2)
+        ec_D_T2.set_dynamics(D=0.1)
+        filename_D_T2 = ec_D_T2._get_filename()
+
+        try:
+            self.assertEqual(
+                filename_D_T2,
+                filename_ec_D_T2,
+                "expected same D_hist to have same filename (hash)."
+                f"\n{ec_D_const}\n{ec_D_T2}",
+            )
+            self.assertFalse(
+                ec_D_T2.has_results, "expected results to be None before loading"
+            )
+            self.assertTrue(ec_D_T2.load(dt, T2), "did not load results as expected")
+            self.assertTrue(ec_D_T2.has_results, "expected results to loaded")
+
+            # create D_hist to restore desired sim
+            ec_D_change = NoisyEchoChamber(
+                self.ec.N, self.ec.m, self.ec.K, self.ec.alpha, name=self.ec.name
+            )
+            _predictable_interaction(ec_D_change)
+            ec_D_change.set_dynamics(D=0.1)
+            ec_D_change._D_hist = [(0, 0.1), (T, 0.5)]
+            filename_Dchange_T2 = ec_D_change._get_filename()
+            self.assertEqual(
+                filename_T2,
+                filename_Dchange_T2,
+                "expected same D_hist to have same filename (hash)."
+                f"\n{self.ec}\n{ec_D_change}",
+            )
+            self.assertFalse(
+                ec_D_change.has_results, "expected results to be None before loading"
+            )
+            self.assertTrue(
+                ec_D_change.load(dt, T2), "did not load results as expected"
+            )
+            self.assertTrue(ec_D_change.has_results, "expected results to loaded")
+        finally:
+            for f in files_to_del:
+                try:
+                    os.remove(f)
+                except FileNotFoundError:
+                    pass

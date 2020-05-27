@@ -8,6 +8,8 @@ class negpowerlaw(object):
     Class that acts like `scipy.stats` distributions (but does not inherit from `rv_continuous`).
     """
 
+    name = "negpowerlaw"
+
     @staticmethod
     def rvs(gamma: float, low=0.01, high=1.0, size=1) -> np.ndarray:
         """Power-law for a negative exponent.

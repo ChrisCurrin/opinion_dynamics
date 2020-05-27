@@ -29,9 +29,9 @@ class TestSimulation(TestCase):
         )
         D = 1
 
-        noise_start = 1.0
-        noise_length = 2.0
-        recovery = 0.5
+        noise_start = 0.3
+        noise_length = 0.5
+        recovery = 0.2
         lazy = True
         nec = run_periodic_noise(noise_start, noise_length, recovery, D=D, **kwargs)
         vis = VisEchoChamber(nec)

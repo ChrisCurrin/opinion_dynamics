@@ -11,6 +11,7 @@ from typing import Callable, Tuple, Union
 from numpy.random import default_rng
 from scipy.stats import powerlaw
 
+from opdynamics.utils.accuracy import precision_and_scale
 from opdynamics.utils.decorators import hashable
 from opdynamics.utils.distributions import negpowerlaw
 from opdynamics.integrate.types import SolverResult, diffeq
@@ -24,19 +25,19 @@ class EchoChamber(object):
     """
     A network of agents interacting with each other.
 
-    :ivar int N: initial value: number of agents
-    :ivar int m: number of other agents to interact with
-    :ivar float alpha: controversialness of issue (sigmoidal shape)
-    :ivar float K: social interaction strength
-    :ivar float epsilon: minimum activity level with another agent
-    :ivar float gamma: power law distribution param
-    :ivar float beta: power law decay of connection probability
-    :ivar p_mutual_interaction: probability of a p_mutual_interaction interaction
-    :ivar np.ndarray p_conn: connection probabilities (matrix)
-    :ivar np.ndarray activities: activities of agents (vector)
-    :ivar SocialInteraction adj_mat: interactions of agents
-    :ivar np.ndarray opinions: opinions of agents (vector)
-    :ivar SolverResult result: post-simulation result with 't' time (vector) and 'y' opinion (agent x time) attrs
+    :ivar int N: Initial value: number of agents
+    :ivar int m: Number of other agents to interact with
+    :ivar float alpha: Controversialness of issue (sigmoidal shape)
+    :ivar float K: Social interaction strength
+    :ivar float epsilon: Minimum activity level with another agent
+    :ivar float gamma: Power law distribution param
+    :ivar float beta: Power law decay of connection probability
+    :ivar p_mutual_interaction: Probability of a mutual interaction
+    :ivar np.ndarray p_conn: Connection probabilities (matrix)
+    :ivar np.ndarray activities: Activities of agents (vector)
+    :ivar SocialInteraction adj_mat: Interactions of agents
+    :ivar np.ndarray opinions: Opinions of agents (vector)
+    :ivar SolverResult result: Post-simulation result with 't' time (vector) and 'y' opinion (agent x time) attrs
 
     """
 
@@ -124,7 +125,7 @@ class EchoChamber(object):
             dist_args = (*dist_args[:2], max_val - min_val)
 
         self.activities = distribution.rvs(*dist_args, size=size)
-        self._dist = f"{distribution.__name__}{dist_args}"
+        self._dist = f"{distribution.name}{dist_args}"
 
     def set_connection_probabilities(self, beta: float = 0.0):
         """For agent `i`, the probability of connecting to agent `j` is a function of the absolute strength of
@@ -210,6 +211,10 @@ class EchoChamber(object):
         """Check if this object has a results property with simulation data."""
         return self.result is not None
 
+    @property
+    def current_time(self):
+        return 0 if not self.has_results else self.result.t[-1]
+
     def _setup_run(
         self, dt: float = 0.01, t_end: float = 0.05
     ) -> Tuple[Tuple[float, float], tuple]:
@@ -232,10 +237,10 @@ class EchoChamber(object):
             # noinspection PyTypeChecker
             self.prev_result: SolverResult = copy.deepcopy(self.result)
             logger.info(
-                f"continuing dynamics from {t_start:.3f} until {t_end:.3f}. Opinions can be reset using "
+                f"continuing dynamics from {t_start:.6f} until {t_end:.6f}. Opinions can be reset using "
                 f"ec.init_opinions()."
             )
-        return (t_start, t_end), args
+        return (np.round(t_start, 6), np.round(t_end, 6)), args
 
     def _post_run(self):
         # reassign opinions to last time point
@@ -370,6 +375,9 @@ class EchoChamber(object):
         return os.path.join(".cache", f"{hash(self)}.h5")
 
     def save(self):
+        import warnings
+        from tables import NaturalNameWarning
+
         try:
             os.makedirs(".cache")
         except FileExistsError:
@@ -381,33 +389,56 @@ class EchoChamber(object):
         df_conn.name = "p_conn"
         df_act = pd.Series(self.activities)
         df_act.name = "activities"
-        df_adj_mat = pd.DataFrame(self.adj_mat.accumulator)
-        df_adj_mat.name = f"adj_mat-{self.adj_mat.p_mutual_interaction}"
-
-        for df in [df_opinions, df_conn, df_act, df_adj_mat]:
-            df.to_hdf(filename, df.name)
+        df_adj_mat_accum = pd.DataFrame(self.adj_mat.accumulator)
+        df_adj_mat_last = pd.DataFrame(self.adj_mat[-1])
+        df_adj_mat_accum.name = f"adj_mat_accum-{self.adj_mat.p_mutual_interaction}"
+        df_adj_mat_last.name = f"adj_mat_last-{self.adj_mat.p_mutual_interaction}"
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", NaturalNameWarning)
+            for df in [df_opinions, df_conn, df_act, df_adj_mat_accum, df_adj_mat_last]:
+                df.to_hdf(filename, df.name)
+        logger.debug(f"{self.name} saved to {filename}")
         return filename
 
     def load(self, dt, T):
-        import pandas as pd
+        """
+        Try to get previous results from the cache and return successful or not.
+        :param dt: Time step accuracy of simulation to load. Asking for a coarser dt than a simulation has been run
+            will load results (i.e. 0.01 when simulation was run with 0.001), but not the other way.
+        :param T: Time point from which to retrieve results.
+            Due to the way adj_mat is cached (only last adj_mat), only full simulations can be loaded.
+            That is, asking for T=0.5 for a simulation that has run for T=1.0 will not load because the adjacency
+            matrix at T=0.5 cannot be determined. A workaround is do short simulations and change the name of
+            echochamber object between `run_network` calls.
+        :return: True if loaded, False otherwise.
+        """
+        from opdynamics.dynamics.socialinteraction import SocialInteraction
 
         filename = self._get_filename()
 
         if os.path.exists(filename):
-            with pd.HDFStore(filename) as hdf:
+            dt_precision, dt_scale = precision_and_scale(dt)
+            T_precision, T_scale = precision_and_scale(T)
+            with pd.HDFStore(filename, mode="r") as hdf:
                 keys = hdf.keys()
                 # retrieve opinions for the time info first
                 df = hdf.get("opinions")
                 t_arr = df.index.values
                 y_arr = df.values
+                _dt = np.max(np.diff(t_arr))
+                _t_end = t_arr[-1]
+                if (
+                    np.round(T - _t_end, T_scale) != 0.0
+                    or np.round(dt - _dt, dt_scale) != 0.0
+                ):
+                    return False
                 self.result = SolverResult(
                     t_arr, y_arr.T, None, None, None, 0, 0, 0, 1, "success", True,
                 )
-                _dt = np.max(np.diff(self.result.t))
-                _t_end = self.result.t[-1]
-                if np.round(T - _t_end, 2) != 0.00 or np.round(dt - _dt, 5) != 0:
-                    return False
                 self._post_run()
+
+                # initialise social interactions (mutual interaction assigned later)
+                self.adj_mat = SocialInteraction(self, 0)
                 for key in keys:
                     df = hdf.get(key)
                     if "opinions" in key:
@@ -417,15 +448,19 @@ class EchoChamber(object):
                     elif "activities" in key:
                         self.activities = df.values
                     elif "adj_mat" in key:
-                        from opdynamics.dynamics.socialinteraction import (
-                            SocialInteraction,
-                        )
+                        self.adj_mat.p_mutual_interaction = float(key.split("-")[-1])
+                        if "accum" in key:
+                            self.adj_mat._accumulator = df.values
+                        elif "last" in key:
+                            self.adj_mat._last_adj_mat = df.values
+                        else:
+                            raise KeyError(
+                                f"unexpected adj_mat key '{key}' in hdf '{filename}'"
+                            )
+                    else:
+                        raise KeyError(f"unexpected key '{key}' in hdf '{filename}'")
 
-                        self.adj_mat = SocialInteraction(
-                            self, float(key.split("-")[-1])
-                        )
-                        self.adj_mat._accumulator = df.values
-
+            logger.debug(f"{self.name} loaded from {filename}")
             return True
         return False
 
@@ -442,6 +477,7 @@ class NoisyEchoChamber(EchoChamber):
         super().__init__(name=name, *args, **kwargs)
         self.diffusion: diffeq = None
         self.wiener_process: Callable = None
+        self._D_hist = []
 
     def set_dynamics(self, D=0.01, *args, **kwargs):
         """Network with external noise.
@@ -456,6 +492,8 @@ class NoisyEchoChamber(EchoChamber):
         # create new diffusion term
         self.diffusion = lambda t, y, *diff_args: D
         self.wiener_process = lambda: self.rn.normal(0, 1, size=self.N)
+
+        self._D_hist.append((self.current_time, D))
 
     def run_network(
         self, dt: float = 0.01, t_end: float = 0.05, method: str = "Euler-Maruyama",
@@ -484,7 +522,8 @@ class NoisyEchoChamber(EchoChamber):
         self._post_run()
 
     def __repr__(self):
-        return f"{super().__repr__()} diff={self.diffusion(0,0)}"
+        d_hist = [f"D={_D:.5f} from {_t:.5f}" for _t, _D in self._D_hist]
+        return f"{super().__repr__()} D_hist={d_hist}"
 
 
 class NoisyAgentEchoChamber(NoisyEchoChamber):
@@ -510,8 +549,8 @@ class NoisyAgentEchoChamber(NoisyEchoChamber):
         self.wiener_process = lambda: 1
 
 
-if __name__ == "__main__":
-    import matplotlib.pyplot as plt
+def example():
+    """Simple example to show how to run a simulation and display some results."""
     from opdynamics.visualise.visechochamber import VisEchoChamber
 
     logging.basicConfig(level=logging.DEBUG)
@@ -541,4 +580,11 @@ if __name__ == "__main__":
 
     ec.run_network(dt=dt, t_end=t_end)
     vis.show_opinions(color_code=False)
+
+
+if __name__ == "__main__":
+    import matplotlib.pyplot as plt
+
+    example()
+
     plt.show()
