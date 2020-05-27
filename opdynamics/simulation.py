@@ -116,9 +116,9 @@ def run_noise_range(
     :return: List of NoisyEchoChambers.
     """
     nec_arr = []
-
+    name = kwargs.pop("name", "")
     for D in D_range:
-        nec = run_params(NoisyEchoChamber, *args, D=D, name=f"D={D}", **kwargs,)
+        nec = run_params(NoisyEchoChamber, *args, D=D, name=f"D={D} {name}", **kwargs)
         nec_arr.append(nec)
 
     if plot_opinion:
