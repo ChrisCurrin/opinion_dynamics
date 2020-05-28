@@ -4,7 +4,7 @@ from typing import Callable, Iterable, List, Tuple, Type, TypeVar, Union
 
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
-from tqdm import trange
+from tqdm import tqdm, trange
 
 from opdynamics.dynamics.echochamber import EchoChamber, NoisyEchoChamber
 from opdynamics.utils.distributions import negpowerlaw
@@ -138,7 +138,6 @@ def run_noise_other_range(
     subplot_kws: dict = None,
     **kwargs,
 ) -> List[List[NoisyEchoChamber]]:
-    from tqdm.contrib import tenumerate
 
     if plot_opinion:
         import matplotlib.pyplot as plt
@@ -154,13 +153,13 @@ def run_noise_other_range(
 
     nec_arrs = []
 
-    for i, other in tenumerate(other_range):
+    for i, other in tqdm(enumerate(other_range)):
         kwargs[other_var] = other
         if plot_opinion:
             other_val = (
                 f"{other}"
                 if label_precision is None
-                else f"{other:.{{label_precision}}f}"
+                else f"{{}}:.{label_precision}f".format(other)
             )
             # noinspection PyUnboundLocalVariable
             nec_arr = run_noise_range(

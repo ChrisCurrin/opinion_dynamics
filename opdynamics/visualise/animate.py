@@ -95,7 +95,7 @@ class Animator(object):
             )
 
     def animate_nearest_neighbour(self, **kwargs):
-        bw = kwargs.setdefault("bw", 0.75)
+        bw = kwargs.setdefault("bw", 0.5)
         g = self.vis.show_nearest_neighbour(**kwargs)
         xlim = g.ax_joint.get_xlim()
         ylim = g.ax_joint.get_ylim()
@@ -222,16 +222,18 @@ if __name__ == "__main__":
         activity_distribution=negpowerlaw,
         r=0.5,
         dt=0.01,
-        T=10,
+        T=5,
     )
 
     ec = Simulation.run_params(
         EchoChamber, plot_opinions=False, lazy=False, cache=False, **_kwargs
     )
+    vis = VisEchoChamber(ec)
+    vis.show_opinions()
     animator = Animator(ec)
     # _fig, _ax = plt.subplots(1, 2)
     # animator.animate_social_interactions()
-    # animator.animate_opinions()
+    animator.animate_opinions()
     animator.animate_nearest_neighbour()
     animator.save()
     plt.show()
