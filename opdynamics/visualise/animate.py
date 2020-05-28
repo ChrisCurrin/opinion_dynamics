@@ -95,7 +95,7 @@ class Animator(object):
             )
 
     def animate_nearest_neighbour(self, **kwargs):
-        bw = kwargs.setdefault("bw", 1)
+        bw = kwargs.setdefault("bw", 0.75)
         g = self.vis.show_nearest_neighbour(**kwargs)
         xlim = g.ax_joint.get_xlim()
         ylim = g.ax_joint.get_ylim()

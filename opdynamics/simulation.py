@@ -141,6 +141,8 @@ def run_noise_other_range(
     from tqdm.contrib import tenumerate
 
     if plot_opinion:
+        import matplotlib.pyplot as plt
+
         if subplot_kws is None:
             subplot_kws = {}
         # default to share x and y
