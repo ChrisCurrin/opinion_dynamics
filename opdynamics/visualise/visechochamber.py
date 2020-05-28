@@ -315,7 +315,9 @@ class VisEchoChamber(object):
         v = np.max(np.abs(opinions))
         return -v, v
 
-    def show_nearest_neighbour(self, bw=1, t=-1, title=True, **kwargs) -> sns.JointGrid:
+    def show_nearest_neighbour(
+        self, bw=0.75, t=-1, title=True, **kwargs
+    ) -> sns.JointGrid:
         nn = self.ec.get_nearest_neighbours(t)
         kwargs.setdefault("color", "Purple")
         marginal_kws = kwargs.pop("marginal_kws", dict())

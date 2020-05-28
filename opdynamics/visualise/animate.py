@@ -222,7 +222,7 @@ if __name__ == "__main__":
         activity_distribution=negpowerlaw,
         r=0.5,
         dt=0.01,
-        T=5,
+        T=10,
     )
 
     ec = Simulation.run_params(

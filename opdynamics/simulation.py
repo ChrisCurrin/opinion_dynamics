@@ -160,7 +160,7 @@ def run_noise_other_range(
             other_val = (
                 f"{other}"
                 if label_precision is None
-                else f"{other:.{{label_precision}}.f}"
+                else f"{other:.{{label_precision}}f}"
             )
             # noinspection PyUnboundLocalVariable
             nec_arr = run_noise_range(
