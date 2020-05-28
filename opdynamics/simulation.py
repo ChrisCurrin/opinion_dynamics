@@ -1,7 +1,7 @@
 """Run a full simulation of a network of agents without worrying about object details."""
 import logging
 from typing import Callable, Iterable, List, Tuple, Type, TypeVar, Union
-
+import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from tqdm import tqdm, trange
@@ -134,7 +134,7 @@ def run_noise_other_range(
     *args,
     plot_opinion: bool = True,
     title: str = "",
-    label_precision: str = None,
+    label_precision: int = None,
     subplot_kws: dict = None,
     **kwargs,
 ) -> List[List[NoisyEchoChamber]]:
@@ -159,7 +159,7 @@ def run_noise_other_range(
             other_val = (
                 f"{other}"
                 if label_precision is None
-                else f"{{}}:.{label_precision}f".format(other)
+                else f"{np.round(other, label_precision)}"
             )
             # noinspection PyUnboundLocalVariable
             nec_arr = run_noise_range(

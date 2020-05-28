@@ -437,8 +437,6 @@ class EchoChamber(object):
                 )
                 self._post_run()
 
-                # initialise social interactions (mutual interaction assigned later)
-                self.adj_mat = SocialInteraction(self, 0)
                 for key in keys:
                     df = hdf.get(key)
                     if "opinions" in key:
