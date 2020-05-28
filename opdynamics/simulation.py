@@ -296,11 +296,13 @@ def run_periodic_noise(
         f"{block_time:.3f} with intervals of {interval}. A total of {num} perturbations will be done."
     )
     t = trange(2 + num * 2, desc="periodic noise")
+    name = kwargs.pop("name", "")
+    name += f"[num={num} interval={interval}]"
     nec = NoisyEchoChamber(N, m, K, alpha, *args, **kwargs)
     nec.set_activities(activity, gamma, epsilon, 1, dim=1)
     nec.set_connection_probabilities(beta=beta)
     nec.set_social_interactions(r=r, lazy=lazy)
-    nec.set_dynamics(D=D, *args, **kwargs)
+    nec.set_dynamics(D=0, *args, **kwargs)
 
     # try to hit the cache by creating noise history
     total_time = 0.0
@@ -311,7 +313,7 @@ def run_periodic_noise(
         total_time += block_time
         nec._D_hist.append((total_time, 0.0))
 
-    if not cache or (cache and not nec.load(dt, T)):
+    if not cache or (cache and not nec.load(dt, noise_start + noise_length + recovery)):
         nec._D_hist = [(0, 0)]
         nec.run_network(dt=dt, t_end=T, method=method)
 
