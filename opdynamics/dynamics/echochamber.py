@@ -326,7 +326,7 @@ class EchoChamber(object):
         time_point, average = self.result.t[idx], np.mean(self.result.y[:, idx], axis=0)
         return time_point, average
 
-    def get_nearest_neighbours(self, t: int or float = -1):
+    def get_nearest_neighbours(self, t: int or float = -1) -> np.ndarray:
         """Calculate mean value of every agents' nearest neighbour.
 
         .. math::
@@ -343,9 +343,9 @@ class EchoChamber(object):
 
         """
         idx = np.argmin(np.abs(t - self.result.t)) if isinstance(t, float) else t
-        snapshot_adj_mat = self.adj_mat[idx]
+        snapshot_adj_mat = self.adj_mat.accumulate(idx)
         out_degree_i = np.sum(snapshot_adj_mat, axis=0)
-        close_opinions = np.sum(snapshot_adj_mat * self.opinions, axis=0)
+        close_opinions = np.sum(snapshot_adj_mat * self.result.y[:, idx], axis=0)
         with np.errstate(divide="ignore", invalid="ignore"):
             # suppress warnings about dividing by nan or 0
             nn = close_opinions / out_degree_i
@@ -478,6 +478,7 @@ class NoisyEchoChamber(EchoChamber):
         self.diffusion: diffeq = None
         self.wiener_process: Callable = None
         self._D_hist = []
+        self.diff_args = ()
 
     def set_dynamics(self, D=0.01, *args, **kwargs):
         """Network with external noise.
@@ -503,7 +504,7 @@ class NoisyEchoChamber(EchoChamber):
         from opdynamics.integrate.solvers import SDE_INTEGRATORS, solve_sde
 
         t_span, args = self._setup_run(dt, t_end)
-
+        diff_args = (dt, *self.diff_args)
         if method in SDE_INTEGRATORS:
             # use a custom method in `opdynamics.utils.integrators`
             self.result: SolverResult = solve_sde(
@@ -515,7 +516,7 @@ class NoisyEchoChamber(EchoChamber):
                 method=method,
                 dt=dt,
                 args=args,
-                diff_args=(),
+                diff_args=diff_args,
             )
         else:
             raise NotImplementedError()
@@ -527,7 +528,7 @@ class NoisyEchoChamber(EchoChamber):
 
 
 class NoisyAgentEchoChamber(NoisyEchoChamber):
-    def set_dynamics(self, D=0.01, *args, **kwargs):
+    def set_dynamics(self, D=0.01, k_steps=10, *args, **kwargs):
         """
         Input from a random agent. Noise is internal to the network.
 
@@ -537,10 +538,11 @@ class NoisyAgentEchoChamber(NoisyEchoChamber):
         :param D: strength of noise
         """
         self._idx = self.rn.uniform(0, self.N, self.N)
+        self.diff_args = k_steps
 
         def diffusion(t, y, *diff_args):
-            k_steps = diff_args
-            if t % k_steps == 0:
+            dt, _k_steps = diff_args
+            if int(t / dt) % _k_steps == 0:
                 # TODO: agent with opposite opinion
                 self._idx = self.rn.uniform(0, self.N, size=self.N)
             return D * (y - y[self._idx])

@@ -53,8 +53,10 @@ def show_simulation_range(var_range, nec_arr, fig_ax=None):
             fontsize="x-large",
             rotation=0,
             va="top",
-            ha="left",
+            ha="right",
         )
+
+        _ax.grid(True, axis="x")
     sns.despine()
 
 

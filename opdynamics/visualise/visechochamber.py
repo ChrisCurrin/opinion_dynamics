@@ -28,18 +28,18 @@ class VisEchoChamber(object):
 
     Visualisations
     =====
-    - `show_activities`
-    - `show_opinions`
-    - `show_opinions_snapshot`
-    - `show_agent_opinions`
-    - `show_adjacency_matrix`
-    - `show_nearest_neighbour`
-    - `show_summary`
+    - ``show_activities``
+    - ``show_opinions``
+    - ``show_opinions_snapshot``
+    - ``show_agent_opinions``
+    - ``show_adjacency_matrix``
+    - ``show_nearest_neighbour``
+    - ``show_summary``
 
 
     Private methods
     ----
-     - `_get_equal_opinion_limits`
+     - ``_get_equal_opinion_limits``
 
     Examples
     =====
@@ -315,9 +315,9 @@ class VisEchoChamber(object):
         v = np.max(np.abs(opinions))
         return -v, v
 
-    def show_nearest_neighbour(self, title=True, **kwargs) -> sns.JointGrid:
-        nn = self.ec.get_nearest_neighbours()
-        bw = kwargs.pop("bw", 0.5)
+    def show_nearest_neighbour(self, bw=1, t=-1, title=True, **kwargs) -> sns.JointGrid:
+        nn = self.ec.get_nearest_neighbours(t)
+        kwargs.setdefault("color", "Purple")
         marginal_kws = kwargs.pop("marginal_kws", dict())
         marginal_kws.update(bw=bw)
         g = sns.jointplot(
@@ -326,7 +326,7 @@ class VisEchoChamber(object):
         g.ax_joint.set_xlabel(OPINION_SYMBOL)
         g.ax_joint.set_ylabel(MEAN_NEAREST_NEIGHBOUR)
         if title:
-            g.fig.suptitle("Neighbour's opinions")
+            g.fig.suptitle("Neighbour's opinions", va="bottom")
         return g
 
     def show_summary(self, single_fig=True, fig_kwargs=None) -> Tuple[Figure, Axes]:

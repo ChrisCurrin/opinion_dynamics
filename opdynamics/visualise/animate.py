@@ -1,11 +1,13 @@
 import logging
+import os
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from matplotlib import animation
 from matplotlib.collections import QuadMesh
-from matplotlib.colors import LogNorm
+from matplotlib.colors import LogNorm, colorConverter
 
 from opdynamics.dynamics.echochamber import EchoChamber
 from opdynamics.utils.decorators import optional_fig_ax
@@ -93,23 +95,55 @@ class Animator(object):
             )
 
     def animate_nearest_neighbour(self, **kwargs):
-        g = vis.show_nearest_neighbour(**kwargs)
-        bw = kwargs.pop("bw", 0.5)
+        bw = kwargs.setdefault("bw", 1)
+        g = self.vis.show_nearest_neighbour(**kwargs)
+        xlim = g.ax_joint.get_xlim()
+        ylim = g.ax_joint.get_ylim()
+        color = kwargs.pop("color", "Purple")
+        color_rgb = colorConverter.to_rgb(color)
+        colors = [
+            sns.set_hls_values(color_rgb, l=l) for l in np.linspace(1, 0, 12)  # noqa
+        ]
+        # Make a colormap based off the plot color
+        cmap = sns.blend_palette(colors, as_cmap=True)
+        kwargs.setdefault("cmap", cmap)
+        kwargs.setdefault("shade", True)
         marginal_kws = kwargs.pop("marginal_kws", dict())
         marginal_kws.update(bw=bw)
-        # Set up empty default kwarg dicts
+        marginal_kws.setdefault("color", color)
+        marginal_kws.setdefault("shade", True)
 
         def init():
+            g.ax_joint.clear()
+            g.ax_marg_x.clear()
+            g.ax_marg_y.clear()
             g.fig.suptitle(f"{0:>6.3f}")
 
         def animate(i):
-            g.x = self.ec.result.y[i]
-            g.y = self.ec.get_nearest_neighbours(t=i)
+            g.ax_joint.clear()
+            g.ax_marg_x.clear()
+            g.ax_marg_y.clear()
+            x = self.ec.result.y[:, i]
+            y = self.ec.get_nearest_neighbours(t=i)
+            # drop nans
+            not_na = pd.notnull(x) & pd.notnull(y)
+            g.x = x[not_na]
+            g.y = y[not_na]
             g.plot_joint(sns.kdeplot, **kwargs)
             g.plot_marginals(sns.kdeplot, **marginal_kws)
-            g.fig.suptitle(f"{self.ec.result.t[i]:>6.3f}")
 
-        self.animations["opinions"] = animation.FuncAnimation(
+            # these are reset after .clear(); so go correct these as in joint_plot
+            plt.setp(g.ax_marg_x.get_xticklabels(), visible=False)
+            plt.setp(g.ax_marg_y.get_yticklabels(), visible=False)
+            plt.setp(g.ax_marg_x.yaxis.get_majorticklines(), visible=False)
+            plt.setp(g.ax_marg_x.yaxis.get_minorticklines(), visible=False)
+            plt.setp(g.ax_marg_y.xaxis.get_majorticklines(), visible=False)
+            plt.setp(g.ax_marg_y.xaxis.get_minorticklines(), visible=False)
+            plt.setp(g.ax_marg_x.get_yticklabels(), visible=False)
+            plt.setp(g.ax_marg_y.get_xticklabels(), visible=False)
+            g.fig.suptitle(f"{self.ec.result.t[i]:>6.3f}", va="bottom")
+
+        self.animations["nearest_neighbour"] = animation.FuncAnimation(
             g.fig, animate, init_func=init, frames=len(self.ec.result.t), repeat=False,
         )
 
@@ -162,8 +196,13 @@ class Animator(object):
 
     def save(self):
         logger.info("saving...")
+        try:
+            os.makedirs("output")
+        except FileExistsError:
+            pass
         for name, anim in self.animations.items():
-            anim.save(f"{name}.mp4")
+            logger.debug(f"\t {name}")
+            anim.save(os.path.join("output", f"{name}.mp4"))
         logger.info("saved")
 
 
@@ -175,18 +214,20 @@ if __name__ == "__main__":
     _kwargs = dict(
         N=1000,  # number of agents
         m=10,  # number of other agents to interact with
-        alpha=2,  # controversialness of issue (sigmoidal shape)
+        alpha=3,  # controversialness of issue (sigmoidal shape)
         K=3,  # social interaction strength
         epsilon=1e-2,  # minimum activity level with another agent
         gamma=2.1,  # power law distribution param
-        beta=2,  # power law decay of connection probability
+        beta=3,  # power law decay of connection probability
         activity_distribution=negpowerlaw,
         r=0.5,
         dt=0.01,
-        t_end=5,
+        T=5,
     )
 
-    ec = Simulation.run_params(EchoChamber, plot_opinions=False, **_kwargs)
+    ec = Simulation.run_params(
+        EchoChamber, plot_opinions=False, lazy=False, cache=False, **_kwargs
+    )
     animator = Animator(ec)
     # _fig, _ax = plt.subplots(1, 2)
     # animator.animate_social_interactions()

@@ -49,8 +49,8 @@ def run_params(
     :param alpha: Controversialness of issue (sigmoidal shape).
     :param beta: Power law decay of connection probability.
     :param activity: Distribution of agents' activities.
-    :param epsilon: Minimum activity level with another agent.
     :param gamma: Power law distribution param.
+    :param epsilon: Minimum activity level with another agent.
     :param r: Probability of a mutual interaction.
     :param dt: Maximum size of time step.
     :param T: Length of simulation.
@@ -127,67 +127,161 @@ def run_noise_range(
     return nec_arr
 
 
+def run_noise_other_range(
+    D_range: Iterable,
+    other_var: str,
+    other_range: Iterable,
+    *args,
+    plot_opinion: bool = True,
+    title: str = "",
+    label_precision: str = None,
+    subplot_kws: dict = None,
+    **kwargs,
+) -> List[List[NoisyEchoChamber]]:
+    from tqdm.contrib import tenumerate
+
+    if plot_opinion:
+        if subplot_kws is None:
+            subplot_kws = {}
+        # default to share x and y
+        subplot_kws = {**dict(sharex="all", sharey="all"), **subplot_kws}
+        # noinspection PyTypeChecker
+        fig, ax = plt.subplots(
+            nrows=len(D_range), ncols=len(other_range), **subplot_kws
+        )
+
+    nec_arrs = []
+
+    for i, other in tenumerate(other_range):
+        kwargs[other_var] = other
+        if plot_opinion:
+            other_val = (
+                f"{other}"
+                if label_precision is None
+                else f"{other:.{{label_precision}}.f}"
+            )
+            # noinspection PyUnboundLocalVariable
+            nec_arr = run_noise_range(
+                D_range,
+                *args,
+                plot_opinion=(fig, ax[:, i]),
+                name=f"{other_var}={other_val}",
+                **kwargs,
+            )
+            ax[0, i].set_title("")
+            ax[-1, i].set_xlabel(other_val)
+        else:
+            nec_arr = run_noise_range(D_range, plot_opinion=False, **kwargs)
+        nec_arrs.append(nec_arr)
+
+    if plot_opinion:
+        from matplotlib.cbook import flatten
+        import seaborn as sns
+
+        fig.suptitle(title)
+        fig.subplots_adjust(hspace=-0.5, wspace=0)
+        for _ax in flatten(ax[:, 1:]):
+            _ax.set_ylabel("", ha="right")
+        for i in range(len(D_range)):
+            ax[i, 0].set_ylabel(f"{D_range[i]}", ha="right")
+        for _ax in fig.axes:
+            _ax.set_facecolor("None")
+            sns.despine(ax=_ax, bottom=True, left=True)
+            _ax.tick_params(
+                bottom=False, left=False, labelleft=False, labelbottom=False
+            )
+    return nec_arrs
+
+
 def run_periodic_noise(
     noise_start: float,
     noise_length: float,
     recovery: float,
     interval: float = 0.0,
     num: int = 1,
+    D: float = 0.01,
     N: int = 1000,
     m: int = 10,
     K: float = 3,
     alpha: float = 2,
     beta: float = 2,
     activity: Callable = negpowerlaw,
-    epsilon: float = 1e-2,
     gamma: float = 2.1,
+    epsilon: float = 1e-2,
     r: float = 0.5,
     dt: float = 0.01,
     T: float = 1.0,
-    lazy: bool = True,
     cache: bool = True,
-    D: float = 0.01,
     method: str = "Euler-Maruyama",
     plot_opinion: bool = False,
     *args,
     **kwargs,
-):
+) -> NoisyEchoChamber:
     """
+    Run a simulation with no noise, then bursts/periods of noise, then a recovery period.
 
-    :param noise_start:
-    :type noise_start:
-    :param noise_length:
-    :type noise_length:
-    :param recovery:
-    :type recovery:
-    :param interval:
-    :type interval:
-    :param num:
-    :type num:
-    :param D:
-    :type D:
+    no noise | noise | recovery
+
+    _________|-------|_________
+
+    The frequency at which noise is applied can be optionally set using ``interval`` and ``num``.
+
+    Examples
+    ----
+    To have 5 s no noise, 10 s constant noise, and 7 s recovery:
+
+    .. code-block :: python
+
+        run_periodic_noise(noise_start=5, noise_length=10, recovery=7)
+
+    To have 5 s no noise, 10 s with periodic noise, and 7 s recovery
+
+    with the block of noise defined as 2 periods of noise separated by 0.5 s of no noise.
+
+    _____|---- ----|_______
+
+        .. code-block :: python
+
+            run_periodic_noise(noise_start=5, noise_length=10, recovery=7, num=2, interval=0.5)
+
+        To have 5 s no noise, 10 s with periodic noise, and 7 s recovery
+
+    with the block of noise defined as 5 periods of noise each separated by 0.5 s of no noise.
+
+    noise per block = 10s/5 - 0.5s = 1.5 s
+
+    _____|- - - - -|_______
+
+        .. code-block :: python
+
+            run_periodic_noise(noise_start=5, noise_length=10, recovery=7, num=5, interval=0.5)
+
+    :param noise_start: The time to start the noise.
+    :param noise_length: The duration which will have noise. Note, this is inclusive of interval durations.
+    :param recovery: Duration **after** noise is applied where there is no noise.
+    :param interval: Duration between noise blocks.
+    :param num: Number of noise blocks.
+    :param D: Noise strength.
 
     :param N: initial value: Number of agents.
     :param m: Number of other agents to interact with.
     :param alpha: Controversialness of issue (sigmoidal shape).
     :param K: Social interaction strength.
-    :param epsilon: Minimum activity level with another agent.
-    :param gamma: Power law distribution param.
     :param beta: Power law decay of connection probability.
+    :param activity: Distribution of agents' activities.
+    :param gamma: Power law distribution param.
+    :param epsilon: Minimum activity level with another agent.
     :param r: Probability of a mutual interaction.
     :param dt: Maximum size of time step.
     :param T: Length of simulation.
     :param method: Solver method (custom or part of scipy).
-    :param lazy: Compute social interactions when needed (True) or before the network evolves with time (False).
-        Note that this can lead to large RAM usage.
     :param cache: Use a cache to retrieve and save results. Saves to `.cache`.
 
+    :param plot_opinion: Whether to display results (default False).
 
-    :return:
-    :rtype:
+    :return: NoisyEchoChamber created for the simulation.
     """
     lazy = kwargs.pop("lazy", True)
-    cache = kwargs.pop("cache", None)
     if not lazy:
         logger.warning(
             "value of 'lazy' provided to run_periodic_noise is ignored (set to True)."
@@ -201,12 +295,11 @@ def run_periodic_noise(
         f"{block_time:.3f} with intervals of {interval}. A total of {num} perturbations will be done."
     )
     t = trange(2 + num * 2, desc="periodic noise")
-    activity = kwargs.pop("ac")
-    nec = NoisyEchoChamber(N, m, K, alpha)
+    nec = NoisyEchoChamber(N, m, K, alpha, *args, **kwargs)
     nec.set_activities(activity, gamma, epsilon, 1, dim=1)
     nec.set_connection_probabilities(beta=beta)
     nec.set_social_interactions(r=r, lazy=lazy)
-    nec.set_dynamics(D=D)
+    nec.set_dynamics(D=D, *args, **kwargs)
 
     # try to hit the cache by creating noise history
     total_time = 0.0

@@ -65,6 +65,11 @@ class SocialInteraction(object):
             if t_idx is None:
                 return np.sum(self._time_mat, axis=0)
             return np.sum(self._time_mat[:t_idx], axis=0)
+        elif t_idx is not None and t_idx != -1:
+            raise IndexError(
+                f"Accumulate called with t_idx={t_idx} but adj_mat is computed lazily. "
+                f"Call ``eager(<dt>, <t_end>)`` first or set `lazy=False`."
+            )
         return self._accumulator
 
     # create a property for t_idx=None
