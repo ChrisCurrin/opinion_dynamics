@@ -207,10 +207,12 @@ def run_periodic_noise(
         nec._D_hist.append((total_time, 0.0))
 
     if not cache or (cache and not nec.load(dt, noise_start + noise_length + recovery)):
-        nec._D_hist = [(0, 0)]
-        nec.run_network(dt=dt, t_end=noise_start, method=method)
-
-        t.update()
+        # reset history
+        nec._D_hist = []
+        if noise_start > 0:
+            nec.set_dynamics(D=0, *args, **kwargs)
+            nec.run_network(dt=dt, t_end=noise_start, method=method)
+            t.update()
         # inner loop of noise on-off in blocks
         for i in trange(
             num, desc="noise blocks", disable=logger.getEffectiveLevel() <= logging.INFO
@@ -226,9 +228,10 @@ def run_periodic_noise(
         logger.debug(
             f"removing noise and letting network settle at {noise_start + noise_length} for {recovery}."
         )
-        nec.set_dynamics(D=0)
-        nec.run_network(t_end=recovery)
-        t.update()
+        if recovery > 0:
+            nec.set_dynamics(D=0)
+            nec.run_network(t_end=recovery)
+            t.update()
         if cache:
             nec.save(cache != "all")
     if plot_opinion:
@@ -270,17 +273,18 @@ def run_noise_range(
     """
     nec_arr = []
     name = kwargs.pop("name", "")
+    if noise_start > 0:
+        noise_length = kwargs.pop("T", 1.0)
     for D in D_range:
-        if noise_start == 0:
-            nec = run_params(
-                NoisyEchoChamber, *args, D=D, name=f"D={D} {name}", **kwargs
-            )
-        else:
-            noise_length = kwargs.pop("T", 1.0)
+        if noise_start > 0:
             if len(args) == 0:
                 kwargs.setdefault("recovery", 0)
             nec = run_periodic_noise(
                 noise_start, noise_length, *args, D=D, name=f"D={D} {name}", **kwargs
+            )
+        else:
+            nec = run_params(
+                NoisyEchoChamber, *args, D=D, name=f"D={D} {name}", **kwargs
             )
         nec_arr.append(nec)
 

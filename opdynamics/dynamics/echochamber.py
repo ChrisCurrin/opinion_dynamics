@@ -397,6 +397,7 @@ class EchoChamber(object):
         # get dt
         _index_name = np.max(np.diff(df_opinions.index))
         if only_last:
+            logger.debug("saving only last time point")
             # take last value but keep df_opinions as a DataFrame by including a `:`
             df_opinions = df_opinions.iloc[-1:]
             df_opinions.name = _name
