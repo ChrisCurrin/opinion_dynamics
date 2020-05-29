@@ -143,8 +143,11 @@ class VisEchoChamber(object):
     show_interactions = show_adjacency_matrix
 
     @optional_fig_ax
-    def show_activities(self, ax: Axes = None, fig: Figure = None) -> (Figure, Axes):
-        sns.distplot(self.ec.activities, kde=False, axlabel="activity", ax=ax)
+    def show_activities(
+        self, ax: Axes = None, fig: Figure = None, **kwargs
+    ) -> (Figure, Axes):
+        kwargs.setdefault("color", "Green")
+        sns.distplot(self.ec.activities, kde=False, axlabel="activity", ax=ax, **kwargs)
         ax.set(
             title="Activity distribution",
             ylabel="count",
@@ -222,6 +225,7 @@ class VisEchoChamber(object):
     ) -> (Figure, Axes):
         idx = np.argmin(np.abs(t - self.ec.result.t)) if isinstance(t, float) else t
         bins = kwargs.pop("bins", self.ec.N // 5)
+        kwargs.setdefault("color", "Purple")
         sns.distplot(self.ec.result.y[:, idx], bins=bins, ax=ax, **kwargs)
 
         vertical = kwargs.get("vertical", False)
@@ -316,7 +320,7 @@ class VisEchoChamber(object):
         return -v, v
 
     def show_nearest_neighbour(
-        self, bw=0.75, t=-1, title=True, **kwargs
+        self, bw=0.5, t=-1, title=True, **kwargs
     ) -> sns.JointGrid:
         nn = self.ec.get_nearest_neighbours(t)
         kwargs.setdefault("color", "Purple")

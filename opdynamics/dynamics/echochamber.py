@@ -374,7 +374,15 @@ class EchoChamber(object):
     def _get_filename(self):
         return os.path.join(".cache", f"{hash(self)}.h5")
 
-    def save(self):
+    def save(self, only_last=True) -> str:
+        """Save the echochamber to the cache using the HDF file format.
+
+        File name and format specified in ``_get_filename()``
+
+        :param only_last: Save only the last time point (default True).
+
+        :return Saved filename.
+        """
         import warnings
         from tables import NaturalNameWarning
 
@@ -385,6 +393,9 @@ class EchoChamber(object):
         filename = self._get_filename()
 
         df_opinions = self.result_df()
+        if only_last:
+            # take last value but keep df_opinions as a DataFrame by including a `:`
+            df_opinions = df_opinions.iloc[-1:]
         df_conn = pd.DataFrame(self.p_conn)
         df_conn.name = "p_conn"
         df_act = pd.Series(self.activities)

@@ -11,25 +11,31 @@ logger = logging.getLogger("social interaction")
 class SocialInteraction(object):
     """
     Compute the social interactions for the associated EchoChamber at time of request by calling
-    `si_object[<index>]`.
+    ``si_object[<index>]``.
 
-    The matrix for `<index>` is cached using `functools.lru_cache` so repeated calls for the same index are efficient.
+    The matrix for ``<index>`` is cached using ``functools.lru_cache`` so repeated calls for the same index are efficient.
 
     The use of calling a SocialInteraction object with an index ensures the dt time scale for social interactions is
     maintained even if the actual simulation is computed at a different dt, depending on method (such as RK45).
 
     Arguments:
     ------
-    * ec - EchoChamber to generate the social interaction from.
-    * p_mutual_interaction - 'r', the probability of a mutual interaction between agents i and j.
+    * ``ec`` - EchoChamber to generate the social interaction from.
+    * ``p_mutual_interaction`` - 'r', the probability of a mutual interaction between agents i and j.
+
+    Methods:
+    ------
+    * ``accumulate(t_idx)`` - number of interactions up to ``t_idx``. If ``t_idx`` is provided, instance must have
+        ``_time_mat``.
 
     Properties:
     ---------
-    * accumulator - keep track of the total number of interactions between agents.
+    * ``accumulator`` - keep track of the total number of interactions between agents.
 
     Private Properties
     ---------
-    * _last_adj_mat - keep a reference to the newest adjacency matrix of social interactions. Retrieved via [-1]
+    * ``_time_mat`` - adjacency matrix at each time point. Used to store eagerly computed results.
+    * ``_last_adj_mat`` - keep a reference to the newest adjacency matrix of social interactions. Retrieved via [-1]
 
     """
 

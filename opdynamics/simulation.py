@@ -87,113 +87,6 @@ def run_params(
     return _ec
 
 
-def run_noise_range(
-    D_range: Iterable,
-    *args,
-    plot_opinion: Union[bool, Tuple[Figure, Axes]] = True,
-    **kwargs,
-) -> List[NoisyEchoChamber]:
-    """ Run the same simulation multiple times, with different noises.
-
-    :param D_range: List of noise values (`D`).
-    :param plot_opinion: Display simulation range results (True). If a tuple of (fig, ax), then the passed values are used.
-
-    :keyword N: initial value: Number of agents.
-    :keyword m: Number of other agents to interact with.
-    :keyword alpha: Controversialness of issue (sigmoidal shape).
-    :keyword K: Social interaction strength.
-    :keyword epsilon: Minimum activity level with another agent.
-    :keyword gamma: Power law distribution param.
-    :keyword beta: Power law decay of connection probability.
-    :keyword r: Probability of a mutual interaction.
-    :keyword dt: Maximum size of time step.
-    :keyword T: Length of simulation.
-    :keyword method: Solver method (custom or part of scipy).
-    :keyword lazy: Compute social interactions when needed (True) or before the network evolves with time (False).
-        Note that this can lead to large RAM usage.
-    :keyword cache: Use a cache to retrieve and save results. Saves to `.cache`.
-
-    :return: List of NoisyEchoChambers.
-    """
-    nec_arr = []
-    name = kwargs.pop("name", "")
-    for D in D_range:
-        nec = run_params(NoisyEchoChamber, *args, D=D, name=f"D={D} {name}", **kwargs)
-        nec_arr.append(nec)
-
-    if plot_opinion:
-        show_simulation_range(D_range, nec_arr, plot_opinion)
-
-    return nec_arr
-
-
-def run_noise_other_range(
-    D_range: Iterable,
-    other_var: str,
-    other_range: Iterable,
-    *args,
-    plot_opinion: bool = True,
-    title: str = "",
-    label_precision: int = None,
-    subplot_kws: dict = None,
-    **kwargs,
-) -> List[List[NoisyEchoChamber]]:
-
-    if plot_opinion:
-        import matplotlib.pyplot as plt
-
-        if subplot_kws is None:
-            subplot_kws = {}
-        # default to share x and y
-        subplot_kws = {**dict(sharex="all", sharey="all"), **subplot_kws}
-        # noinspection PyTypeChecker
-        fig, ax = plt.subplots(
-            nrows=len(D_range), ncols=len(other_range), **subplot_kws
-        )
-
-    nec_arrs = []
-
-    for i, other in tqdm(enumerate(other_range)):
-        kwargs[other_var] = other
-        if plot_opinion:
-            other_val = (
-                f"{other}"
-                if label_precision is None
-                else f"{np.round(other, label_precision)}"
-            )
-            # noinspection PyUnboundLocalVariable
-            nec_arr = run_noise_range(
-                D_range,
-                *args,
-                plot_opinion=(fig, ax[:, i]),
-                name=f"{other_var}={other_val}",
-                **kwargs,
-            )
-            ax[0, i].set_title("")
-            ax[-1, i].set_xlabel(other_val)
-        else:
-            nec_arr = run_noise_range(D_range, plot_opinion=False, **kwargs)
-        nec_arrs.append(nec_arr)
-
-    if plot_opinion:
-        from matplotlib.cbook import flatten
-        import seaborn as sns
-
-        fig.suptitle(title)
-        fig.subplots_adjust(hspace=-0.5, wspace=0)
-        for _ax in flatten(ax[:, 1:]):
-            _ax.set_ylabel("", ha="right")
-        for i in range(len(D_range)):
-            ax[i, 0].set_ylabel(f"{D_range[i]}", ha="right")
-        for _ax in fig.axes:
-            _ax.set_facecolor("None")
-            sns.despine(ax=_ax, bottom=True, left=True)
-            _ax.tick_params(
-                bottom=False, left=False, labelleft=False, labelbottom=False
-            )
-    return nec_arrs
-
-
 def run_periodic_noise(
     noise_start: float,
     noise_length: float,
@@ -211,7 +104,6 @@ def run_periodic_noise(
     epsilon: float = 1e-2,
     r: float = 0.5,
     dt: float = 0.01,
-    T: float = 1.0,
     cache: bool = True,
     method: str = "Euler-Maruyama",
     plot_opinion: bool = False,
@@ -274,7 +166,6 @@ def run_periodic_noise(
     :param epsilon: Minimum activity level with another agent.
     :param r: Probability of a mutual interaction.
     :param dt: Maximum size of time step.
-    :param T: Length of simulation.
     :param method: Solver method (custom or part of scipy).
     :param cache: Use a cache to retrieve and save results. Saves to `.cache`.
 
@@ -295,7 +186,9 @@ def run_periodic_noise(
         f"noise (D={D}) will be intermittently added from {noise_start} for {noise_length} in blocks of "
         f"{block_time:.3f} with intervals of {interval}. A total of {num} perturbations will be done."
     )
-    t = trange(2 + num * 2, desc="periodic noise")
+    t = trange(
+        int(noise_start > 0) + (num * 2 - 1) + int(recovery > 0), desc="periodic noise"
+    )
     name = kwargs.pop("name", "")
     name += f"[num={num} interval={interval}]"
     nec = NoisyEchoChamber(N, m, K, alpha, *args, **kwargs)
@@ -315,7 +208,7 @@ def run_periodic_noise(
 
     if not cache or (cache and not nec.load(dt, noise_start + noise_length + recovery)):
         nec._D_hist = [(0, 0)]
-        nec.run_network(dt=dt, t_end=T, method=method)
+        nec.run_network(dt=dt, t_end=noise_start, method=method)
 
         t.update()
         # inner loop of noise on-off in blocks
@@ -337,11 +230,131 @@ def run_periodic_noise(
         nec.run_network(t_end=recovery)
         t.update()
         if cache:
-            nec.save()
+            nec.save(cache != "all")
     if plot_opinion:
         show_periodic_noise(nec, noise_start, noise_length, recovery, interval, num, D)
 
     return nec
+
+
+def run_noise_range(
+    D_range: Iterable,
+    *args,
+    noise_start=0,
+    plot_opinion: Union[bool, Tuple[Figure, Axes]] = True,
+    **kwargs,
+) -> List[NoisyEchoChamber]:
+    """ Run the same simulation multiple times, with different noises.
+
+    :param D_range: List of noise values (`D`).
+    :param noise_start: Time to start adding noise.
+        If 0, ``run_params`` is called, otherwise ``run_periodic_noise`` is called.
+    :param plot_opinion: Display simulation range results (True). If a tuple of (fig, ax), then the passed values are used.
+
+    :keyword N: initial value: Number of agents.
+    :keyword m: Number of other agents to interact with.
+    :keyword alpha: Controversialness of issue (sigmoidal shape).
+    :keyword K: Social interaction strength.
+    :keyword epsilon: Minimum activity level with another agent.
+    :keyword gamma: Power law distribution param.
+    :keyword beta: Power law decay of connection probability.
+    :keyword r: Probability of a mutual interaction.
+    :keyword dt: Maximum size of time step.
+    :keyword T: Length of simulation.
+    :keyword method: Solver method (custom or part of scipy).
+    :keyword lazy: Compute social interactions when needed (True) or before the network evolves with time (False).
+        Note that this can lead to large RAM usage.
+    :keyword cache: Use a cache to retrieve and save results. Saves to `.cache`.
+
+    :return: List of NoisyEchoChambers.
+    """
+    nec_arr = []
+    name = kwargs.pop("name", "")
+    for D in D_range:
+        if noise_start == 0:
+            nec = run_params(
+                NoisyEchoChamber, *args, D=D, name=f"D={D} {name}", **kwargs
+            )
+        else:
+            noise_length = kwargs.pop("T", 1.0)
+            if len(args) == 0:
+                kwargs.setdefault("recovery", 0)
+            nec = run_periodic_noise(
+                noise_start, noise_length, *args, D=D, name=f"D={D} {name}", **kwargs
+            )
+        nec_arr.append(nec)
+
+    if plot_opinion:
+        show_simulation_range(D_range, nec_arr, plot_opinion)
+
+    return nec_arr
+
+
+def run_noise_other_range(
+    D_range: Iterable,
+    other_var: str,
+    other_range: Iterable,
+    *args,
+    plot_opinion: bool = True,
+    title: str = "",
+    label_precision: int = None,
+    subplot_kws: dict = None,
+    **kwargs,
+) -> List[List[NoisyEchoChamber]]:
+
+    if plot_opinion:
+        import matplotlib.pyplot as plt
+
+        if subplot_kws is None:
+            subplot_kws = {}
+        # default to share x and y
+        subplot_kws = {**dict(sharex="all", sharey="all"), **subplot_kws}
+        # noinspection PyTypeChecker
+        fig, ax = plt.subplots(
+            nrows=len(D_range), ncols=len(other_range), squeeze=False, **subplot_kws
+        )
+
+    nec_arrs = []
+
+    for i, other in tqdm(enumerate(other_range)):
+        kwargs[other_var] = other
+        if plot_opinion:
+            other_val = (
+                f"{other}"
+                if label_precision is None
+                else f"{np.round(other, label_precision)}"
+            )
+            # noinspection PyUnboundLocalVariable
+            nec_arr = run_noise_range(
+                D_range,
+                *args,
+                plot_opinion=(fig, ax[:, i]),
+                name=f"{other_var}={other_val}",
+                **kwargs,
+            )
+            ax[0, i].set_title("")
+            ax[-1, i].set_xlabel(other_val)
+        else:
+            nec_arr = run_noise_range(D_range, plot_opinion=False, **kwargs)
+        nec_arrs.append(nec_arr)
+
+    if plot_opinion:
+        from matplotlib.cbook import flatten
+        import seaborn as sns
+
+        fig.suptitle(title)
+        fig.subplots_adjust(hspace=-0.5, wspace=0)
+        for _ax in flatten(ax[:, 1:]):
+            _ax.set_ylabel("", ha="right")
+        for i in range(len(D_range)):
+            ax[i, 0].set_ylabel(f"{D_range[i]}", ha="right")
+        for _ax in fig.axes:
+            _ax.set_facecolor("None")
+            sns.despine(ax=_ax, bottom=True, left=True)
+            _ax.tick_params(
+                bottom=False, left=False, labelleft=False, labelbottom=False
+            )
+    return nec_arrs
 
 
 if __name__ == "__main__":
