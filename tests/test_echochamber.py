@@ -292,14 +292,33 @@ class TestEchoChamber(TestCase):
         _predictable_interaction(ec_T2)
         ec_T2.set_dynamics()
 
+        ec_last = EchoChamber(
+            self.ec.N, self.ec.m, self.ec.K, self.ec.alpha, name=self.ec.name
+        )
+        _predictable_interaction(ec_last)
+        ec_last.set_dynamics()
+
         filename_T0 = self.ec._get_filename()
         self.assertFalse(os.path.exists(filename_T0))
         self.assertFalse(self.ec.load(dt, T))
 
         self.ec.run_network(dt, T)
         filename = self.ec._get_filename()
+
         try:
-            saved_filename = self.ec.save()
+            # last time point only
+            saved_filename = self.ec.save(True)
+            self.assertTrue(saved_filename, filename)
+            self.assertTrue(os.path.exists(filename))
+            self.assertTrue(ec_last.load(dt, T), "did not load results as expected")
+            self.assertTrue(ec_last.has_results, "expected results to loaded")
+            self.assertListEqual(
+                list(ec_last.result.t), [T], "expected single time point"
+            )
+            self.assertTupleEqual(ec_last.result.y.shape, (self.ec.N, 1))
+
+            # re-save with all time points
+            saved_filename = self.ec.save(False)
             self.assertTrue(saved_filename, filename)
             self.assertTrue(os.path.exists(filename))
 
@@ -307,7 +326,7 @@ class TestEchoChamber(TestCase):
                 ec_T1.result is None, "expected results to be None before loading"
             )
             self.assertTrue(ec_T1.load(dt, T), "did not load results as expected")
-            self.assertTrue(ec_T1.result is not None, "expected results to loaded")
+            self.assertTrue(ec_T1.has_results, "expected results to loaded")
             self.assertFalse(ec_T2.has_results, "ec_T2 should still be a shell")
 
             self.assertListEqual(
@@ -355,7 +374,7 @@ class TestEchoChamber(TestCase):
             f"\nec={self.ec}\nec_T1={ec_T1}\nec_T2={ec_T2}",
         )
 
-        self.ec.save()
+        self.ec.save(False)
         try:
             self.assertFalse(
                 ec_T2.load(dt, T_more),
@@ -422,7 +441,7 @@ class TestNoisyEchoChamber(TestCase):
         filename = self.ec._get_filename()
         filename_ec_D = ec_D_const._get_filename()
         try:
-            saved_filename = self.ec.save()
+            saved_filename = self.ec.save(False)
             self.assertTrue(saved_filename, filename)
             self.assertTrue(os.path.exists(filename))
 
@@ -480,7 +499,7 @@ class TestNoisyEchoChamber(TestCase):
             f"\n{ec_D_const}",
         )
 
-        files_to_del = [self.ec.save(), ec_D_const.save()]
+        files_to_del = [self.ec.save(False), ec_D_const.save(False)]
 
         ec_D_T2 = NoisyEchoChamber(
             self.ec.N, self.ec.m, self.ec.K, self.ec.alpha, name=self.ec.name

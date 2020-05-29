@@ -81,7 +81,7 @@ def run_params(
     if not cache or (cache and not _ec.load(dt, T)):
         _ec.run_network(dt=dt, t_end=T, method=method)
         if cache:
-            _ec.save()
+            _ec.save(cache != "all")
     if plot_opinion:
         show_simulation_results(_ec, plot_opinion)
     return _ec

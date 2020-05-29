@@ -245,7 +245,7 @@ class EchoChamber(object):
     def _post_run(self):
         # reassign opinions to last time point
         self.opinions = self.result.y[:, -1]
-        if self.result.t[0] > 0:
+        if len(self.result.t) > 2 and self.result.t[0] > 0:
             self.result = self.prev_result + self.result
         logger.info(f"done running {self.name}")
 
@@ -394,10 +394,13 @@ class EchoChamber(object):
 
         df_opinions = self.result_df()
         _name = df_opinions.name
+        # get dt
+        _index_name = np.max(np.diff(df_opinions.index))
         if only_last:
             # take last value but keep df_opinions as a DataFrame by including a `:`
             df_opinions = df_opinions.iloc[-1:]
             df_opinions.name = _name
+        df_opinions.index.name = _index_name
         df_conn = pd.DataFrame(self.p_conn)
         df_conn.name = "p_conn"
         df_act = pd.Series(self.activities)
@@ -437,7 +440,7 @@ class EchoChamber(object):
                 df = hdf.get("opinions")
                 t_arr = df.index.values
                 y_arr = df.values
-                _dt = np.max(np.diff(t_arr))
+                _dt = df.index.name
                 _t_end = t_arr[-1]
                 if (
                     np.round(T - _t_end, T_scale) != 0.0
