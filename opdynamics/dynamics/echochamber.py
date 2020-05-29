@@ -393,9 +393,11 @@ class EchoChamber(object):
         filename = self._get_filename()
 
         df_opinions = self.result_df()
+        _name = df_opinions
         if only_last:
             # take last value but keep df_opinions as a DataFrame by including a `:`
             df_opinions = df_opinions.iloc[-1:]
+            df_opinions.name = _name
         df_conn = pd.DataFrame(self.p_conn)
         df_conn.name = "p_conn"
         df_act = pd.Series(self.activities)
