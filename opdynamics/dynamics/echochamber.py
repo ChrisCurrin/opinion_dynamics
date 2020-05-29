@@ -393,7 +393,7 @@ class EchoChamber(object):
         filename = self._get_filename()
 
         df_opinions = self.result_df()
-        _name = df_opinions
+        _name = df_opinions.name
         if only_last:
             # take last value but keep df_opinions as a DataFrame by including a `:`
             df_opinions = df_opinions.iloc[-1:]
@@ -425,7 +425,6 @@ class EchoChamber(object):
             echochamber object between `run_network` calls.
         :return: True if loaded, False otherwise.
         """
-        from opdynamics.dynamics.socialinteraction import SocialInteraction
 
         filename = self._get_filename()
 
