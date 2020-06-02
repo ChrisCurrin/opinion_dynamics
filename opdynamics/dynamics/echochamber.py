@@ -12,6 +12,7 @@ from numpy.random import default_rng
 from scipy.stats import powerlaw
 
 from opdynamics.utils.accuracy import precision_and_scale
+from opdynamics.utils.constants import EXTERNAL_NOISE, INTERNAL_NOISE
 from opdynamics.utils.decorators import hashable
 from opdynamics.utils.distributions import negpowerlaw
 from opdynamics.integrate.types import SolverResult, diffeq
@@ -279,6 +280,7 @@ class EchoChamber(object):
                 method=method,
                 dt=dt,
                 args=args,
+                desc=self.name,
             )
         else:
             # use a method in `scipy.integrate`
@@ -414,7 +416,7 @@ class EchoChamber(object):
             warnings.simplefilter("ignore", NaturalNameWarning)
             for df in [df_opinions, df_conn, df_act, df_adj_mat_accum, df_adj_mat_last]:
                 df.to_hdf(filename, df.name)
-        logger.debug(f"{self.name} saved to {filename}")
+        logger.debug(f"saved to {filename}\n{self}")
         return filename
 
     def load(self, dt, T):
@@ -431,7 +433,7 @@ class EchoChamber(object):
         """
 
         filename = self._get_filename()
-
+        logger.debug(f"trying to hit cache for {filename}\n{self}")
         if os.path.exists(filename):
             dt_precision, dt_scale = precision_and_scale(dt)
             T_precision, T_scale = precision_and_scale(T)
@@ -494,19 +496,58 @@ class NoisyEchoChamber(EchoChamber):
         self._D_hist = []
         self.diff_args = ()
 
-    def set_dynamics(self, D=0.01, *args, **kwargs):
-        """Network with external noise.
+    def set_dynamics(self, D=0.01, noise_source=EXTERNAL_NOISE, *args, **kwargs):
+        """Network with noise.
+
+        External noise:
+        -----
 
         .. math::
             \dot{x}_i = - x_i + K \cdot \sum_{j=1} A_{ij}(t) \cdot \\tanh{(\\alpha \cdot x_j)} + D \cdot \\xi (t)
+
+        Where :math:`\\xi (t)` is the Wiener Process.
+
+        Internal noise:
+        -----
+
+        .. math::
+            \dot{x}_i = - x_i + K \cdot \sum_j A_{ij}(t) \cdot \\tanh{(\\alpha \cdot x_j)} + D \cdot (x_i - x_k)
+
+        Where :math:`x_k` is an agent chosen every k time steps.
+
+        :param D: Strength of noise.
+        :param noise_source: Whether noise is external or internal (see formulations above).
+            Use constants defined in `utils.constants`.
+
+        :keyword k_steps: If `noise_source=INTERNAL_NOISE`, then choose N random agents every `k_steps`
+            (default 10).
 
         """
         # assign drift as before, aka dy_dt
         super().set_dynamics()
 
         # create new diffusion term
-        self.diffusion = lambda t, y, *diff_args: D
-        self.wiener_process = lambda: self.rn.normal(0, 1, size=self.N)
+        if noise_source == INTERNAL_NOISE:
+            self._idx = self.rn.uniform(0, self.N, self.N)
+            self.diff_args = (kwargs.pop("k_steps", 10),)
+            logger.debug(f"internal noise chosen with k_steps={self.diff_args}")
+
+            def diffusion(t, y, *diff_args):
+                dt, _k_steps = diff_args
+                if int(t / dt) % _k_steps == 0:
+                    # TODO: pick agent with opposite opinion
+                    self._idx = np.round(
+                        self.rn.uniform(0, self.N - 1, size=self.N), 0
+                    ).astype(int)
+                return D * (y - y[self._idx])
+
+            self.diffusion = diffusion
+            self.wiener_process = lambda dt: 1
+        else:
+            self.diffusion = lambda t, y, *diff_args: D
+            self.wiener_process = lambda dt: self.rn.normal(
+                loc=0, scale=np.sqrt(dt), size=self.N
+            )
 
         self._D_hist.append((self.current_time, D))
 
@@ -531,6 +572,7 @@ class NoisyEchoChamber(EchoChamber):
                 dt=dt,
                 args=args,
                 diff_args=diff_args,
+                desc=self.name,
             )
         else:
             raise NotImplementedError()
@@ -538,31 +580,7 @@ class NoisyEchoChamber(EchoChamber):
 
     def __repr__(self):
         d_hist = [f"D={_D:.5f} from {_t:.5f}" for _t, _D in self._D_hist]
-        return f"{super().__repr__()} D_hist={d_hist}"
-
-
-class NoisyAgentEchoChamber(NoisyEchoChamber):
-    def set_dynamics(self, D=0.01, k_steps=10, *args, **kwargs):
-        """
-        Input from a random agent. Noise is internal to the network.
-
-        .. math::
-            \dot{x}_i = - x_i + K \cdot \sum_j A_{ij}(t) \cdot \\tanh{(\\alpha \cdot x_j)} + D \cdot (x_i - x_k)
-
-        :param D: strength of noise
-        """
-        self._idx = self.rn.uniform(0, self.N, self.N)
-        self.diff_args = k_steps
-
-        def diffusion(t, y, *diff_args):
-            dt, _k_steps = diff_args
-            if int(t / dt) % _k_steps == 0:
-                # TODO: agent with opposite opinion
-                self._idx = self.rn.uniform(0, self.N, size=self.N)
-            return D * (y - y[self._idx])
-
-        self.diffusion = diffusion
-        self.wiener_process = lambda: 1
+        return f"{super().__repr__()} D_hist={d_hist} diff_args={self.diff_args}"
 
 
 def example():

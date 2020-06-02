@@ -169,6 +169,7 @@ class VisEchoChamber(object):
         **kwargs,
     ) -> (Figure, Axes):
         """
+        Display the evolution of opinions over time.
 
         :param color_code: Whether to color by valence (True) or by agent (False).
             By default, a scatter plot is used, but a line plot with precise coloring can be specified with 'line'.
@@ -177,7 +178,6 @@ class VisEchoChamber(object):
         :param ax: Axes to use for plot. Created if none passed.
         :param fig: Figure to use for colorbar. Created if none passed.
         :param title: Include title in the figure.
-
 
         :return: (Figure, Axes) used.
         """

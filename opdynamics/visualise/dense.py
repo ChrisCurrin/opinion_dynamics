@@ -83,24 +83,20 @@ def show_activity_vs_opinion(
     cax = cbar_kws.pop("cbar_ax", None) or cbar_kws.pop("cax", None)
     if cax is None:
         # create colorbar axes without stealing from main ax
-        colorbar_inset(
-            points, "outer right", size="5%", ax=ax, **cbar_kws,
-        )
+        cbar = colorbar_inset(points, "outer right", size="5%", ax=ax, **cbar_kws,)
     elif isinstance(cax, Axes):
         # using existing cax
-        fig.colorbar(
-            points, cax=cax, **cbar_kws,
-        )
+        cbar = fig.colorbar(points, cax=cax, **cbar_kws,)
     elif cax:
         # steal space from ax if cax is anything else (i.e. unless None, False, or an Axes)
-        fig.colorbar(points, ax=ax, **cbar_kws)
+        cbar = fig.colorbar(points, ax=ax, **cbar_kws)
 
     ax.set_xlabel(OPINION_SYMBOL)
     ax.set_ylabel(ACTIVITY_SYMBOL)
     ax.set_xlim(*get_equal_limits(opinions))
     if title:
         ax.set_title(title)
-    return fig, ax
+    return fig, ax, cbar
 
 
 @optional_fig_ax
@@ -111,13 +107,13 @@ def show_matrix(
     sort: bool = False,
     norm: Normalize = LogNorm(),
     cmap: str = INTERACTIONS_CMAP,
-    ax: Axes = None,
     fig: Figure = None,
+    ax: Axes = None,
     title: str = "matrix",
     **kwargs,
 ) -> (Figure or ClusterGrid, Axes):
     """
-    Plot matrix.
+    Plot matrix where x and y are the indices of the matrix and z (or c) is the value.
 
     :param mat: Matrix to plot.
     :param label: The data represented by the matrix. E.g. Number of interactions.
@@ -211,3 +207,26 @@ def show_matrix(
         else:
             ax.set_title(title)
     return fig, ax
+
+
+def show_noise_panel(
+    df: pd.DataFrame, col, log=False, grid_kwargs=None, kde_kwargs=None
+) -> sns.FacetGrid:
+    if grid_kwargs is None:
+        grid_kwargs = {}
+    grid_kwargs.setdefault("palette", "husl")
+    grid_kwargs.setdefault("hue", col)
+    if kde_kwargs is None:
+        kde_kwargs = {}
+    kde_kwargs.setdefault("shade", True)
+    kde_kwargs.setdefault("shade_lowest", False)
+
+    _D = "D"
+    if log:
+        _D = "log D"
+        df = df[df["D"] > 0]
+        df[_D] = np.log10(df["D"])
+    g = sns.FacetGrid(df, col=col, **grid_kwargs)
+    g.map(sns.kdeplot, "opinion", _D, **kde_kwargs)
+    g.axes[0, 0].set_ylabel(_D, rotation=0)
+    return g

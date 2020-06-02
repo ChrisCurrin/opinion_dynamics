@@ -1,7 +1,12 @@
-# Model opinion dynamics in an echo chamber
+# Depolarisation of opinions
 
 Authors: 
 - [Christopher Currin](https://chriscurrin.com)
+
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/ChrisCurrin/opinion_dynamics/master?filepath=opdynamics.ipynb)
+[![Google Colab](https://colab.research.google.com/img/colab_favicon.ico)](https://colab.research.google.com/github/ChrisCurrin/opinion_dynamics/blob/master/opdynamics.ipynb)
+
+---
 
 ## 1. Create environment from requirements using [conda](https://docs.conda.io/en/latest/)
 

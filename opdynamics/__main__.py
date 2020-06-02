@@ -8,6 +8,7 @@ from scipy.integrate._ivp.ivp import METHODS as SCIPY_METHODS
 from opdynamics.dynamics.echochamber import EchoChamber, NoisyEchoChamber
 from opdynamics.simulation import run_noise_range, run_params
 from opdynamics.integrate.solvers import ODE_INTEGRATORS, SDE_INTEGRATORS
+from opdynamics.utils.constants import EXTERNAL_NOISE, INTERNAL_NOISE
 from opdynamics.utils.distributions import negpowerlaw
 
 
@@ -74,6 +75,13 @@ parser.add_argument(
 parser.add_argument("K", type=float, default=K, help="Social interaction strength.")
 parser.add_argument(
     "-D", "--noise", nargs="*", type=float, default=None, help="Noise in dynamics.",
+)
+parser.add_argument(
+    "--noise_source",
+    type=str,
+    default="external",
+    choices=["internal", "external"],
+    help="Noise in dynamics.",
 )
 parser.add_argument(
     "-a",
@@ -204,6 +212,7 @@ kwargs = dict(
     r=args.r,
     method=method,
     plot_opinion=args.plot,
+    cache="all",
 )
 if args.noise:
     ec_type = NoisyEchoChamber
@@ -211,6 +220,9 @@ if args.noise:
         kwargs["D"] = args.noise[0]
     else:
         kwargs["D"] = args.noise
+    kwargs["noise_source"] = (
+        EXTERNAL_NOISE if args.noise_source == "external" else INTERNAL_NOISE
+    )
 
 else:
     ec_type = EchoChamber

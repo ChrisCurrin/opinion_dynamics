@@ -12,13 +12,15 @@ ODE_INTEGRATORS = {"Euler": Euler}
 SDE_INTEGRATORS = {"Euler-Maruyama": EulerMaruyama}
 
 
-def _run_solver(solver, t_span: Tuple[float, float], dt: float) -> SolverResult:
+def _run_solver(
+    solver, t_span: Tuple[float, float], dt: float, desc: str = "solver"
+) -> SolverResult:
     """Given a numerical integrator, call its 'step' method T/dt times (where T is last element of t_span)."""
     t_start, t_end = t_span
     t_arr = np.arange(t_start, t_end + dt, dt)
     y_arr = np.zeros(shape=(len(t_arr), len(solver.y)))
     logger.info(f"{len(t_arr)} iterations to do...")
-    for i, t in tenumerate(t_arr, desc="solver"):
+    for i, t in tenumerate(t_arr, desc=desc):
         y_arr[i] = solver.y
         solver.step(t, dt)
     # add final y
@@ -27,13 +29,19 @@ def _run_solver(solver, t_span: Tuple[float, float], dt: float) -> SolverResult:
 
 
 def solve_ode(
-    dy_dt: Callable, t_span: tuple, y0: np.ndarray, method: str, dt: float, args: tuple
+    dy_dt: Callable,
+    t_span: tuple,
+    y0: np.ndarray,
+    method: str,
+    dt: float,
+    args: tuple,
+    **kwargs,
 ) -> SolverResult:
     """Solve an ordinary differential equation using a method in `opdynamics.integrate.methods`."""
     if method in ODE_INTEGRATORS:
         logger.info(f"solving ODE using {method}")
         solver = ODE_INTEGRATORS[method](dy_dt, y0, args)
-        return _run_solver(solver, t_span, dt)
+        return _run_solver(solver, t_span, dt, **kwargs)
     else:
         raise NotImplementedError(
             f"ODE integration method '{method}' not implemented. Supported methods: {ODE_INTEGRATORS}"
@@ -50,6 +58,7 @@ def solve_sde(
     dt: float,
     args: tuple,
     diff_args: tuple,
+    **kwargs,
 ) -> SolverResult:
     """Solve a stochastic ordinary differential equation using a method in `opdynamics.integrate.methods`."""
     if method in SDE_INTEGRATORS:
@@ -57,7 +66,7 @@ def solve_sde(
         solver = SDE_INTEGRATORS[method](
             dy_dt, diffusion, wiener_process, y0, args, diff_args
         )
-        return _run_solver(solver, t_span, dt)
+        return _run_solver(solver, t_span, dt, **kwargs)
     else:
         raise NotImplementedError(
             f"SDE integration method '{method}' not implemented. Supported methods: {ODE_INTEGRATORS}"

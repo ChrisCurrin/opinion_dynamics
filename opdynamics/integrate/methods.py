@@ -88,4 +88,4 @@ class EulerMaruyama(SDEIntegrator):
     def step(self, t: float, dt: float):
         drift = self.dy_dt(t, self.y, *self.args)
         diff = self.diffusion(t, self.y, *self.diff_args)
-        self.y = self.y + drift * dt + np.sqrt(dt * diff) * self.wiener_process()
+        self.y = self.y + drift * dt + diff * self.wiener_process(dt)

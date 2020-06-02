@@ -1,4 +1,5 @@
 from .animate import Animator
+from .dense import show_K_alpha_phase, show_activity_vs_opinion, show_noise_panel
 from .visechochamber import VisEchoChamber
 from .vissimulation import (
     show_simulation_results,
@@ -9,6 +10,9 @@ from .vissimulation import (
 __all__ = [
     "Animator",
     "VisEchoChamber",
+    "show_K_alpha_phase",
+    "show_activity_vs_opinion",
+    "show_noise_panel",
     "show_simulation_range",
     "show_periodic_noise",
     "show_simulation_results",

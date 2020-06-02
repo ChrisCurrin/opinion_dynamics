@@ -1,11 +1,13 @@
 """Run a full simulation of a network of agents without worrying about object details."""
 import logging
-from typing import Callable, Iterable, List, Tuple, Type, TypeVar, Union
 import numpy as np
+import pandas as pd
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from tqdm import tqdm, trange
+from typing import Callable, Iterable, List, Tuple, Type, TypeVar, Union
 
+from opdynamics.utils.constants import *
 from opdynamics.dynamics.echochamber import EchoChamber, NoisyEchoChamber
 from opdynamics.utils.distributions import negpowerlaw
 from opdynamics.visualise import (
@@ -40,8 +42,9 @@ def run_params(
     **sim_kwargs,
 ) -> EC:
     """
-    Static method to quickly and conveniently run a simulation where the parameters differ, but the structure
+    Quickly and conveniently run a simulation where the parameters differ, but the structure
             is the same (activity distribution, dynamics, etc.)
+
     :param cls: The type of EchoChamber class to use. E.g. NoisyEchoChamber.
     :param N: initial value: Number of agents.
     :param m: Number of other agents to interact with.
@@ -60,6 +63,12 @@ def run_params(
     :param cache: Use a cache to retrieve and save results. Saves to `.cache`.
     :param plot_opinion: Display opinions (True), display summary figure ('summary') or display multiple figures (
         'all').
+
+    :keyword noise_source: Whether noise is external or internal (see formulations above).
+            Use constants defined in `utils.constants`.
+    :keyword k_steps: If `noise_source=INTERNAL_NOISE`, then choose N random agents every `k_steps`
+         (default 10).
+
     :return: Instance of EchoChamber (or a subclass)
     """
     if method is None:
@@ -171,6 +180,11 @@ def run_periodic_noise(
 
     :param plot_opinion: Whether to display results (default False).
 
+    :keyword noise_source: Whether noise is external or internal (see formulations above).
+            Use constants defined in `utils.constants`.
+    :keyword k_steps: If `noise_source=INTERNAL_NOISE`, then choose N random agents every `k_steps`
+         (default 10).
+
     :return: NoisyEchoChamber created for the simulation.
     """
     lazy = kwargs.pop("lazy", True)
@@ -271,16 +285,18 @@ def run_noise_range(
 
     :return: List of NoisyEchoChambers.
     """
+    from tqdm.contrib import tenumerate
+
     nec_arr = []
     name = kwargs.pop("name", "")
     if noise_start > 0:
         noise_length = kwargs.pop("T", 1.0)
-    for D in D_range:
+    for i, D in tenumerate(D_range, desc="noise range"):
         if noise_start > 0:
             if len(args) == 0:
                 kwargs.setdefault("recovery", 0)
             nec = run_periodic_noise(
-                noise_start, noise_length, *args, D=D, name=f"D={D} {name}", **kwargs
+                noise_start, noise_length, *args, D=D, name=f"D={D} {name}", **kwargs,
             )
         else:
             nec = run_params(
@@ -304,7 +320,8 @@ def run_noise_other_range(
     label_precision: int = None,
     subplot_kws: dict = None,
     **kwargs,
-) -> List[List[NoisyEchoChamber]]:
+) -> (List[List[NoisyEchoChamber]], pd.DataFrame):
+    from tqdm.contrib import tenumerate
 
     if plot_opinion:
         import matplotlib.pyplot as plt
@@ -319,8 +336,8 @@ def run_noise_other_range(
         )
 
     nec_arrs = []
-
-    for i, other in tqdm(enumerate(other_range)):
+    df_builder = []
+    for i, other in tenumerate(other_range, desc=other_var):
         kwargs[other_var] = other
         if plot_opinion:
             other_val = (
@@ -342,6 +359,14 @@ def run_noise_other_range(
             nec_arr = run_noise_range(D_range, plot_opinion=False, **kwargs)
         nec_arrs.append(nec_arr)
 
+        # put data into dictionaries with keys for column names
+        for nec, D in zip(nec_arr, D_range):
+            for y_idx, opinion in enumerate(nec.result.y[:, -1]):
+                d = {"D": D, "i": y_idx, "opinion": opinion, other_var: other}
+                df_builder.append(d)
+
+    df = pd.DataFrame(df_builder)
+
     if plot_opinion:
         from matplotlib.cbook import flatten
         import seaborn as sns
@@ -358,7 +383,7 @@ def run_noise_other_range(
             _ax.tick_params(
                 bottom=False, left=False, labelleft=False, labelbottom=False
             )
-    return nec_arrs
+    return nec_arrs, df
 
 
 if __name__ == "__main__":
