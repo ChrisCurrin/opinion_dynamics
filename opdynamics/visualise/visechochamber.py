@@ -362,7 +362,7 @@ class VisEchoChamber(object):
         # second column has opinion as x-axis
         _, ax[0, 1] = self.show_opinions_snapshot(ax=ax[0, 1])
         _, ax[1, 1] = self.show_agent_opinions(ax=ax[1, 1], sort=True)
-        _, ax[2, 1] = self.show_activity_vs_opinion(ax=ax[2, 1])
+        _, ax[2, 1], cbar = self.show_activity_vs_opinion(ax=ax[2, 1])
         # `show_agent_opinions` already calculates optimal limits
         xlim = ax[1, 1].get_xlim()
         ax[0, 1].set_xlim(*xlim)

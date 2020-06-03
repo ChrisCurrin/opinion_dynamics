@@ -210,23 +210,51 @@ def show_matrix(
 
 
 def show_noise_panel(
-    df: pd.DataFrame, col, log=False, grid_kwargs=None, kde_kwargs=None
-) -> sns.FacetGrid:
+    df: pd.DataFrame,
+    col,
+    log=False,
+    grid_kwargs=None,
+    kde_kwargs=None,
+    palette_kwargs=None,
+    fig: Figure = None,
+    ax: "np.ndarray[Axes]" = None,
+) -> (Figure, "np.ndarray[Axes]"):
+    """Display a grid of kernel density estimates (nudge vs opinion) for different parameters."""
+
     if grid_kwargs is None:
         grid_kwargs = {}
-    grid_kwargs.setdefault("palette", "husl")
-    grid_kwargs.setdefault("hue", col)
     if kde_kwargs is None:
         kde_kwargs = {}
     kde_kwargs.setdefault("shade", True)
     kde_kwargs.setdefault("shade_lowest", False)
+    if palette_kwargs is None:
+        palette_kwargs = {}
+    start = palette_kwargs.pop("start", 0)
+    col_names = df[col].unique()
+
+    if fig is None and ax is None:
+        fig, ax = plt.subplots(1, len(col_names), **grid_kwargs)
+    elif fig is None:
+        fig = ax[0].figure
+    from itertools import product
 
     _D = "D"
     if log:
         _D = "log D"
         df = df[df["D"] > 0]
         df[_D] = np.log10(df["D"])
-    g = sns.FacetGrid(df, col=col, **grid_kwargs)
-    g.map(sns.kdeplot, "opinion", _D, **kde_kwargs)
-    g.axes[0, 0].set_ylabel(_D, rotation=0)
-    return g
+
+    col_masks = [df[col] == n for n in col_names]
+    hue_masks = [
+        sns.cubehelix_palette(
+            start=start + 3 * (n - start) / len(col_names), **palette_kwargs
+        )
+        for n in range(col_names)
+    ]
+    for (j, col), (k, hue) in product(enumerate(col_masks), enumerate(hue_masks)):
+        data_ijk = df[col & df.notna()]
+        sns.kdeplot(
+            data_ijk["opinion"], data_ijk[_D], ax=ax[j], palette=hue, **kde_kwargs
+        )
+    ax[0].set_ylabel(_D, rotation=0)
+    return fig, ax

@@ -12,7 +12,12 @@ from numpy.random import default_rng
 from scipy.stats import powerlaw
 
 from opdynamics.utils.accuracy import precision_and_scale
-from opdynamics.utils.constants import EXTERNAL_NOISE, INTERNAL_NOISE
+from opdynamics.utils.constants import (
+    EXTERNAL_NOISE,
+    INTERNAL_NOISE,
+    INTERNAL_NOISE_SIG,
+    INTERNAL_NOISE_SIG_K,
+)
 from opdynamics.utils.decorators import hashable
 from opdynamics.utils.distributions import negpowerlaw
 from opdynamics.integrate.types import SolverResult, diffeq
@@ -522,26 +527,45 @@ class NoisyEchoChamber(EchoChamber):
         :keyword k_steps: If `noise_source=INTERNAL_NOISE`, then choose N random agents every `k_steps`
             (default 10).
 
+        # TODO: pick agent with opposite opinion
+
         """
         # assign drift as before, aka dy_dt
         super().set_dynamics()
 
         # create new diffusion term
-        if noise_source == INTERNAL_NOISE:
+        if noise_source >= INTERNAL_NOISE:
             self._idx = self.rn.uniform(0, self.N, self.N)
             self.diff_args = (kwargs.pop("k_steps", 10),)
             logger.debug(f"internal noise chosen with k_steps={self.diff_args}")
+            precision, scale = precision_and_scale(self.diff_args[0])
 
-            def diffusion(t, y, *diff_args):
-                dt, _k_steps = diff_args
-                if int(t / dt) % _k_steps == 0:
-                    # TODO: pick agent with opposite opinion
+            def choose_k(t, dt, _k_steps):
+                if (scale and np.round(t, scale) % _k_steps == 0) or (
+                    int(t / dt) % _k_steps == 0
+                ):
                     self._idx = np.round(
                         self.rn.uniform(0, self.N - 1, size=self.N), 0
                     ).astype(int)
+
+            def diffusion(t, y, *diff_args):
+                choose_k(t, *diff_args)
                 return D * (y - y[self._idx])
 
-            self.diffusion = diffusion
+            def diffusion_tanh(t, y, *diff_args):
+                choose_k(t, *diff_args)
+                return D * np.tanh(y - y[self._idx])
+
+            def diffusion_tanh_k(t, y, *diff_args):
+                choose_k(t, *diff_args)
+                return D * (y - np.tanh(y[self._idx]))
+
+            if noise_source == INTERNAL_NOISE_SIG:
+                self.diffusion = diffusion_tanh
+            elif noise_source == INTERNAL_NOISE_SIG_K:
+                self.diffusion = diffusion_tanh_k
+            else:
+                self.diffusion = diffusion
             self.wiener_process = lambda dt: 1
         else:
             self.diffusion = lambda t, y, *diff_args: D
