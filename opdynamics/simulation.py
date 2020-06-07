@@ -419,7 +419,7 @@ def run_noise_product(
         import seaborn as sns
 
         data_kwargs = dict(zip(["col", "row", "hue"], keys))
-        g = sns.PairGrid(df, **data_kwargs)
+        g = sns.FacetGrid(df, **data_kwargs)
         g.map(sns.kdeplot, "opinion", "D", shade_lowest=False)
 
     return df
