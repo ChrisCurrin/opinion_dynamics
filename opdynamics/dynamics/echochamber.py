@@ -500,6 +500,7 @@ class NoisyEchoChamber(EchoChamber):
         self.wiener_process: Callable = None
         self._D_hist = []
         self.diff_args = ()
+        self.noise_source = EXTERNAL_NOISE
 
     def set_dynamics(self, D=0.01, noise_source=EXTERNAL_NOISE, *args, **kwargs):
         """Network with noise.
@@ -524,7 +525,7 @@ class NoisyEchoChamber(EchoChamber):
         :param noise_source: Whether noise is external or internal (see formulations above).
             Use constants defined in `utils.constants`.
 
-        :keyword k_steps: If `noise_source=INTERNAL_NOISE`, then choose N random agents every `k_steps`
+        :keyword k_steps: If `noise_source>=INTERNAL_NOISE`, then choose N random agents every `k_steps`
             (default 10).
 
         # TODO: pick agent with opposite opinion
@@ -573,6 +574,7 @@ class NoisyEchoChamber(EchoChamber):
                 loc=0, scale=np.sqrt(dt), size=self.N
             )
 
+        self.noise_source = noise_source
         self._D_hist.append((self.current_time, D))
 
     def run_network(
@@ -604,7 +606,7 @@ class NoisyEchoChamber(EchoChamber):
 
     def __repr__(self):
         d_hist = [f"D={_D:.5f} from {_t:.5f}" for _t, _D in self._D_hist]
-        return f"{super().__repr__()} D_hist={d_hist} diff_args={self.diff_args}"
+        return f"{super().__repr__()} D_hist={d_hist} noise_source={self.noise_source} diff_args={self.diff_args}"
 
 
 def example():

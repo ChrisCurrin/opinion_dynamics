@@ -217,10 +217,10 @@ class VisEchoChamber(object):
     @optional_fig_ax
     def show_opinions_snapshot(
         self,
+        t=-1,
         ax: Axes = None,
         fig: Figure = None,
         title: str = "Opinions distribution",
-        t=-1,
         **kwargs,
     ) -> (Figure, Axes):
         idx = np.argmin(np.abs(t - self.ec.result.t)) if isinstance(t, float) else t
@@ -244,6 +244,7 @@ class VisEchoChamber(object):
     @optional_fig_ax
     def show_agent_opinions(
         self,
+        t=-1,
         direction=True,
         sort=False,
         ax: Axes = None,
@@ -251,7 +252,8 @@ class VisEchoChamber(object):
         colorbar: bool = True,
         title: str = "Agent opinions",
     ) -> (Figure, Axes):
-        opinions = self.ec.opinions
+        idx = np.argmin(np.abs(t - self.ec.result.t)) if isinstance(t, float) else t
+        opinions = self.ec.result.y[:, idx]
         agents = np.arange(self.ec.N)
         if not direction:
             # only magnitude

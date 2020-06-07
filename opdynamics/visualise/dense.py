@@ -209,6 +209,56 @@ def show_matrix(
     return fig, ax
 
 
+def show_jointplot(
+    x, y, ax=(), cmap=None, joint_kws=None, marginal_kws=None, annot_kws=None, **kwargs
+):
+    """Nearest Neighbour plot for inside a bigger figure"""
+
+    ax_joint, ax_marg_x, ax_marg_y = ax
+    # Set up empty default kwarg dicts
+    joint_kws = {} if joint_kws is None else joint_kws.copy()
+    joint_kws.update(kwargs)
+    marginal_kws = {} if marginal_kws is None else marginal_kws.copy()
+    annot_kws = {} if annot_kws is None else annot_kws.copy()
+
+    # Make a colormap based off the plot color
+    if cmap is None:
+        cmap = sns.cubehelix_palette(8, reverse=True, as_cmap=True)
+        color = sns.cubehelix_palette(8, reverse=True)[3]
+
+    # Turn off tick visibility for the measure axis on the marginal plots
+    plt.setp(ax_marg_x.get_xticklabels(), visible=False)
+    plt.setp(ax_marg_y.get_yticklabels(), visible=False)
+
+    # Turn off the ticks on the density axis for the marginal plots
+    plt.setp(ax_marg_x.yaxis.get_majorticklines(), visible=False)
+    plt.setp(ax_marg_x.yaxis.get_minorticklines(), visible=False)
+    plt.setp(ax_marg_y.xaxis.get_majorticklines(), visible=False)
+    plt.setp(ax_marg_y.xaxis.get_minorticklines(), visible=False)
+    plt.setp(ax_marg_x.get_yticklabels(), visible=False)
+    plt.setp(ax_marg_y.get_xticklabels(), visible=False)
+    ax_marg_x.yaxis.grid(False)
+    ax_marg_y.xaxis.grid(False)
+
+    # Convert the x and y data to arrays for indexing and plotting
+    x_array = np.asarray(x)
+    y_array = np.asarray(y)
+
+    # Possibly drop NA
+    not_na = pd.notnull(x_array) & pd.notnull(y_array)
+    x_array = x_array[not_na]
+    y_array = y_array[not_na]
+
+    joint_kws.setdefault("shade", True)
+    joint_kws.setdefault("cmap", cmap)
+    sns.kdeplot(x, y, ax=ax_joint, **joint_kws)
+
+    marginal_kws.setdefault("shade", True)
+    marginal_kws.setdefault("color", color)
+    sns.kdeplot(x, vertical=False, ax=ax_marg_x, **marginal_kws)
+    sns.kdeplot(y, vertical=True, ax=ax_marg_y, **marginal_kws)
+
+
 def show_noise_panel(
     df: pd.DataFrame,
     col,
@@ -230,13 +280,15 @@ def show_noise_panel(
     if palette_kwargs is None:
         palette_kwargs = {}
     start = palette_kwargs.pop("start", 0)
+    n_colors = kde_kwargs.setdefault("levels", 6)
+
     col_names = df[col].unique()
+    not_na = ~df[col].isnull()
 
     if fig is None and ax is None:
         fig, ax = plt.subplots(1, len(col_names), **grid_kwargs)
     elif fig is None:
         fig = ax[0].figure
-    from itertools import product
 
     _D = "D"
     if log:
@@ -245,16 +297,21 @@ def show_noise_panel(
         df[_D] = np.log10(df["D"])
 
     col_masks = [df[col] == n for n in col_names]
-    hue_masks = [
+    hues = [
         sns.cubehelix_palette(
-            start=start + 3 * (n - start) / len(col_names), **palette_kwargs
+            n_colors=n_colors,
+            start=start + 3 * (n - start) / len(col_names),
+            as_cmap=True,
+            **palette_kwargs,
         )
-        for n in range(col_names)
+        for n in range(len(col_names))
     ]
-    for (j, col), (k, hue) in product(enumerate(col_masks), enumerate(hue_masks)):
-        data_ijk = df[col & df.notna()]
-        sns.kdeplot(
-            data_ijk["opinion"], data_ijk[_D], ax=ax[j], palette=hue, **kde_kwargs
-        )
+    for j, (col_mask, hue) in enumerate(zip(col_masks, hues)):
+        data_ijk = df[not_na & col_mask]
+        sns.kdeplot(data_ijk["opinion"], data_ijk[_D], ax=ax[j], cmap=hue, **kde_kwargs)
+    for _ax in ax[1:]:
+        _ax.set_ylabel("")
+    for col_name, _ax in zip(col_names, ax):
+        _ax.set_title(col_name)
     ax[0].set_ylabel(_D, rotation=0)
     return fig, ax

@@ -22,7 +22,16 @@ def show_simulation_results(_ec: EchoChamber, plot_opinion: str):
         _vis.show_summary(single_fig=False)
         sns.despine()
     else:
-        _vis.show_opinions(True)
+        import matplotlib.pyplot as plt
+
+        fig, axs = plt.subplots(
+            1, 2, sharey="col", gridspec_kw={"width_ratios": [1, 0.1]}
+        )
+        _vis.show_opinions(True, ax=axs[0])
+        _vis.show_opinions_snapshot(vertical=True, ax=axs[-1])
+        axs[-1].set_ylabel("")
+        axs[-1].set_yticklabels([])
+        fig.subplots_adjust(hspace=0.1)
 
 
 def show_simulation_range(var_range, nec_arr, fig_ax=None):

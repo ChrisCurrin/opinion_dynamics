@@ -70,18 +70,21 @@ Update `environment.yml` using `conda env export --from-history > environment.ym
 ## TODO:
 - [ ] Test and plot results for "internal noise".
 - [ ] Restrict internal noise to be from an agent of opposite opinion.
-- [x] Implement noise as coming from agent $D(x_i - x_k)$ - "internal noise".
-* plot $D$ vs $x$
-    - [ ] with different $K$ values
-    - [ ] with different $r$ values
-    - [x] D from $t_0$
-    - [x] D from $t_10$
-    - [x] with different $\beta$ values
-    - [x] with different $\alpha$ values
-    - [x] with different $dt$ values
+- [x] Implement noise as coming from agent <img src="https://latex.codecogs.com/svg.latex?D(x_i - x_k)"/> - "internal noise".
+    - [x] with sigmoid transformation (tanh):
+        * <img src="https://latex.codecogs.com/svg.latex?D(\tanh(x_i - x_k))"/>
+        * <img src="https://latex.codecogs.com/svg.latex?D(x_i - \tanh(x_k))"/>
+* plot <img src="https://latex.codecogs.com/svg.latex?D"/> vs <img src="https://latex.codecogs.com/svg.latex?x"/>
+    - [ ] with different <img src="https://latex.codecogs.com/svg.latex?K"/> values
+    - [ ] with different <img src="https://latex.codecogs.com/svg.latex?r"/> values
+    - [x] <img src="https://latex.codecogs.com/svg.latex?D"/> from <img src="https://latex.codecogs.com/svg.latex?t_0"/>
+    - [x] <img src="https://latex.codecogs.com/svg.latex?D"/> from <img src="https://latex.codecogs.com/svg.latex?t_10"/>
+    - [x] with different <img src="https://latex.codecogs.com/svg.latex?\beta"/> values
+    - [x] with different <img src="https://latex.codecogs.com/svg.latex?\alpha"/> values
+    - [x] with different <img src="https://latex.codecogs.com/svg.latex?dt"/> values
 - [ ] [low priority] Implement other SDE solvers using https://pypi.org/project/diffeqpy/
 - [x] change density activity vs opinion plot to be density per activity
-- [x] Apply noise after time $t$ for $\Delta t_D$
-- [x] Calculate $v = \frac{dx_i}{dt}$ and $\lbracket v \rbracket$
+- [x] Apply noise after time <img src="https://latex.codecogs.com/svg.latex?t"/>
+- [x] Calculate <img src="https://latex.codecogs.com/svg.latex?v=\frac{dx_i}{dt}"> and <img src="https://latex.codecogs.com/svg.latex?\left \langle  v \right \rangle">
 
 

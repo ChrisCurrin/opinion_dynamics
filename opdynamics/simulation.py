@@ -1,11 +1,12 @@
 """Run a full simulation of a network of agents without worrying about object details."""
+import itertools
 import logging
 import numpy as np
 import pandas as pd
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from tqdm import tqdm, trange
-from typing import Callable, Iterable, List, Tuple, Type, TypeVar, Union
+from typing import Callable, Dict, Iterable, List, Tuple, Type, TypeVar, Union
 
 from opdynamics.utils.constants import *
 from opdynamics.dynamics.echochamber import EchoChamber, NoisyEchoChamber
@@ -386,6 +387,44 @@ def run_noise_other_range(
     return nec_arrs, df
 
 
+def run_noise_product(
+    D_range: Iterable,
+    other_vars: Dict[str, Dict[str, Union[list, str]]],
+    plot_opinion: bool = True,
+    **kwargs,
+) -> pd.DataFrame:
+    from tqdm.contrib import tenumerate
+
+    keys = list(other_vars.keys())
+
+    full_range = itertools.product(*[other_vars[key]["range"] for key in keys])
+
+    nec_arrs = []
+    df_builder = []
+    for i, values in tenumerate(full_range, desc="full range"):
+        for key, value in zip(keys, values):
+            kwargs[key] = value
+        nec_arr = run_noise_range(D_range, plot_opinion=False, **kwargs)
+        nec_arrs.append(nec_arr)
+
+        # put data into dictionaries with keys for column names
+        for nec, D in zip(nec_arr, D_range):
+            for y_idx, opinion in enumerate(nec.result.y[:, -1]):
+                d = {"D": D, "i": y_idx, "opinion": opinion, **kwargs}
+                df_builder.append(d)
+
+    df = pd.DataFrame(df_builder)
+
+    if plot_opinion:
+        import seaborn as sns
+
+        data_kwargs = dict(zip(["col", "row", "hue"], keys))
+        g = sns.PairGrid(df, **data_kwargs)
+        g.map(sns.kdeplot, "opinion", "D", shade_lowest=False)
+
+    return df
+
+
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
 
@@ -403,7 +442,32 @@ if __name__ == "__main__":
         t_end=0.5,
     )
 
-    run_params(
-        EchoChamber, **_kwargs, plot_opinion="summary",
+    # run_params(
+    #     EchoChamber, **_kwargs, plot_opinion="summary",
+    # )
+    kwargs = dict(
+        N=1000,
+        m=10,
+        T=10,
+        epsilon=1e-2,
+        gamma=2.1,
+        dt=0.01,
+        K=2,
+        beta=1,
+        alpha=3,
+        r=0.65,
+        noise_source=INTERNAL_NOISE,
+        k_steps=10,
     )
+
+    D_range = np.round(np.arange(0.000, 0.01, 0.002), 3)
+
+    other_vars = {
+        "k_steps": {"range": [1, 10, 100], "title": "k",},
+        "noise_source": {
+            "range": [INTERNAL_NOISE, INTERNAL_NOISE_SIG, INTERNAL_NOISE_SIG_K],
+            "title": "noise source",
+        },
+    }
+    run_noise_product(D_range, other_vars, **kwargs)
     plt.show()
