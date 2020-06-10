@@ -537,7 +537,7 @@ class NoisyEchoChamber(EchoChamber):
         # create new diffusion term
         if noise_source >= INTERNAL_NOISE:
             self._idx = self.rn.uniform(0, self.N, self.N)
-            self.diff_args = (kwargs.pop("k_steps", 10),)
+            self.diff_args = (kwargs.pop("k_steps", 10), kwargs.pop("alpha_2", 1))
             logger.debug(f"internal noise chosen with k_steps={self.diff_args}")
             precision, scale = precision_and_scale(self.diff_args[0])
 
@@ -550,16 +550,19 @@ class NoisyEchoChamber(EchoChamber):
                     ).astype(int)
 
             def diffusion(t, y, *diff_args):
-                choose_k(t, *diff_args)
+                dt, _k_steps, _alpha_2 = diff_args
+                choose_k(t, dt, _k_steps)
                 return D * (y - y[self._idx])
 
             def diffusion_tanh(t, y, *diff_args):
-                choose_k(t, *diff_args)
-                return D * np.tanh(y - y[self._idx])
+                dt, _k_steps, _alpha_2 = diff_args
+                choose_k(t, dt, _k_steps)
+                return D * np.tanh(_alpha_2 * (y - y[self._idx]))
 
             def diffusion_tanh_k(t, y, *diff_args):
-                choose_k(t, *diff_args)
-                return D * (y - np.tanh(y[self._idx]))
+                dt, _k_steps, _alpha_2 = diff_args
+                choose_k(t, dt, _k_steps)
+                return D * (y - np.tanh(_alpha_2 * y[self._idx]))
 
             if noise_source == INTERNAL_NOISE_SIG:
                 self.diffusion = diffusion_tanh

@@ -3,6 +3,7 @@ from .dense import (
     show_K_alpha_phase,
     show_activity_vs_opinion,
     show_noise_panel,
+    show_noise_grid,
     show_jointplot,
 )
 from .visechochamber import VisEchoChamber
@@ -18,6 +19,7 @@ __all__ = [
     "show_K_alpha_phase",
     "show_activity_vs_opinion",
     "show_noise_panel",
+    "show_noise_grid",
     "show_jointplot",
     "show_simulation_range",
     "show_periodic_noise",

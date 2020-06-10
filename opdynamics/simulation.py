@@ -1,6 +1,8 @@
 """Run a full simulation of a network of agents without worrying about object details."""
 import itertools
 import logging
+import os
+
 import numpy as np
 import pandas as pd
 from matplotlib.axes import Axes
@@ -292,17 +294,15 @@ def run_noise_range(
     name = kwargs.pop("name", "")
     if noise_start > 0:
         noise_length = kwargs.pop("T", 1.0)
-    for i, D in tenumerate(D_range, desc="noise range"):
+    for i, D in tenumerate(D_range, desc=f"noise range [{name}]"):
         if noise_start > 0:
             if len(args) == 0:
                 kwargs.setdefault("recovery", 0)
             nec = run_periodic_noise(
-                noise_start, noise_length, *args, D=D, name=f"D={D} {name}", **kwargs,
+                noise_start, noise_length, *args, D=D, name=f"D={D}", **kwargs,
             )
         else:
-            nec = run_params(
-                NoisyEchoChamber, *args, D=D, name=f"D={D} {name}", **kwargs
-            )
+            nec = run_params(NoisyEchoChamber, *args, D=D, name=f"D={D}", **kwargs)
         nec_arr.append(nec)
 
     if plot_opinion:
@@ -390,21 +390,72 @@ def run_noise_other_range(
 def run_noise_product(
     D_range: Iterable,
     other_vars: Dict[str, Dict[str, Union[list, str]]],
-    plot_opinion: bool = True,
+    cache=True,
+    cache_sim=False,
     **kwargs,
 ) -> pd.DataFrame:
+    """Run a combination of variables, varying noise for each combination.
+
+    Examples
+    --------
+
+    .. code-block:: python
+
+        D_range = np.round(np.arange(0.000, 0.01, 0.002), 3)
+
+        other_vars = {
+            'k_steps':{
+                'range':[1, 10, 100],
+                'title':'k',
+            },
+            'noise_source':{
+                'range':[INTERNAL_NOISE, INTERNAL_NOISE_SIG, INTERNAL_NOISE_SIG_K],
+                'title':'noise source',
+            },
+        }
+
+        df = run_noise_product(D_range, other_vars, **kwargs)
+
+
+    :param D_range: Noise values.
+    :param other_vars: A dictionary of parameters to vary. The product of each parameter's 'range' key is taken.
+        See example and ``run_noise_range`` for format.
+    :param cache: Whether to cache the Dataframe used to store the results (default ``True``).
+    :param cache_sim: Whether to cache individual simulations (default ``False``).
+    :return: DataFrame of results in tidy long-form. That is, each column is a variable and each row is an
+        observation. Only opinions at the last time point are stored.
+    """
     from tqdm.contrib import tenumerate
 
     keys = list(other_vars.keys())
 
     full_range = itertools.product(*[other_vars[key]["range"] for key in keys])
 
+    file_name = os.path.join(".cache", "k_step_v_noise_source.h5")
+
+    # the efficient HDF format is used for saving and loading DataFrames.
+    if cache and os.path.exists(file_name):
+        # noinspection PyTypeChecker
+        df: pd.DataFrame = pd.read_hdf(file_name)
+        df_noise_range = df["D"].unique()
+        new_d_range = []
+        for d in D_range:
+            if d not in df_noise_range:
+                new_d_range.append(d)
+        D_range = new_d_range
+    else:
+        df = pd.DataFrame()
     nec_arrs = []
     df_builder = []
     for i, values in tenumerate(full_range, desc="full range"):
+        names = []
         for key, value in zip(keys, values):
             kwargs[key] = value
-        nec_arr = run_noise_range(D_range, plot_opinion=False, **kwargs)
+            names.append(f"{key}={value}")
+        name = ", ".join(names)
+        nec_arr = run_noise_range(
+            D_range, name=name, plot_opinion=False, cache=cache_sim, **kwargs
+        )
         nec_arrs.append(nec_arr)
 
         # put data into dictionaries with keys for column names
@@ -413,14 +464,10 @@ def run_noise_product(
                 d = {"D": D, "i": y_idx, "opinion": opinion, **kwargs}
                 df_builder.append(d)
 
-    df = pd.DataFrame(df_builder)
+    df = pd.concat([df, pd.DataFrame(df_builder)], ignore_index=True)
 
-    if plot_opinion:
-        import seaborn as sns
-
-        data_kwargs = dict(zip(["col", "row", "hue"], keys))
-        g = sns.FacetGrid(df, **data_kwargs)
-        g.map(sns.kdeplot, "opinion", "D", shade_lowest=False)
+    if cache:
+        df.to_hdf(file_name, "df")
 
     return df
 
@@ -460,14 +507,14 @@ if __name__ == "__main__":
         k_steps=10,
     )
 
-    D_range = np.round(np.arange(0.000, 0.01, 0.002), 3)
+    _D_range = np.round(np.arange(0.000, 0.01, 0.002), 3)
 
-    other_vars = {
+    _other_vars = {
         "k_steps": {"range": [1, 10, 100], "title": "k",},
         "noise_source": {
             "range": [INTERNAL_NOISE, INTERNAL_NOISE_SIG, INTERNAL_NOISE_SIG_K],
             "title": "noise source",
         },
     }
-    run_noise_product(D_range, other_vars, **kwargs)
+    run_noise_product(_D_range, _other_vars, **kwargs)
     plt.show()

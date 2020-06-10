@@ -315,3 +315,40 @@ def show_noise_panel(
         _ax.set_title(col_name)
     ax[0].set_ylabel(_D, rotation=0)
     return fig, ax
+
+
+def show_noise_grid(
+    df: pd.DataFrame, columns: list, D_range=None, grid_kwargs=None, kde_kwargs=None
+) -> sns.FacetGrid:
+    """Plot a grid of noise vs opinion kernel density estimates where columns and rows of the grid are
+    different combinations of parameters (according to `columns`).
+
+    Seaborn's ``sns.FacetGrid`` is used.
+
+    :param df: Long-form DataFrame of observations.
+    :param columns: The column names in df to construct the FacetGrid. The first column changes with the co'l' of
+        grid, the second changes with the 'row' of the grid, and the final column changes with the 'hue' of the grid.
+    :param D_range: Restrict D_range plotted.
+    :param grid_kwargs: Keyword arguments for ``sns.FacetGrid``.
+    :param kde_kwargs: Keyword arguments for ``sns.kdeplot``.
+    :return: FaceGrid of kernel density estimates for diffrent parameter combinations.
+    """
+
+    if grid_kwargs is None:
+        grid_kwargs = {}
+    if kde_kwargs is None:
+        kde_kwargs = {}
+
+    data_kwargs = dict(zip(["col", "row", "hue"], columns))
+
+    df = df[df["D"].isin(D_range)]
+
+    g = sns.FacetGrid(df, **data_kwargs, **grid_kwargs)
+
+    if "hue" not in data_kwargs:
+        kde_kwargs.setdefault("cmap", sns.cubehelix_palette(reverse=True, as_cmap=True))
+    kde_kwargs.setdefault("shade", True)
+    kde_kwargs.setdefault("shade_lowest", False)
+
+    g.map(sns.kdeplot, "opinion", "D")
+    return g
