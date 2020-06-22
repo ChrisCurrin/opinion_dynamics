@@ -69,7 +69,7 @@ Update `environment.yml` using `conda env export --from-history > environment.ym
 ---
 ## TODO:
 - [ ] Test and plot results for "internal noise".
-- [ ] Restrict internal noise to be from an agent of opposite opinion.
+- [x] Restrict internal noise to be from an agent of opposite opinion.
 - [x] Implement noise as coming from agent <img src="https://latex.codecogs.com/svg.latex?D(x_i - x_k)"/> - "internal noise".
     - [x] with sigmoid transformation (tanh):
         * <img src="https://latex.codecogs.com/svg.latex?D(\tanh(x_i - x_k))"/>

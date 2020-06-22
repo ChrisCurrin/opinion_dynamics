@@ -327,6 +327,44 @@ class EchoChamber(object):
         time_point, average = self.result.t[idx], np.mean(self.result.y[:, idx], axis=0)
         return time_point, average
 
+    def get_sample_means(
+        self,
+        sample_size: int,
+        num_samples: int = 1,
+        opinions: np.ndarray = None,
+        t: float = -1,
+    ) -> np.ndarray:
+        """
+        Calculate the sample means.
+
+        Each mean is from a sample of ``sample_size`` agents.
+
+        The number of means is the same as ``num_samples``.
+
+        Means are taken either from ``opinions`` argument or from ``self.result.y`` at time point ``t``.
+
+        see https://en.wikipedia.org/wiki/Central_limit_theorem
+
+        :param sample_size: Pick this many agents' opinions (i.e. a sample).
+        :param num_samples: Number of sample to perform.
+        :param opinions: Opinions to sample from. If ``None``, use ``result.y`` array.
+        :param t: Time at which to conduct the sampling (-1 for last time point).
+        :return: Array of means.
+        """
+        if opinions is None:
+            t_idx = np.argmin(np.abs(t - self.result.t)) if isinstance(t, float) else t
+            opinions = self.result.y[:, t_idx]
+        # create a large array of opinions (at time t) of size N times number of samples (N*n)
+        n_opinions = np.tile(opinions, num_samples)
+        # uniformly pick a sample n times (sample_size*n).
+        n_idx = np.asarray(
+            self.rn.uniform(0, opinions.shape[0], (sample_size, num_samples)), dtype=int
+        )
+        # Take mean of samples of opinions. Note the num_samples or n dimension is the same.
+        means = np.mean(n_opinions[n_idx], axis=0)
+        # return samples means
+        return means
+
     def get_nearest_neighbours(self, t: int or float = -1) -> np.ndarray:
         """Calculate mean value of every agents' nearest neighbour.
 
@@ -556,7 +594,7 @@ class ConnChamber(EchoChamber):
 
 class NoisyEchoChamber(EchoChamber):
     def __init__(self, *args, name="noisy echochamber", **kwargs):
-        super().__init__(name=name, *args, **kwargs)
+        super().__init__(*args, name=name, **kwargs)
         self._D_hist = []
 
     def set_dynamics(self, D=0.01, *args, **kwargs):
@@ -565,7 +603,7 @@ class NoisyEchoChamber(EchoChamber):
         :param D: Strength of noise.
 
         """
-        super().set_dynamics()
+        super().set_dynamics(*args, **kwargs)
         self._D_hist.append((self.current_time, D))
 
     def __repr__(self):
@@ -576,7 +614,7 @@ class NoisyEchoChamber(EchoChamber):
 class OpenChamber(NoisyEchoChamber):
     # noinspection PyTypeChecker
     def __init__(self, *args, name="open echochamber", **kwargs):
-        super().__init__(name=name, *args, **kwargs)
+        super().__init__(*args, name=name, **kwargs)
         self.diffusion: diffeq = None
         self.wiener_process: Callable = None
         self.diff_args = ()
@@ -638,7 +676,7 @@ class OpenChamber(NoisyEchoChamber):
 class ContrastChamber(NoisyEchoChamber):
     # noinspection PyTypeChecker
     def __init__(self, *args, name="contrast echochamber", **kwargs):
-        super().__init__(name=name, *args, **kwargs)
+        super().__init__(*args, name=name, **kwargs)
         self.k_steps: int = None
         self.alpha_2: float = None
 
@@ -703,83 +741,38 @@ class ContrastChamber(NoisyEchoChamber):
 
 
 class SampleChamber(NoisyEchoChamber, ConnChamber):
-    def get_sample_means(
-        self,
-        sample_size: int,
-        num_samples: int = 1,
-        opinions: np.ndarray = None,
-        t: float = -1,
-    ) -> np.ndarray:
-        """
-        Calculate the sample means.
 
-        Each mean is from a sample of ``sample_size`` agents.
-
-        The number of means is the same as ``num_samples``.
-
-        Means are taken either from ``opinions`` argument or from ``self.result.y`` at time point ``t``.
-
-        see https://en.wikipedia.org/wiki/Central_limit_theorem
-
-        :param sample_size: Pick this many agents' opinions (i.e. a sample).
-        :param num_samples: Number of sample to perform.
-        :param opinions: Opinions to sample from. If ``None``, use ``result.y`` array.
-        :param t: Time at which to conduct the sampling (-1 for last time point).
-        :return: Array of means.
-        """
-        if opinions is None:
-            t_idx = np.argmin(np.abs(t - self.result.t)) if isinstance(t, float) else t
-            opinions = self.result.y[:, t_idx]
-        # create a large array of opinions (at time t) of size N times number of samples (N*n)
-        n_opinions = np.tile(opinions, num_samples)
-        # uniformly pick a sample n times (sample_size*n).
-        n_idx = np.asarray(
-            self.rn.uniform(0, self.N, (sample_size, num_samples)), dtype=int
-        )
-        # Take mean of samples of opinions. Note the num_samples or n dimension is the same.
-        means = np.mean(n_opinions[n_idx], axis=0)
-        # return samples means
-        return means
+    # noinspection PyTypeChecker
+    def __init__(self, *args, name="sample chamber", **kwargs):
+        super().__init__(*args, name=name, **kwargs)
+        self.sample_size: int = None
 
     def set_dynamics(self, D=0, sample_size=20, *args, **kwargs):
         """Set the dynamics of network by assigning a function to `self.dy_dt`.
-
-        `self.dy_dt` is a function to be called by the ODE solver, which expects a signature of (t, y, *args).
         """
+        super().set_dynamics(D, *args, **kwargs)
+        super_dy_dt = self.dy_dt
 
-        def dy_dt(t: float, y: np.ndarray, *args) -> np.ndarray:
+        def dy_dt(t: float, y: np.ndarray, *all_args) -> np.ndarray:
             """Activity-Driven (AD) network dynamics.
 
-            1. calculate connection probabilities based on difference in opinions
-
-            2. get the interactions (A) that happen at this time point between each of N agents based on activity
-            probabilities (p_conn) and the number of agents to interact with (m).
-
-            3. calculate opinion derivative by getting the scaled (by social influence, alpha) opinions (y.T) of agents
-            interacting with each other (A), multiplied by social interaction strength (K).
+            1 - 3 as in ``ConnChamber``
 
             4. add a "population opinion" term that captures the Lindeberg–Lévy Central Limit Theorem -
             :math:`N(0,\sigma^2)`
 
             """
-            K, alpha, N, m, p_conn, A, beta, p_opp, n, dt = args
-            # recalculate connection probabilities to be used in A
-            p_conn(beta, p_opp)
-            # get activity matrix for this time point
-            At = A[int(t / dt)]
-            return (
-                -y.T
-                + K * np.sum(At * np.tanh(alpha * y.T), axis=1)
-                + D
-                * np.sqrt(n)
-                * (np.mean(self.get_sample_means(n, opinions=y)) - np.mean(y))
+            n, *other_args = all_args
+            return super_dy_dt(t, y, *other_args) + D * np.sqrt(n) * (
+                np.mean(self.get_sample_means(n, opinions=y)) - np.mean(y)
             )
 
         self.sample_size = sample_size
         self.dy_dt = dy_dt
 
     def _args(self, *args):
-        return super()._args(self.sample_size, *args)
+        temp = super()._args(*args)
+        return (self.sample_size, *temp)
 
 
 def example():
@@ -800,7 +793,7 @@ def example():
     dt = 0.01
     t_end = 0.5
 
-    ec = EchoChamber(num_agents, m, K, alpha, seed=1337)
+    ec = SampleChamber(num_agents, m, K, alpha, seed=1337)
     vis = VisEchoChamber(ec)
 
     ec.set_activities(activity_distribution, gamma, epsilon, 1)
