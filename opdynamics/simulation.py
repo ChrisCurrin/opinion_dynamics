@@ -11,7 +11,7 @@ from tqdm import tqdm, trange
 from typing import Callable, Dict, Iterable, List, Tuple, Type, TypeVar, Union
 
 from opdynamics.utils.constants import *
-from opdynamics.dynamics.echochamber import EchoChamber, NoisyEchoChamber
+from opdynamics.dynamics.echochamber import EchoChamber, NoisyEchoChamber, OpenChamber
 from opdynamics.utils.distributions import negpowerlaw
 from opdynamics.visualise import (
     show_periodic_noise,
@@ -22,6 +22,7 @@ from opdynamics.visualise import (
 logger = logging.getLogger("simulation")
 
 EC = TypeVar("EC", bound="EchoChamber")
+NEC = TypeVar("NEC", bound="NoisyEchoChamber")
 
 
 def run_params(
@@ -39,7 +40,7 @@ def run_params(
     T: float = 1.0,
     method: str = None,
     lazy: bool = True,
-    cache: bool = True,
+    cache: Union[bool, str] = True,
     plot_opinion: Union[bool, str] = False,
     *sim_args,
     **sim_kwargs,
@@ -48,7 +49,7 @@ def run_params(
     Quickly and conveniently run a simulation where the parameters differ, but the structure
             is the same (activity distribution, dynamics, etc.)
 
-    :param cls: The type of EchoChamber class to use. E.g. NoisyEchoChamber.
+    :param cls: The type of EchoChamber class to use. E.g. OpenChamber.
     :param N: initial value: Number of agents.
     :param m: Number of other agents to interact with.
     :param K: Social interaction strength.
@@ -75,10 +76,10 @@ def run_params(
     :return: Instance of EchoChamber (or a subclass)
     """
     if method is None:
-        if cls is EchoChamber:
-            method = "RK45"
-        elif cls is NoisyEchoChamber:
+        if cls is OpenChamber:
             method = "Euler-Maruyama"
+        else:
+            method = "RK45"
     logger.debug(
         f"run_params for {cls.__name__} with (N={N}, m={m}, K={K}, alpha={alpha}, beta={beta}, activity "
         f"={str(activity)}(epsilon={epsilon}, gamma={gamma}), dt={dt}, T={T}, r={r}, plot_opinion="
@@ -86,11 +87,11 @@ def run_params(
     )
     logger.debug(f"additional args={sim_args}\tadditional kwargs={sim_kwargs}")
     _ec = cls(N, m, K, alpha, *sim_args, **sim_kwargs)
-    _ec.set_activities(activity, gamma, epsilon, 1, dim=1)
-    _ec.set_connection_probabilities(beta=beta)
+    _ec.set_activities(activity, gamma, epsilon, 1, dim=1, **sim_kwargs)
+    _ec.set_connection_probabilities(beta=beta, **sim_kwargs)
     _ec.set_social_interactions(r=r, lazy=lazy, dt=dt, t_end=T)
     _ec.set_dynamics(*sim_args, **sim_kwargs)
-    if not cache or (cache and not _ec.load(dt, T)):
+    if not (cache and _ec.load(dt, T)):
         _ec.run_network(dt=dt, t_end=T, method=method)
         if cache:
             _ec.save(cache != "all")
@@ -105,6 +106,7 @@ def run_periodic_noise(
     recovery: float,
     interval: float = 0.0,
     num: int = 1,
+    cls: Type[NEC] = OpenChamber,
     D: float = 0.01,
     N: int = 1000,
     m: int = 10,
@@ -121,7 +123,7 @@ def run_periodic_noise(
     plot_opinion: bool = False,
     *args,
     **kwargs,
-) -> NoisyEchoChamber:
+) -> NEC:
     """
     Run a simulation with no noise, then bursts/periods of noise, then a recovery period.
 
@@ -166,6 +168,7 @@ def run_periodic_noise(
     :param recovery: Duration **after** noise is applied where there is no noise.
     :param interval: Duration between noise blocks.
     :param num: Number of noise blocks.
+    :param cls: Class of the noise type to use. Must support 'D' argument.
     :param D: Noise strength.
 
     :param N: initial value: Number of agents.
@@ -208,7 +211,7 @@ def run_periodic_noise(
     )
     name = kwargs.pop("name", "")
     name += f"[num={num} interval={interval}]"
-    nec = NoisyEchoChamber(N, m, K, alpha, *args, **kwargs)
+    nec = cls(N, m, K, alpha, *args, **kwargs)
     nec.set_activities(activity, gamma, epsilon, 1, dim=1)
     nec.set_connection_probabilities(beta=beta)
     nec.set_social_interactions(r=r, lazy=lazy)
@@ -260,13 +263,15 @@ def run_periodic_noise(
 def run_noise_range(
     D_range: Iterable,
     *args,
+    cls: Type[NEC] = OpenChamber,
     noise_start=0,
     plot_opinion: Union[bool, Tuple[Figure, Axes]] = True,
     **kwargs,
-) -> List[NoisyEchoChamber]:
+) -> List[NEC]:
     """ Run the same simulation multiple times, with different noises.
 
     :param D_range: List of noise values (`D`).
+    :param cls: Class of the noise type to use. Must support 'D' argument.
     :param noise_start: Time to start adding noise.
         If 0, ``run_params`` is called, otherwise ``run_periodic_noise`` is called.
     :param plot_opinion: Display simulation range results (True). If a tuple of (fig, ax), then the passed values are used.
@@ -302,7 +307,7 @@ def run_noise_range(
                 noise_start, noise_length, *args, D=D, name=f"D={D}", **kwargs,
             )
         else:
-            nec = run_params(NoisyEchoChamber, *args, D=D, name=f"D={D}", **kwargs)
+            nec = run_params(cls, *args, D=D, name=f"D={D}", **kwargs)
         nec_arr.append(nec)
 
     if plot_opinion:
@@ -321,8 +326,7 @@ def run_noise_other_range(
     label_precision: int = None,
     subplot_kws: dict = None,
     **kwargs,
-) -> (List[List[NoisyEchoChamber]], pd.DataFrame):
-    from tqdm.contrib import tenumerate
+) -> (List[List[NEC]], pd.DataFrame):
 
     if plot_opinion:
         import matplotlib.pyplot as plt
@@ -338,7 +342,7 @@ def run_noise_other_range(
 
     nec_arrs = []
     df_builder = []
-    for i, other in tenumerate(other_range, desc=other_var):
+    for i, other in tqdm(enumerate(other_range), desc=other_var):
         kwargs[other_var] = other
         if plot_opinion:
             other_val = (
@@ -407,10 +411,6 @@ def run_noise_product(
             'k_steps':{
                 'range':[1, 10, 100],
                 'title':'k',
-            },
-            'noise_source':{
-                'range':[INTERNAL_NOISE, INTERNAL_NOISE_SIG, INTERNAL_NOISE_SIG_K],
-                'title':'noise source',
             },
         }
 
@@ -503,7 +503,6 @@ if __name__ == "__main__":
         beta=1,
         alpha=3,
         r=0.65,
-        noise_source=INTERNAL_NOISE,
         k_steps=10,
     )
 
@@ -511,10 +510,6 @@ if __name__ == "__main__":
 
     _other_vars = {
         "k_steps": {"range": [1, 10, 100], "title": "k",},
-        "noise_source": {
-            "range": [INTERNAL_NOISE, INTERNAL_NOISE_SIG, INTERNAL_NOISE_SIG_K],
-            "title": "noise source",
-        },
     }
     run_noise_product(_D_range, _other_vars, **kwargs)
     plt.show()

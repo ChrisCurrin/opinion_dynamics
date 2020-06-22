@@ -53,3 +53,6 @@ class negpowerlaw(object):
     def pdf(x, a, b, g) -> np.ndarray:
         ag, bg = a ** g, b ** g
         return g * x ** (g - 1) / (bg - ag)
+
+    def __str__(self):
+        return self.name

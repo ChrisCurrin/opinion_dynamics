@@ -206,6 +206,8 @@ def show_matrix(
             fig.fig.suptitle(title)
         else:
             ax.set_title(title)
+    # default to borders
+    sns.despine(ax=ax, top=False, right=False, left=False, bottom=False)
     return fig, ax
 
 
@@ -318,7 +320,7 @@ def show_noise_panel(
 
 
 def show_noise_grid(
-    df: pd.DataFrame, columns: list, D_range=None, grid_kwargs=None, kde_kwargs=None
+    df: pd.DataFrame, columns: list, grid_kwargs=None, kde_kwargs=None
 ) -> sns.FacetGrid:
     """Plot a grid of noise vs opinion kernel density estimates where columns and rows of the grid are
     different combinations of parameters (according to `columns`).
@@ -328,7 +330,6 @@ def show_noise_grid(
     :param df: Long-form DataFrame of observations.
     :param columns: The column names in df to construct the FacetGrid. The first column changes with the co'l' of
         grid, the second changes with the 'row' of the grid, and the final column changes with the 'hue' of the grid.
-    :param D_range: Restrict D_range plotted.
     :param grid_kwargs: Keyword arguments for ``sns.FacetGrid``.
     :param kde_kwargs: Keyword arguments for ``sns.kdeplot``.
     :return: FaceGrid of kernel density estimates for diffrent parameter combinations.
@@ -341,8 +342,6 @@ def show_noise_grid(
 
     data_kwargs = dict(zip(["col", "row", "hue"], columns))
 
-    df = df[df["D"].isin(D_range)]
-
     g = sns.FacetGrid(df, **data_kwargs, **grid_kwargs)
 
     if "hue" not in data_kwargs:
@@ -350,5 +349,5 @@ def show_noise_grid(
     kde_kwargs.setdefault("shade", True)
     kde_kwargs.setdefault("shade_lowest", False)
 
-    g.map(sns.kdeplot, "opinion", "D")
+    g.map(sns.kdeplot, "opinion", "D", **kde_kwargs)
     return g

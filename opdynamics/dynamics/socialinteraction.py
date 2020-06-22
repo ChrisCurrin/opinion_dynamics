@@ -119,14 +119,6 @@ def get_connection_probabilities(ec: EchoChamber, beta: float = 0.0):
     mag[self_mask] = 0
     p_conn = np.power(mag, -beta)
     p_conn /= np.sum(p_conn, axis=1)
-
-    p_conn = np.zeros(shape=(ec.N, ec.N))
-    # for i in range(ec.N):
-    #     mag = np.abs(ec.opinions[i] - ec.opinions)
-    #     mag[i] = np.nan
-    #     p_conn[i] = np.power(mag, -beta)
-    #     p_conn[i, i] = 0
-    #     p_conn[i] /= np.sum(p_conn[i])
     return p_conn
 
 
