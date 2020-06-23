@@ -704,7 +704,7 @@ class ContrastChamber(NoisyEchoChamber):
         super_dy_dt = self.dy_dt
 
         self._idx = self.rn.uniform(0, self.N, self.N)
-        precision, scale = precision_and_scale(self.diff_args[0])
+        precision, scale = precision_and_scale(k_steps)
 
         def choose_k(t, dt, _k_steps):
             if (scale and np.round(t, scale) % _k_steps == 0) or (

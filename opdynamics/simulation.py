@@ -315,7 +315,7 @@ def run_noise_range(
                 **kwargs,
             )
         else:
-            nec = run_params(cls, *args, D=D, name=f"D={D}", **kwargs)
+            nec = run_params(cls, *args, D=D, name=f"D={D}", T=T, **kwargs)
         nec_arr.append(nec)
 
     if plot_opinion:
@@ -440,7 +440,7 @@ def run_product(
 
     keys = list(other_vars.keys())
 
-    full_range = itertools.product(*[other_vars[key]["range"] for key in keys])
+    full_range = list(itertools.product(*[other_vars[key]["range"] for key in keys]))
     file_name = os.path.join(".cache", "noise_source.h5")
 
     # the efficient HDF format is used for saving and loading DataFrames.
@@ -467,12 +467,16 @@ def run_product(
         name = kw_name + ", ".join(names)
         if noise_start > 0:
             nec = run_periodic_noise(
-                noise_start, noise_length, recovery, cls=cls, name=name, **kwargs,
+                noise_start,
+                noise_length,
+                recovery,
+                cls=cls,
+                name=name,
+                cache=cache_sim,
+                **kwargs,
             )
         else:
-            nec = run_params(
-                cls, name=name, plot_opinion=False, cache=cache_sim, **kwargs
-            )
+            nec = run_params(cls, name=name, cache=cache_sim, T=T, **kwargs)
 
         # put data into dictionaries with keys for column names
         for y_idx, opinion in enumerate(nec.result.y[:, -1]):
