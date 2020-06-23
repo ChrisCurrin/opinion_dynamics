@@ -446,7 +446,7 @@ def run_product(
     # the efficient HDF format is used for saving and loading DataFrames.
     if cache and os.path.exists(file_name):
         # noinspection PyTypeChecker
-        df: pd.DataFrame = pd.read_hdf(file_name, columns=keys)
+        df: pd.DataFrame = pd.read_hdf(file_name)
         run_range = set(df.groupby([*keys]).count().index)
         full_range = {x for x in full_range if x not in run_range}
     else:
