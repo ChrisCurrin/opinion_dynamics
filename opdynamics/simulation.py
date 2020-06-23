@@ -296,15 +296,23 @@ def run_noise_range(
     from tqdm.contrib import tenumerate
 
     nec_arr = []
+
     name = kwargs.pop("name", "")
-    if noise_start > 0:
-        noise_length = kwargs.pop("T", 1.0)
+    T = kwargs.pop("T", 1.0)
+    noise_length = kwargs.pop("noise_length", T)
+    recovery = kwargs.pop("recovery", 0)
+
     for i, D in tenumerate(D_range, desc=f"noise range [{name}]"):
         if noise_start > 0:
-            if len(args) == 0:
-                kwargs.setdefault("recovery", 0)
             nec = run_periodic_noise(
-                noise_start, noise_length, *args, D=D, name=f"D={D}", **kwargs,
+                noise_start,
+                noise_length,
+                recovery,
+                *args,
+                cls=cls,
+                D=D,
+                name=f"D={D}",
+                **kwargs,
             )
         else:
             nec = run_params(cls, *args, D=D, name=f"D={D}", **kwargs)
@@ -391,9 +399,9 @@ def run_noise_other_range(
     return nec_arrs, df
 
 
-def run_noise_product(
-    D_range: Iterable,
+def run_product(
     other_vars: Dict[str, Dict[str, Union[list, str]]],
+    cls: Type[NEC] = OpenChamber,
     cache=True,
     cache_sim=False,
     **kwargs,
@@ -405,23 +413,26 @@ def run_noise_product(
 
     .. code-block:: python
 
-        D_range = np.round(np.arange(0.000, 0.01, 0.002), 3)
-
         other_vars = {
+            'D':{
+                'range':np.round(np.arange(0.000, 0.01, 0.002), 3),
+                'title': 'nudge',
+            },
             'k_steps':{
                 'range':[1, 10, 100],
                 'title':'k',
             },
         }
 
-        df = run_noise_product(D_range, other_vars, **kwargs)
+        df = run_product(D_range, other_vars, **kwargs)
 
 
-    :param D_range: Noise values.
     :param other_vars: A dictionary of parameters to vary. The product of each parameter's 'range' key is taken.
-        See example and ``run_noise_range`` for format.
+        See example for format.
+    :param cls: Class of noise.
     :param cache: Whether to cache the Dataframe used to store the results (default ``True``).
     :param cache_sim: Whether to cache individual simulations (default ``False``).
+
     :return: DataFrame of results in tidy long-form. That is, each column is a variable and each row is an
         observation. Only opinions at the last time point are stored.
     """
@@ -430,39 +441,43 @@ def run_noise_product(
     keys = list(other_vars.keys())
 
     full_range = itertools.product(*[other_vars[key]["range"] for key in keys])
-
-    file_name = os.path.join(".cache", "k_step_v_noise_source.h5")
+    file_name = os.path.join(".cache", "noise_source.h5")
 
     # the efficient HDF format is used for saving and loading DataFrames.
     if cache and os.path.exists(file_name):
         # noinspection PyTypeChecker
-        df: pd.DataFrame = pd.read_hdf(file_name)
-        df_noise_range = df["D"].unique()
-        new_d_range = []
-        for d in D_range:
-            if d not in df_noise_range:
-                new_d_range.append(d)
-        D_range = new_d_range
+        df: pd.DataFrame = pd.read_hdf(file_name, columns=keys, iterator=True)
+        run_range = set(df.groupby([*keys]).count().index)
+        full_range = {x for x in full_range if x not in run_range}
     else:
         df = pd.DataFrame()
-    nec_arrs = []
     df_builder = []
+
+    kw_name = kwargs.pop("name", "")
+    T = kwargs.pop("T", 1.0)
+    noise_start = kwargs.pop("noise_start", 0)
+    noise_length = kwargs.pop("noise_length", T)
+    recovery = kwargs.pop("recovery", 0)
+
     for i, values in tenumerate(full_range, desc="full range"):
         names = []
         for key, value in zip(keys, values):
             kwargs[key] = value
             names.append(f"{key}={value}")
-        name = ", ".join(names)
-        nec_arr = run_noise_range(
-            D_range, name=name, plot_opinion=False, cache=cache_sim, **kwargs
-        )
-        nec_arrs.append(nec_arr)
+        name = kw_name + ", ".join(names)
+        if noise_start > 0:
+            nec = run_periodic_noise(
+                noise_start, noise_length, recovery, cls=cls, name=name, **kwargs,
+            )
+        else:
+            nec = run_params(
+                cls, name=name, plot_opinion=False, cache=cache_sim, **kwargs
+            )
 
         # put data into dictionaries with keys for column names
-        for nec, D in zip(nec_arr, D_range):
-            for y_idx, opinion in enumerate(nec.result.y[:, -1]):
-                d = {"D": D, "i": y_idx, "opinion": opinion, **kwargs}
-                df_builder.append(d)
+        for y_idx, opinion in enumerate(nec.result.y[:, -1]):
+            d = {"i": y_idx, "opinion": opinion, **kwargs}
+            df_builder.append(d)
 
     df = pd.concat([df, pd.DataFrame(df_builder)], ignore_index=True)
 
@@ -511,5 +526,5 @@ if __name__ == "__main__":
     _other_vars = {
         "k_steps": {"range": [1, 10, 100], "title": "k",},
     }
-    run_noise_product(_D_range, _other_vars, **kwargs)
+    run_product(_D_range, _other_vars, **kwargs)
     plt.show()
