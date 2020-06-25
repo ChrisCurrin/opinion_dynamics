@@ -349,7 +349,7 @@ class EchoChamber(object):
         :param num_samples: Number of sample to perform.
         :param opinions: Opinions to sample from. If ``None``, use ``result.y`` array.
         :param t: Time at which to conduct the sampling (-1 for last time point).
-        :return: Array of means.
+        :return: Array of means (size equal to ``num_samples``).
         """
         if opinions is None:
             t_idx = np.argmin(np.abs(t - self.result.t)) if isinstance(t, float) else t
@@ -741,6 +741,11 @@ class ContrastChamber(NoisyEchoChamber):
 
 
 class SampleChamber(NoisyEchoChamber, ConnChamber):
+    """
+    Provide a mean sample of opinions to each agent.
+
+    see https://en.wikipedia.org/wiki/Central_limit_theorem
+    """
 
     # noinspection PyTypeChecker
     def __init__(self, *args, name="sample chamber", **kwargs):
@@ -759,12 +764,18 @@ class SampleChamber(NoisyEchoChamber, ConnChamber):
             1 - 3 as in ``ConnChamber``
 
             4. add a "population opinion" term that captures the Lindeberg–Lévy Central Limit Theorem -
-            :math:`N(0,\sigma^2)`
+            :math:`\\sqrt {n}\\left({\\bar{X}}_{n}-\\mu \\right) \\rightarrow N\\left(0,\\sigma ^{2}\\right)`
+            \\
+            where :math:`X` is a random sample and :math:`\\bar{X}_{n}` is the sample mean for :math:`n` random samples.
 
             """
-            n, *other_args = all_args
+            n, N, *other_args = all_args
+            if type(n) is tuple:
+                # choose between low and high values (randint not implemented for default_rng)
+                n = self.rn.choice(np.arange(n[0], n[1], dtype=int))
+
             return super_dy_dt(t, y, *other_args) + D * np.sqrt(n) * (
-                np.mean(self.get_sample_means(n, opinions=y)) - np.mean(y)
+                self.get_sample_means(n, num_samples=N, opinions=y) - np.mean(y)
             )
 
         self.sample_size = sample_size
@@ -772,7 +783,7 @@ class SampleChamber(NoisyEchoChamber, ConnChamber):
 
     def _args(self, *args):
         temp = super()._args(*args)
-        return (self.sample_size, *temp)
+        return (self.sample_size, self.N, *temp)
 
 
 def example():

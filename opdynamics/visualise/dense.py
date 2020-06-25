@@ -319,7 +319,7 @@ def show_noise_panel(
     return fig, ax
 
 
-def show_noise_grid(
+def show_opinion_grid(
     df: pd.DataFrame, columns: list, grid_kwargs=None, kde_kwargs=None
 ) -> sns.FacetGrid:
     """Plot a grid of noise vs opinion kernel density estimates where columns and rows of the grid are
@@ -348,6 +348,9 @@ def show_noise_grid(
         kde_kwargs.setdefault("cmap", sns.cubehelix_palette(reverse=True, as_cmap=True))
     kde_kwargs.setdefault("shade", True)
     kde_kwargs.setdefault("shade_lowest", False)
-
-    g.map(sns.kdeplot, "opinion", "D", **kde_kwargs)
+    if "D" in columns:
+        cmap = kde_kwargs.pop("cmap", sns.cubehelix_palette(reverse=True, as_cmap=True))
+        g.map(sns.kdeplot, "opinion", **kde_kwargs)
+    else:
+        g.map(sns.kdeplot, "opinion", "D", **kde_kwargs)
     return g
