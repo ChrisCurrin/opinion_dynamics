@@ -454,6 +454,8 @@ class EchoChamber(object):
             for df in [df_opinions, df_conn, df_act, df_adj_mat_accum, df_adj_mat_last]:
                 df.to_hdf(filename, df.name)
         logger.debug(f"saved to {filename}\n{self}")
+        with open(os.path.join(".cache", "map.txt"), "a+") as f_map:
+            f_map.write(f"{self}\n\t{os.path.split(filename)[-1]}")
         return filename
 
     def load(self, dt, T):
@@ -626,7 +628,7 @@ class OpenChamber(NoisyEchoChamber):
         -----
 
         .. math::
-            \dot{x}_i = - x_i + K \cdot \sum_{j=1} A_{ij}(t) \cdot \\tanh{(\\alpha \cdot x_j)} + D \cdot \\xi (t)
+            \\dot{x}_i = K \\cdot \\sum_{j=1} A_{ij}(t) \\cdot \\tanh{(\\alpha \\cdot x_j)} + D \\cdot \\xi (t)
 
         Where :math:`\\xi (t)` is the Wiener Process.
 
@@ -684,11 +686,11 @@ class ContrastChamber(NoisyEchoChamber):
         """
 
         .. math::
-            \\dot{x}_i = - x_i + K \\cdot \\sum_j A_{ij}(t) \\cdot \\tanh{(\\alpha \\cdot x_j)} +
+            \\dot{x}_i = K \\cdot \\sum_j A_{ij}(t) \\cdot \\tanh{(\\alpha \\cdot x_j)} +
             D \\cdot \\tanh(\\alpha_2 \\cdot (x_i - x_k))
 
         .. math::
-            \\dot{x}_i = - x_i + K \\cdot \\sum_j A_{ij}(t) \\cdot \\tanh{(\\alpha \\cdot x_j)} +
+            \\dot{x}_i = K \\cdot \\sum_j A_{ij}(t) \\cdot \\tanh{(\\alpha \\cdot x_j)} +
             D \\cdot \\tanh(\\alpha_2 \\cdot x_k)
 
         Where :math:`x_k` is an agent chosen every `k` time steps.
@@ -764,7 +766,7 @@ class SampleChamber(NoisyEchoChamber, ConnChamber):
             1 - 3 as in ``ConnChamber``
 
             4. add a "population opinion" term that captures the Lindeberg–Lévy Central Limit Theorem -
-            :math:`\\sqrt {n}\\left({\\bar{X}}_{n}-\\mu \\right) \\rightarrow N\\left(0,\\sigma ^{2}\\right)`
+            :math:`\\sqrt {n}\\left({\\bar{X}}_{n}-\\mu \\right) \\rightarrow \mathcal{N}\\left(0,\\sigma ^{2}\\right)`
             \\
             where :math:`X` is a random sample and :math:`\\bar{X}_{n}` is the sample mean for :math:`n` random samples.
 

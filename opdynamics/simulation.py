@@ -436,7 +436,6 @@ def run_product(
     :return: DataFrame of results in tidy long-form. That is, each column is a variable and each row is an
         observation. Only opinions at the last time point are stored.
     """
-    from tqdm.contrib import tenumerate
 
     keys = list(other_vars.keys())
 
@@ -459,7 +458,7 @@ def run_product(
     noise_length = kwargs.pop("noise_length", T)
     recovery = kwargs.pop("recovery", 0)
 
-    for i, values in tenumerate(full_range, desc="full range"):
+    for values in tqdm(full_range, desc="full range"):
         names = []
         for key, value in zip(keys, values):
             kwargs[key] = value
@@ -491,7 +490,7 @@ def run_product(
     return df
 
 
-if __name__ == "__main__":
+def example():
     import matplotlib.pyplot as plt
 
     _kwargs = dict(
@@ -532,3 +531,7 @@ if __name__ == "__main__":
     }
     run_product(_D_range, _other_vars, **kwargs)
     plt.show()
+
+
+if __name__ == "__main__":
+    example()
