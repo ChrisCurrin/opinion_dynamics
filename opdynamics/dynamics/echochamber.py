@@ -455,7 +455,7 @@ class EchoChamber(object):
                 df.to_hdf(filename, df.name)
         logger.debug(f"saved to {filename}\n{self}")
         with open(os.path.join(".cache", "map.txt"), "a+") as f_map:
-            f_map.write(f"{self}\n\t{os.path.split(filename)[-1]}")
+            f_map.write(f"\n{self}\n\t{os.path.split(filename)[-1]}")
         return filename
 
     def load(self, dt, T):
