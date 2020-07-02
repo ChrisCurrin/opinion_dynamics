@@ -8,17 +8,35 @@ Authors:
 
 ---
 
-## 1. Create environment from requirements using [conda](https://docs.conda.io/en/latest/)
+## 1. Clone repo
+
+Options
+- `git clone git@github.com:ChrisCurrin/opinion_dynamics.git`
+- `git clone https://github.com/ChrisCurrin/opinion_dynamics.git`
+
+```
+cd opinion_dynamics
+```
+
+## 2. Create environment from requirements using [conda](https://docs.conda.io/en/latest/)
 
 `conda env create -f environment.yaml`
 
+`conda activate opinion_dynamics`
+
 Target Python version: >= 3.6
 
-## 2. Play around with notebook
+## 3. Play around with notebook
 
 `jupter notebook opdynamics.ipynb`
 
-## 3. Use as a module from the terminal
+`jupter lab opdynamics.ipynb`
+
+## 3. Run desired scripts
+   
+`python -m scripts.<script name>`
+
+## 4. Use as a module from the terminal
 
 e.g.
  

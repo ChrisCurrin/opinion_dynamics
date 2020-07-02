@@ -11,7 +11,13 @@ from typing import Callable, Tuple, Union
 from numpy.random import default_rng
 from scipy.stats import powerlaw
 
+from opdynamics.metrics.opinions import (
+    distribution_modality,
+    nearest_neighbours,
+    sample_means,
+)
 from opdynamics.utils.accuracy import precision_and_scale
+from opdynamics.utils.constants import DEFAULT_COMPRESSION_LEVEL
 from opdynamics.utils.decorators import hashable
 from opdynamics.utils.distributions import negpowerlaw
 from opdynamics.integrate.types import SolverResult, diffeq
@@ -249,7 +255,7 @@ class EchoChamber(object):
         logger.info(f"done running {self.name}")
 
     def run_network(
-        self, dt: float = 0.01, t_end: float = 0.05, method: str = "RK45"
+        self, dt: float = 0.01, t_end: float = 0.05, method: str = "Euler"
     ) -> None:
         """Run a simulation for the echo chamber until `t_end` with a time step of `dt`.
 
@@ -328,11 +334,7 @@ class EchoChamber(object):
         return time_point, average
 
     def get_sample_means(
-        self,
-        sample_size: int,
-        num_samples: int = 1,
-        opinions: np.ndarray = None,
-        t: float = -1,
+        self, sample_size: int, num_samples: int = 1, t: float = -1,
     ) -> np.ndarray:
         """
         Calculate the sample means.
@@ -347,60 +349,48 @@ class EchoChamber(object):
 
         :param sample_size: Pick this many agents' opinions (i.e. a sample).
         :param num_samples: Number of sample to perform.
-        :param opinions: Opinions to sample from. If ``None``, use ``result.y`` array.
         :param t: Time at which to conduct the sampling (-1 for last time point).
         :return: Array of means (size equal to ``num_samples``).
         """
-        if opinions is None:
-            t_idx = np.argmin(np.abs(t - self.result.t)) if isinstance(t, float) else t
-            opinions = self.result.y[:, t_idx]
-        # create a large array of opinions (at time t) of size N times number of samples (N*n)
-        n_opinions = np.tile(opinions, num_samples)
-        # uniformly pick a sample n times (sample_size*n).
-        n_idx = np.asarray(
-            self.rn.uniform(0, opinions.shape[0], (sample_size, num_samples)), dtype=int
-        )
-        # Take mean of samples of opinions. Note the num_samples or n dimension is the same.
-        means = np.mean(n_opinions[n_idx], axis=0)
-        # return samples means
-        return means
 
-    def get_nearest_neighbours(self, t: int or float = -1) -> np.ndarray:
+        t_idx = np.argmin(np.abs(t - self.result.t)) if isinstance(t, float) else t
+        opinions = self.result.y[:, t_idx]
+        return sample_means(opinions, sample_size, num_samples, rng=self.rn)
+
+    def get_nearest_neighbours(self, t: Union[int, float] = -1) -> np.ndarray:
         """Calculate mean value of every agents' nearest neighbour.
 
         .. math::
-                \\frac{\sum_j a_{ij} x_j}{\sum_j a_{ij}}
+                \\frac{\\sum_j a_{ij} x_j}{\\sum_j a_{ij}}
 
-        where
-
-        .. math:: a_{ij}
-        represents the (static) adjacency matrix of the aggregated interaction network
-        and
-
-        .. math:: \sum_j a_{ij}
-        is the degree of node `i`.
+        where :math:`a_{ij}` represents the (static) adjacency matrix of the aggregated interaction network
+        and :math:`\\sum_j a_{ij}` is the degree of node `i`.
 
         """
         idx = np.argmin(np.abs(t - self.result.t)) if isinstance(t, float) else t
         snapshot_adj_mat = self.adj_mat.accumulate(idx)
-        out_degree_i = np.sum(snapshot_adj_mat, axis=0)
-        close_opinions = np.sum(snapshot_adj_mat * self.result.y[:, idx], axis=0)
-        with np.errstate(divide="ignore", invalid="ignore"):
-            # suppress warnings about dividing by nan or 0
-            nn = close_opinions / out_degree_i
-        return nn
+        opinions = self.result.y[:, idx]
+        return nearest_neighbours(opinions, snapshot_adj_mat)
 
-    def result_df(self):
-        if self.result is None:
-            raise RuntimeError(
-                f"{self.name} has not been run. call `.run_network` first."
-            )
-        df = pd.DataFrame(self.result.y.T, index=self.result.t)
-        df.name = "opinions"
-        return df
+    # noinspection NonAsciiCharacters
+    def get_distribution_modality(self, t: Union[int, float] = -1) -> float:
+        """Calculate Test of unimodality for normal distribution(s)
 
-    def get_change_in_opinions(self, dt=0.01):
-        df = self.result_df()
+        .. math::
+                \\frac{v - \\mu}{\\sigma} \\leq \\sqrt{\\frac{3}{5}}
+
+        where :math:`v` is the median, :math:`\\mu`` is the mean, and :math:`\\sigma` is the standard deviation.
+
+        see https://en.wikipedia.org/wiki/Unimodality
+        see https://doi.org/10.1007/s10182-008-0057-2 
+
+        """
+        t_idx = np.argmin(np.abs(t - self.result.t)) if isinstance(t, float) else t
+        opinions = self.result.y[:, t_idx]
+        return distribution_modality(opinions)
+
+    def get_change_in_opinions(self, dt=0.01) -> np.ndarray:
+        """Calculate the change of opinions for a given time step ``dt``."""
         # create time array with constant dt (variable dt may have been used in the numerical integration method)
         t_indices = [
             np.nanargmin(np.abs(t - self.result.t))
@@ -410,25 +400,36 @@ class EchoChamber(object):
         opinions = self.result.y[:, t_indices]
         return np.diff(opinions, axis=1)
 
-    def _get_filename(self):
-        return os.path.join(".cache", f"{hash(self)}.h5")
+    def result_df(self) -> pd.DataFrame:
+        """Provide opinions as a pandas ``DataFrame``"""
+        if self.result is None:
+            raise RuntimeError(
+                f"{self.name} has not been run. call `.run_network` first."
+            )
+        df = pd.DataFrame(self.result.y.T, index=self.result.t)
+        df.name = "opinions"
+        return df
 
-    def save(self, only_last=True) -> str:
+    def _get_filename(self) -> str:
+        """get a cacheable filename for this instance"""
+        from opdynamics.utils.cache import get_cache_dir
+
+        cache_dir = get_cache_dir()
+        return os.path.join(cache_dir, f"{hash(self)}.h5")
+
+    def save(self, only_last=True, complevel=DEFAULT_COMPRESSION_LEVEL) -> str:
         """Save the echochamber to the cache using the HDF file format.
 
         File name and format specified in ``_get_filename()``
 
         :param only_last: Save only the last time point (default True).
+        :param complevel: Compression level (default DEFAULT_COMPRESSION_LEVEL defined in ``constants``).
 
         :return Saved filename.
         """
         import warnings
         from tables import NaturalNameWarning
 
-        try:
-            os.makedirs(".cache")
-        except FileExistsError:
-            pass
         filename = self._get_filename()
 
         df_opinions = self.result_df()
@@ -449,12 +450,21 @@ class EchoChamber(object):
         df_adj_mat_last = pd.DataFrame(self.adj_mat[-1])
         df_adj_mat_accum.name = f"adj_mat_accum-{self.adj_mat.p_mutual_interaction}"
         df_adj_mat_last.name = f"adj_mat_last-{self.adj_mat.p_mutual_interaction}"
+        meta = dict(complevel=complevel, complib="blosc:zstd")
+        df_meta = pd.Series(meta, name="meta")
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", NaturalNameWarning)
-            for df in [df_opinions, df_conn, df_act, df_adj_mat_accum, df_adj_mat_last]:
-                df.to_hdf(filename, df.name)
+            for df in [
+                df_opinions,
+                df_conn,
+                df_act,
+                df_adj_mat_accum,
+                df_adj_mat_last,
+                df_meta,
+            ]:
+                df.to_hdf(filename, df.name, complevel=7, complib="blosc:zstd")
         logger.debug(f"saved to {filename}\n{self}")
-        with open(os.path.join(".cache", "map.txt"), "a+") as f_map:
+        with open(os.path.join(os.path.split(filename)[0], "map.txt"), "a+") as f_map:
             f_map.write(f"\n{self}\n\t{os.path.split(filename)[-1]}")
         return filename
 
@@ -493,9 +503,9 @@ class EchoChamber(object):
                     t_arr, y_arr.T, None, None, None, 0, 0, 0, 1, "success", True,
                 )
                 self._post_run()
-
+                compressed = False
                 for key in keys:
-                    df = hdf.get(key)
+                    df: Union[pd.DataFrame, pd.Series, object] = hdf.get(key)
                     if "opinions" in key:
                         pass
                     elif "p_conn" in key:
@@ -512,10 +522,15 @@ class EchoChamber(object):
                             raise KeyError(
                                 f"unexpected adj_mat key '{key}' in hdf '{filename}'"
                             )
+                    elif "meta" in key:
+                        if df.loc["complevel"] > 0:
+                            compressed = True
                     else:
                         raise KeyError(f"unexpected key '{key}' in hdf '{filename}'")
 
             logger.debug(f"{self.name} loaded from {filename}")
+            if not compressed:
+                self.save(only_last=self.result.y.shape[1] > 1)
             return True
         return False
 
@@ -547,7 +562,10 @@ class ConnChamber(EchoChamber):
         """
 
         p_conn = np.zeros(shape=(self.N, self.N))
-        betas = self.rn.choice([beta, -beta], size=self.N, p=[p_opp, 1 - p_opp])
+        if p_opp > 0:
+            betas = self.rn.choice([beta, -beta], size=self.N, p=[p_opp, 1 - p_opp])
+        else:
+            betas = -beta
         for i in range(self.N):
             mag = np.abs(self.opinions[i] - self.opinions)
             mag[i] = np.nan
@@ -742,7 +760,7 @@ class ContrastChamber(NoisyEchoChamber):
         return (self.k_steps, self.alpha_2, *temp)
 
 
-class SampleChamber(NoisyEchoChamber, ConnChamber):
+class SampleChamber(NoisyEchoChamber):
     """
     Provide a mean sample of opinions to each agent.
 
@@ -775,9 +793,8 @@ class SampleChamber(NoisyEchoChamber, ConnChamber):
             if type(n) is tuple:
                 # choose between low and high values (randint not implemented for default_rng)
                 n = self.rn.choice(np.arange(n[0], n[1], dtype=int))
-
             return super_dy_dt(t, y, *other_args) + D * np.sqrt(n) * (
-                self.get_sample_means(n, num_samples=N, opinions=y) - np.mean(y)
+                sample_means(y, n, num_samples=N, rng=self.rn) - np.mean(y)
             )
 
         self.sample_size = sample_size

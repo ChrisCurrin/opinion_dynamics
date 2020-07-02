@@ -2,12 +2,17 @@
 from opdynamics.utils.latex_helpers import math_fix
 
 # ----------
-# values
+# system values
 # ----------
 # noise
 INTERNAL_NOISE_K = 10
 INTERNAL_NOISE_CONTRAST = 12
 EXTERNAL_NOISE = 0
+
+# ----------
+# other values
+# ----------
+DEFAULT_COMPRESSION_LEVEL = 7
 
 # ----------
 # colors

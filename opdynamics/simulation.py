@@ -10,6 +10,7 @@ from matplotlib.figure import Figure
 from tqdm import tqdm, trange
 from typing import Callable, Dict, Iterable, List, Tuple, Type, TypeVar, Union
 
+from opdynamics.utils.cache import get_cache_dir
 from opdynamics.utils.constants import *
 from opdynamics.dynamics.echochamber import EchoChamber, NoisyEchoChamber, OpenChamber
 from opdynamics.utils.distributions import negpowerlaw
@@ -18,6 +19,8 @@ from opdynamics.visualise import (
     show_simulation_range,
     show_simulation_results,
 )
+
+logging.basicConfig(level=logging.INFO)
 
 logger = logging.getLogger("simulation")
 
@@ -94,7 +97,14 @@ def run_params(
     if not (cache and _ec.load(dt, T)):
         _ec.run_network(dt=dt, t_end=T, method=method)
         if cache:
-            _ec.save(cache != "all")
+            if type(cache) is str and "all" in cache:
+                cache = cache.replace("all", "")
+                complevel = int(cache) if len(cache) else DEFAULT_COMPRESSION_LEVEL
+                _ec.save(only_last=False, complevel=complevel)
+            else:
+                complevel = cache if cache > 1 else DEFAULT_COMPRESSION_LEVEL
+                _ec.save(only_last=True, complevel=complevel)
+
     if plot_opinion:
         show_simulation_results(_ec, plot_opinion)
     return _ec
@@ -402,8 +412,8 @@ def run_noise_other_range(
 def run_product(
     other_vars: Dict[str, Dict[str, Union[list, str]]],
     cls: Type[NEC] = OpenChamber,
-    cache=True,
-    cache_sim=False,
+    cache=False,
+    cache_sim=True,
     **kwargs,
 ) -> pd.DataFrame:
     """Run a combination of variables, varying noise for each combination.
@@ -418,9 +428,9 @@ def run_product(
                 'range':np.round(np.arange(0.000, 0.01, 0.002), 3),
                 'title': 'nudge',
             },
-            'k_steps':{
-                'range':[1, 10, 100],
-                'title':'k',
+            'alpha':{
+                'range':[0.0001, 2, 3],
+                'title':'α',
             },
         }
 
@@ -430,8 +440,8 @@ def run_product(
     :param other_vars: A dictionary of parameters to vary. The product of each parameter's 'range' key is taken.
         See example for format.
     :param cls: Class of noise.
-    :param cache: Whether to cache the Dataframe used to store the results (default ``True``).
-    :param cache_sim: Whether to cache individual simulations (default ``False``).
+    :param cache: Whether to cache individual simulations (default ``False``).
+    :param cache_sim: Whether to cache the ``pd.DataFrame`` used to store the simulation results (default ``True``).
 
     :return: DataFrame of results in tidy long-form. That is, each column is a variable and each row is an
         observation. Only opinions at the last time point are stored.
@@ -440,25 +450,25 @@ def run_product(
     keys = list(other_vars.keys())
 
     full_range = list(itertools.product(*[other_vars[key]["range"] for key in keys]))
-    file_name = os.path.join(".cache", "noise_source.h5")
+    cache_dir = get_cache_dir()
+    file_name = os.path.join(cache_dir, "noise_source.h5")
 
     # the efficient HDF format is used for saving and loading DataFrames.
-    if cache and os.path.exists(file_name):
+    if cache_sim and os.path.exists(file_name):
         # noinspection PyTypeChecker
         df: pd.DataFrame = pd.read_hdf(file_name)
         run_range = set(df.groupby([*keys]).count().index)
         full_range = {x for x in full_range if x not in run_range}
-    else:
-        df = pd.DataFrame()
-    df_builder = []
 
     kw_name = kwargs.pop("name", "")
-    T = kwargs.pop("T", 1.0)
     noise_start = kwargs.pop("noise_start", 0)
-    noise_length = kwargs.pop("noise_length", T)
-    recovery = kwargs.pop("recovery", 0)
+    if noise_start > 0:
+        T = kwargs.pop("T", 1.0)
+        noise_length = kwargs.pop("noise_length", T)
+        recovery = kwargs.pop("recovery", 0)
 
     for values in tqdm(full_range, desc="full range"):
+        df_builder = []
         names = []
         for key, value in zip(keys, values):
             kwargs[key] = value
@@ -471,21 +481,21 @@ def run_product(
                 recovery,
                 cls=cls,
                 name=name,
-                cache=cache_sim,
+                cache=cache,
                 **kwargs,
             )
         else:
-            nec = run_params(cls, name=name, cache=cache_sim, T=T, **kwargs)
+            nec = run_params(cls, name=name, cache=cache, **kwargs)
 
         # put data into dictionaries with keys for column names
         for y_idx, opinion in enumerate(nec.result.y[:, -1]):
-            d = {"i": y_idx, "opinion": opinion, **kwargs}
-            df_builder.append(d)
+            df_builder.append({"i": y_idx, "opinion": opinion, **kwargs})
+        if cache_sim:
+            with pd.HDFStore(file_name) as store:
+                store.append("df", pd.DataFrame(df_builder))
 
-    df = pd.concat([df, pd.DataFrame(df_builder)], ignore_index=True)
-
-    if cache:
-        df.to_hdf(file_name, "df")
+    # noinspection PyTypeChecker
+    df = pd.read_hdf(file_name)
 
     return df
 

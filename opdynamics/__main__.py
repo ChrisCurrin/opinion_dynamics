@@ -8,7 +8,7 @@ from scipy.integrate._ivp.ivp import METHODS as SCIPY_METHODS
 from opdynamics.dynamics.echochamber import EchoChamber, NoisyEchoChamber
 from opdynamics.simulation import run_noise_range, run_params
 from opdynamics.integrate.solvers import ODE_INTEGRATORS, SDE_INTEGRATORS
-from opdynamics.utils.constants import EXTERNAL_NOISE, INTERNAL_NOISE
+from opdynamics.utils.constants import EXTERNAL_NOISE
 from opdynamics.utils.distributions import negpowerlaw
 
 
@@ -220,10 +220,6 @@ if args.noise:
         kwargs["D"] = args.noise[0]
     else:
         kwargs["D"] = args.noise
-    kwargs["noise_source"] = (
-        EXTERNAL_NOISE if args.noise_source == "external" else INTERNAL_NOISE
-    )
-
 else:
     ec_type = EchoChamber
 
