@@ -32,11 +32,11 @@ Target Python version: >= 3.6
 
 `jupter lab opdynamics.ipynb`
 
-## 3. Run desired scripts
+## 4. Run desired scripts
    
 `python -m scripts.<script name>`
 
-## 4. Use as a module from the terminal
+## 5. Use as a module from the terminal
 
 e.g.
  
