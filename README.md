@@ -20,7 +20,7 @@ cd opinion_dynamics
 
 ## 2. Create environment from requirements using [conda](https://docs.conda.io/en/latest/)
 
-`conda env create -f environment.yaml`
+`conda env create -f environment.yml`
 
 `conda activate opinion_dynamics`
 
@@ -86,7 +86,15 @@ Update `environment.yml` using `conda env export --from-history > environment.ym
 
 ---
 ## TODO:
-- [ ] Test and plot results for "internal noise".
+- [ ] Allow `simulation.run_product` to be run asyncronously.
+    - [x] Initial creation
+    - [ ] Convert from multiprocessing to async/await 
+    - [ ] Test 
+- [ ] Create metric for determining whether opinions are polarised or uniform. 
+- [ ] Add `sample_size` to `SampleChamber.__repr__` 
+- [ ] Test more efficient `get_social_interaction`
+- [ ] Test more efficient `get_connection_probabilities`
+- [x] Test and plot results for "internal noise".
 - [x] Restrict internal noise to be from an agent of opposite opinion.
 - [x] Implement noise as coming from agent <img src="https://latex.codecogs.com/svg.latex?D(x_i - x_k)"/> - "internal noise".
     - [x] with sigmoid transformation (tanh):

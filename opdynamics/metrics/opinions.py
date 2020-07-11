@@ -104,4 +104,11 @@ def distribution_modality(opinions) -> float:
         f" \t is_unimodal = {is_unimodal}"
         f" \t is_unimodal_alt = {is_unimodal_alt}"
     )
+
+    # get the maximum
+    # TODO: finish
+    max_opinion_pop1 = np.argmax(np.histogram(pop1))
+    max_opinion_pop2 = np.argmax(np.histogram(pop2))
+    if np.abs(max_opinion_pop1 - max_opinion_pop2) > 0.5:
+        return 1
     return a_D

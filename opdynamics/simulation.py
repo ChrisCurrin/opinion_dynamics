@@ -5,18 +5,14 @@ import os
 
 import numpy as np
 import pandas as pd
-from matplotlib.axes import Axes
-from matplotlib.figure import Figure
 from tqdm import tqdm, trange
-from typing import Callable, Dict, Iterable, List, Tuple, Type, TypeVar, Union
+from typing import Callable, Dict, List, Type, TypeVar, Union
 
-from opdynamics.utils.cache import get_cache_dir
-from opdynamics.utils.constants import *
-from opdynamics.dynamics.echochamber import EchoChamber, NoisyEchoChamber, OpenChamber
+from opdynamics.utils.cache import save_results
+from opdynamics.dynamics.echochamber import EchoChamber, OpenChamber
 from opdynamics.utils.distributions import negpowerlaw
 from opdynamics.visualise import (
     show_periodic_noise,
-    show_simulation_range,
     show_simulation_results,
 )
 
@@ -45,6 +41,7 @@ def run_params(
     lazy: bool = True,
     cache: Union[bool, str] = True,
     plot_opinion: Union[bool, str] = False,
+    write_mapping=True,
     *sim_args,
     **sim_kwargs,
 ) -> EC:
@@ -64,20 +61,19 @@ def run_params(
     :param r: Probability of a mutual interaction.
     :param dt: Maximum size of time step.
     :param T: Length of simulation.
+
     :param method: Solver method (custom or part of scipy).
     :param lazy: Compute social interactions when needed (True) or before the network evolves with time (False).
         Note that this can lead to large RAM usage.
     :param cache: Use a cache to retrieve and save results. Saves to `.cache`.
     :param plot_opinion: Display opinions (True), display summary figure ('summary') or display multiple figures (
         'all').
-
-    :keyword noise_source: Whether noise is external or internal (see formulations above).
-            Use constants defined in `utils.constants`.
-    :keyword k_steps: If `noise_source=INTERNAL_NOISE`, then choose N random agents every `k_steps`
-         (default 10).
+    :param write_mapping: Write to a file that maps the object's string representation and it's hash value.
 
     :return: Instance of EchoChamber (or a subclass)
     """
+    from opdynamics.utils.cache import cache_ec
+
     if method is None:
         if cls is OpenChamber:
             method = "Euler-Maruyama"
@@ -96,14 +92,7 @@ def run_params(
     _ec.set_dynamics(*sim_args, **sim_kwargs)
     if not (cache and _ec.load(dt, T)):
         _ec.run_network(dt=dt, t_end=T, method=method)
-        if cache:
-            if type(cache) is str and "all" in cache:
-                cache = cache.replace("all", "")
-                complevel = int(cache) if len(cache) else DEFAULT_COMPRESSION_LEVEL
-                _ec.save(only_last=False, complevel=complevel)
-            else:
-                complevel = cache if cache > 1 else DEFAULT_COMPRESSION_LEVEL
-                _ec.save(only_last=True, complevel=complevel)
+        cache_ec(cache, _ec, write_mapping=write_mapping)
 
     if plot_opinion:
         show_simulation_results(_ec, plot_opinion)
@@ -131,6 +120,7 @@ def run_periodic_noise(
     cache: bool = True,
     method: str = "Euler-Maruyama",
     plot_opinion: bool = False,
+    write_mapping=True,
     *args,
     **kwargs,
 ) -> NEC:
@@ -192,17 +182,15 @@ def run_periodic_noise(
     :param r: Probability of a mutual interaction.
     :param dt: Maximum size of time step.
     :param method: Solver method (custom or part of scipy).
+
     :param cache: Use a cache to retrieve and save results. Saves to `.cache`.
-
     :param plot_opinion: Whether to display results (default False).
-
-    :keyword noise_source: Whether noise is external or internal (see formulations above).
-            Use constants defined in `utils.constants`.
-    :keyword k_steps: If `noise_source=INTERNAL_NOISE`, then choose N random agents every `k_steps`
-         (default 10).
+    :param write_mapping: Write to a file that maps the object's string representation and it's hash value.
 
     :return: NoisyEchoChamber created for the simulation.
     """
+    from opdynamics.utils.cache import cache_ec
+
     lazy = kwargs.pop("lazy", True)
     if not lazy:
         logger.warning(
@@ -262,160 +250,24 @@ def run_periodic_noise(
             nec.set_dynamics(D=0)
             nec.run_network(t_end=recovery)
             t.update()
-        if cache:
-            nec.save(cache != "all")
+
+        cache_ec(cache, nec, write_mapping=write_mapping)
+
     if plot_opinion:
         show_periodic_noise(nec, noise_start, noise_length, recovery, interval, num, D)
 
     return nec
 
-
-def run_noise_range(
-    D_range: Iterable,
-    *args,
-    cls: Type[NEC] = OpenChamber,
-    noise_start=0,
-    plot_opinion: Union[bool, Tuple[Figure, Axes]] = True,
-    **kwargs,
-) -> List[NEC]:
-    """ Run the same simulation multiple times, with different noises.
-
-    :param D_range: List of noise values (`D`).
-    :param cls: Class of the noise type to use. Must support 'D' argument.
-    :param noise_start: Time to start adding noise.
-        If 0, ``run_params`` is called, otherwise ``run_periodic_noise`` is called.
-    :param plot_opinion: Display simulation range results (True). If a tuple of (fig, ax), then the passed values are used.
-
-    :keyword N: initial value: Number of agents.
-    :keyword m: Number of other agents to interact with.
-    :keyword alpha: Controversialness of issue (sigmoidal shape).
-    :keyword K: Social interaction strength.
-    :keyword epsilon: Minimum activity level with another agent.
-    :keyword gamma: Power law distribution param.
-    :keyword beta: Power law decay of connection probability.
-    :keyword r: Probability of a mutual interaction.
-    :keyword dt: Maximum size of time step.
-    :keyword T: Length of simulation.
-    :keyword method: Solver method (custom or part of scipy).
-    :keyword lazy: Compute social interactions when needed (True) or before the network evolves with time (False).
-        Note that this can lead to large RAM usage.
-    :keyword cache: Use a cache to retrieve and save results. Saves to `.cache`.
-
-    :return: List of NoisyEchoChambers.
-    """
-    from tqdm.contrib import tenumerate
-
-    nec_arr = []
-
-    name = kwargs.pop("name", "")
-    T = kwargs.pop("T", 1.0)
-    noise_length = kwargs.pop("noise_length", T)
-    recovery = kwargs.pop("recovery", 0)
-
-    for i, D in tenumerate(D_range, desc=f"noise range [{name}]"):
-        if noise_start > 0:
-            nec = run_periodic_noise(
-                noise_start,
-                noise_length,
-                recovery,
-                *args,
-                cls=cls,
-                D=D,
-                name=f"D={D}",
-                **kwargs,
-            )
-        else:
-            nec = run_params(cls, *args, D=D, name=f"D={D}", T=T, **kwargs)
-        nec_arr.append(nec)
-
-    if plot_opinion:
-        show_simulation_range(D_range, nec_arr, plot_opinion)
-
-    return nec_arr
-
-
-def run_noise_other_range(
-    D_range: Iterable,
-    other_var: str,
-    other_range: Iterable,
-    *args,
-    plot_opinion: bool = True,
-    title: str = "",
-    label_precision: int = None,
-    subplot_kws: dict = None,
-    **kwargs,
-) -> (List[List[NEC]], pd.DataFrame):
-
-    if plot_opinion:
-        import matplotlib.pyplot as plt
-
-        if subplot_kws is None:
-            subplot_kws = {}
-        # default to share x and y
-        subplot_kws = {**dict(sharex="all", sharey="all"), **subplot_kws}
-        # noinspection PyTypeChecker
-        fig, ax = plt.subplots(
-            nrows=len(D_range), ncols=len(other_range), squeeze=False, **subplot_kws
-        )
-
-    nec_arrs = []
-    df_builder = []
-    for i, other in tqdm(enumerate(other_range), desc=other_var):
-        kwargs[other_var] = other
-        if plot_opinion:
-            other_val = (
-                f"{other}"
-                if label_precision is None
-                else f"{np.round(other, label_precision)}"
-            )
-            # noinspection PyUnboundLocalVariable
-            nec_arr = run_noise_range(
-                D_range,
-                *args,
-                plot_opinion=(fig, ax[:, i]),
-                name=f"{other_var}={other_val}",
-                **kwargs,
-            )
-            ax[0, i].set_title("")
-            ax[-1, i].set_xlabel(other_val)
-        else:
-            nec_arr = run_noise_range(D_range, plot_opinion=False, **kwargs)
-        nec_arrs.append(nec_arr)
-
-        # put data into dictionaries with keys for column names
-        for nec, D in zip(nec_arr, D_range):
-            for y_idx, opinion in enumerate(nec.result.y[:, -1]):
-                d = {"D": D, "i": y_idx, "opinion": opinion, other_var: other}
-                df_builder.append(d)
-
-    df = pd.DataFrame(df_builder)
-
-    if plot_opinion:
-        from matplotlib.cbook import flatten
-        import seaborn as sns
-
-        fig.suptitle(title)
-        fig.subplots_adjust(hspace=-0.5, wspace=0)
-        for _ax in flatten(ax[:, 1:]):
-            _ax.set_ylabel("", ha="right")
-        for i in range(len(D_range)):
-            ax[i, 0].set_ylabel(f"{D_range[i]}", ha="right")
-        for _ax in fig.axes:
-            _ax.set_facecolor("None")
-            sns.despine(ax=_ax, bottom=True, left=True)
-            _ax.tick_params(
-                bottom=False, left=False, labelleft=False, labelbottom=False
-            )
-    return nec_arrs, df
-
+# TODO: replace multiprocessing with await/async
 
 def run_product(
-    other_vars: Dict[str, Dict[str, Union[list, str]]],
-    cls: Type[NEC] = OpenChamber,
+    parameters: Dict[str, Dict[str, Union[list, str]]],
+    cls: Type[EC] = EchoChamber,
     cache=False,
     cache_sim=True,
+    parallel: Union[bool, int] = False,
     **kwargs,
-) -> pd.DataFrame:
+) -> Union[pd.DataFrame, List[EC]]:
     """Run a combination of variables, varying noise for each combination.
 
     Examples
@@ -437,19 +289,30 @@ def run_product(
         df = run_product(D_range, other_vars, **kwargs)
 
 
-    :param other_vars: A dictionary of parameters to vary. The product of each parameter's 'range' key is taken.
+    :param parameters: A dictionary of parameters to vary. The product of each parameter's 'range' key is taken.
         See example for format.
     :param cls: Class of noise.
     :param cache: Whether to cache individual simulations (default ``False``).
     :param cache_sim: Whether to cache the ``pd.DataFrame`` used to store the simulation results (default ``True``).
+    :param parallel: Run iterations serially (``False``) or in parallel (``True``). Defaults to ``False``.
+        An integer can be passed to explicitly set the pool size, else it is equalt to th number of CPU cores.
+        Parallel run uses ``multiprocessing`` library and is not fully tested.
 
     :return: DataFrame of results in tidy long-form. That is, each column is a variable and each row is an
         observation. Only opinions at the last time point are stored.
     """
+    from opdynamics.utils.cache import get_cache_dir
 
-    keys = list(other_vars.keys())
+    plot_opinion = kwargs.pop("plot_opinion", False)
 
-    full_range = list(itertools.product(*[other_vars[key]["range"] for key in keys]))
+    keys = list(parameters.keys())
+
+    ## This allows a mixed-type to be passed where `range` isn't necessary.
+    # verbose_other_vars = {
+    #     k: {"range": v} for k, v in parameters.items() if type(v) is not dict
+    # }
+    # parameters.update(verbose_other_vars)
+    full_range = itertools.product(*[parameters[key]["range"] for key in keys])
     cache_dir = get_cache_dir()
     file_name = os.path.join(cache_dir, "noise_source.h5")
 
@@ -458,22 +321,40 @@ def run_product(
         # noinspection PyTypeChecker
         df: pd.DataFrame = pd.read_hdf(file_name)
         run_range = set(df.groupby([*keys]).count().index)
-        full_range = {x for x in full_range if x not in run_range}
+        full_range = (x for x in full_range if x not in run_range)
+    # list to store EchoChamber objects (only if not cache_sim)
+    nec_list = []
 
-    kw_name = kwargs.pop("name", "")
+    base_name = kwargs.pop("name", "")
     noise_start = kwargs.pop("noise_start", 0)
     if noise_start > 0:
         T = kwargs.pop("T", 1.0)
         noise_length = kwargs.pop("noise_length", T)
         recovery = kwargs.pop("recovery", 0)
 
-    for values in tqdm(full_range, desc="full range"):
-        df_builder = []
+    # create helper functions for running synchronously or asynchronously
+
+    def comp_unit(values: list, write_mapping: bool= True) -> (EC, dict):
+        """Define unit of computation to be parallelizable.
+
+        :param values: Values to update in kwargs according. Same order as keys.
+        :param write_mapping: Whether to write to a file. Defaults to `True`.
+        :return: Pair of EchoChamber object, parameters used.
+        """
         names = []
+
+        # create copy of kwargs
+        updated_kwargs = dict(kwargs)
+
+        # re-assign
         for key, value in zip(keys, values):
-            kwargs[key] = value
+            updated_kwargs[key] = value
             names.append(f"{key}={value}")
-        name = kw_name + ", ".join(names)
+
+        # create a name based on changed key-values
+        name = base_name + ", ".join(names)
+
+        # run according to noise_start
         if noise_start > 0:
             nec = run_periodic_noise(
                 noise_start,
@@ -482,22 +363,69 @@ def run_product(
                 cls=cls,
                 name=name,
                 cache=cache,
-                **kwargs,
+                write_mapping=write_mapping,
+                **updated_kwargs,
             )
         else:
-            nec = run_params(cls, name=name, cache=cache, **kwargs)
+            nec = run_params(
+                cls, name=name, cache=cache, write_mapping=write_mapping, **updated_kwargs
+            )
+        return nec, updated_kwargs
 
-        # put data into dictionaries with keys for column names
-        for y_idx, opinion in enumerate(nec.result.y[:, -1]):
-            df_builder.append({"i": y_idx, "opinion": opinion, **kwargs})
-        if cache_sim:
-            with pd.HDFStore(file_name) as store:
-                store.append("df", pd.DataFrame(df_builder))
+    def run_sync():
+        """Normal ``for`` loop over range."""
+        for values in tqdm(full_range, desc="full range"):
+            nec, params = comp_unit(values)
+            if cache_sim:
+                save_results(file_name, nec, **params)
+            else:
+                nec_list.append(nec)
 
-    # noinspection PyTypeChecker
-    df = pd.read_hdf(file_name)
+    def run_async(n_processes=None):
+        """Create a pool of size ``n_processes`` for running multiple networks simultaneously.
+        Full range is iterated over using :func:`multiprocessing.imap` to cache results to a shared DataFrame and to
+        write the object -> hash mapping safely.
 
-    return df
+        :param n_processes: Number of processes to use for the pool.
+
+        .. seealso::
+            :func:`multiprocessing.Pool`
+
+        """
+        import multiprocessing as mp
+
+        if n_processes is None:
+            n_processes = mp.cpu_count()
+        p = mp.Pool(n_processes)
+
+        # change mapping to False as it may cause multi-access errors
+        kwargs.pop("write_mapping", False)
+        write_mapping = False
+
+        with open(os.path.join(get_cache_dir(), "map.txt"), "a+") as write_file:
+            # generator of tasks for ``comp_unit`` with keys-values to overwrite in (a copy of) kwargs.
+            TASKS = (
+                keys, values, base_name, kwargs, write_mapping for values in full_range
+            )
+            for nec, params in p.imap(comp_unit, TASKS):
+                write_file.write(nec.save_txt)
+                if cache_sim:
+                    save_results(file_name, nec, **params)
+                else:
+                    nec_list.append(nec)
+        p.close()
+        p.join()
+
+    if parallel:
+        run_async(n_processes=parallel if type(parallel) is int else None)
+    else:
+        run_sync()
+
+    if cache_sim and os.path.exists(file_name):
+        # noinspection PyTypeChecker
+        df = pd.read_hdf(file_name)
+        return df
+    return nec_list
 
 
 def example():

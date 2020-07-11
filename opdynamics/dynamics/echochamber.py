@@ -93,6 +93,9 @@ class EchoChamber(object):
         self.result: SolverResult = None
         self.init_opinions()
 
+        # other public attributes assigned during an operation
+        self.save_txt: str = None
+
     def init_opinions(self, min_val=-1.0, max_val=1.0):
         """Randomly initialise opinions for all N agents between [min_val, max_val] from a uniform distribution
 
@@ -174,11 +177,11 @@ class EchoChamber(object):
         if self.activities is None or self.p_conn is None:
             raise RuntimeError(
                 """Activities and connection probabilities need to be set. 
-                                                                                    ec = EchoChamber(...)
-                                                                                    ec.set_activities(...)
-                                                                                    ec.set_connection_probabilities(...)
-                                                                                    ec.set_social_interactions(...)
-                                                                                    """
+                                                                                        ec = EchoChamber(...)
+                                                                                        ec.set_activities(...)
+                                                                                        ec.set_connection_probabilities(...)
+                                                                                        ec.set_social_interactions(...)
+                                                                                        """
             )
 
         self.adj_mat = SocialInteraction(self, r)
@@ -205,7 +208,7 @@ class EchoChamber(object):
             interacting with each other (A), multiplied by social interaction strength (K).
 
             """
-            K, alpha, N, m, p_conn, A, dt = args
+            K, alpha, A, dt = args
             # get activity matrix for this time point
             At = A[int(t / dt)]
             return -y.T + K * np.sum(At * np.tanh(alpha * y.T), axis=1)
@@ -245,7 +248,24 @@ class EchoChamber(object):
         return np.round(t_start, 6), np.round(t_end, 6)
 
     def _args(self, *args):
-        return (self.K, self.alpha, self.N, self.m, self.p_conn, self.adj_mat, *args)
+        """Bundle parameters into a single tuple for ``dy_dt``.
+
+        .. note ::
+
+            ``dt`` will always be the last argument in ``dy_dt``
+
+        .. note::
+            For extending this method (along with ``dy_dt``) in subclasses, ``*args`` should be placed first so that
+            ``parent_args`` can be collected:
+
+            .. code-block :: python
+
+                def dy_dt(t,y,*args):
+                    new_arg, *parent_args = args
+                    return parent_dy_dt(t, y, *parent_args) * new_arg
+
+        """
+        return (*args, self.K, self.alpha, self.adj_mat)
 
     def _post_run(self):
         # reassign opinions to last time point
@@ -274,7 +294,8 @@ class EchoChamber(object):
         from opdynamics.integrate.solvers import ODE_INTEGRATORS, solve_ode
 
         t_span = self._setup_run(t_end)
-        args = self._args(dt)
+        # always have dt last
+        args = (*self._args(), dt)
 
         if method in ODE_INTEGRATORS:
             # use a custom method in `opdynamics.utils.integrators`
@@ -417,13 +438,16 @@ class EchoChamber(object):
         cache_dir = get_cache_dir()
         return os.path.join(cache_dir, f"{hash(self)}.h5")
 
-    def save(self, only_last=True, complevel=DEFAULT_COMPRESSION_LEVEL) -> str:
+    def save(
+        self, only_last=True, complevel=DEFAULT_COMPRESSION_LEVEL, write_mapping=True
+    ) -> str:
         """Save the echochamber to the cache using the HDF file format.
 
         File name and format specified in ``_get_filename()``
 
         :param only_last: Save only the last time point (default True).
         :param complevel: Compression level (default DEFAULT_COMPRESSION_LEVEL defined in ``constants``).
+        :param write_mapping: Write to a file that maps the object's string representation and it's hash value.
 
         :return Saved filename.
         """
@@ -431,6 +455,7 @@ class EchoChamber(object):
         from tables import NaturalNameWarning
 
         filename = self._get_filename()
+        hash_txt = os.path.split(filename)[-1]
 
         df_opinions = self.result_df()
         _name = df_opinions.name
@@ -464,8 +489,15 @@ class EchoChamber(object):
             ]:
                 df.to_hdf(filename, df.name, complevel=7, complib="blosc:zstd")
         logger.debug(f"saved to {filename}\n{self}")
-        with open(os.path.join(os.path.split(filename)[0], "map.txt"), "a+") as f_map:
-            f_map.write(f"\n{self}\n\t{os.path.split(filename)[-1]}")
+        save_txt = f"\n{self}\n\t{hash_txt}"
+        if write_mapping:
+            with open(
+                os.path.join(os.path.split(filename)[0], "map.txt"), "a+"
+            ) as f_map:
+                f_map.write(save_txt)
+        else:
+            self.save_txt = save_txt
+
         return filename
 
     def load(self, dt, T):
@@ -598,9 +630,11 @@ class ConnChamber(EchoChamber):
             interacting with each other (A), multiplied by social interaction strength (K).
 
             """
-            K, alpha, N, m, p_conn, A, beta, p_opp, dt = args
+            K, alpha, A, set_p_conn, beta, p_opp, dt = args
             # recalculate connection probabilities to be used in A
-            p_conn(beta, p_opp)
+            if np.round(t % dt, 6) == 0:
+                # keep time-scale in-sync with At by reassigning self.p_conn according to dt
+                set_p_conn(beta, p_opp)
             # get activity matrix for this time point
             At = A[int(t / dt)]
             return -y.T + K * np.sum(At * np.tanh(alpha * y.T), axis=1)
@@ -608,8 +642,9 @@ class ConnChamber(EchoChamber):
         self.dy_dt = dy_dt
 
     def _args(self, *args):
-        self.p_conn = self.set_connection_probabilities
-        return super()._args(self._beta, self.p_opp, *args)
+        return super()._args(
+            *args, self.set_connection_probabilities, self._beta, self.p_opp,
+        )
 
 
 class NoisyEchoChamber(EchoChamber):
@@ -669,7 +704,7 @@ class OpenChamber(NoisyEchoChamber):
         from opdynamics.integrate.solvers import SDE_INTEGRATORS, solve_sde
 
         t_span = self._setup_run(t_end)
-        args = self._args(dt)
+        args = (*self._args(), dt)
         diff_args = (dt, *self.diff_args)
         if method in SDE_INTEGRATORS:
             # use a custom method in `opdynamics.utils.integrators`
@@ -756,8 +791,7 @@ class ContrastChamber(NoisyEchoChamber):
         self.alpha_2 = alpha_2
 
     def _args(self, *args):
-        temp = super()._args(*args)
-        return (self.k_steps, self.alpha_2, *temp)
+        return super()._args(*args, self.k_steps, self.alpha_2)
 
 
 class SampleChamber(NoisyEchoChamber):
@@ -770,13 +804,28 @@ class SampleChamber(NoisyEchoChamber):
     # noinspection PyTypeChecker
     def __init__(self, *args, name="sample chamber", **kwargs):
         super().__init__(*args, name=name, **kwargs)
-        self.sample_size: int = None
+        self.sample_size: int = 0
+        self._sample_means: float = 0.0
 
     def set_dynamics(self, D=0, sample_size=20, *args, **kwargs):
         """Set the dynamics of network by assigning a function to `self.dy_dt`.
         """
         super().set_dynamics(D, *args, **kwargs)
         super_dy_dt = self.dy_dt
+
+        # object to store sample_means value at distinct time points
+        self._sample_means = 0
+
+        # method to re-assign self._sample_means
+        def new_clt_sample(y, n, num_samples):
+            """
+            :math:`\\sqrt {n}\\left({\\bar{X}}_{n}-\\mu \\right) \\rightarrow \mathcal{N}\\left(0,\\sigma ^{2}\\right)`
+
+            where :math:`X` is a random sample and :math:`\\bar{X}_{n}` is the sample mean for :math:`n` random samples.
+            """
+            self._sample_means = np.sqrt(n) * (
+                sample_means(y, n, num_samples=num_samples, rng=self.rn) - np.mean(y)
+            )
 
         def dy_dt(t: float, y: np.ndarray, *all_args) -> np.ndarray:
             """Activity-Driven (AD) network dynamics.
@@ -789,20 +838,22 @@ class SampleChamber(NoisyEchoChamber):
             where :math:`X` is a random sample and :math:`\\bar{X}_{n}` is the sample mean for :math:`n` random samples.
 
             """
-            n, N, *other_args = all_args
+            n, num_samples, *other_args = all_args
             if type(n) is tuple:
                 # choose between low and high values (randint not implemented for default_rng)
                 n = self.rn.choice(np.arange(n[0], n[1], dtype=int))
-            return super_dy_dt(t, y, *other_args) + D * np.sqrt(n) * (
-                sample_means(y, n, num_samples=N, rng=self.rn) - np.mean(y)
-            )
+            if np.round(t % other_args[-1], 6) == 0:
+                # calculate sample means every explicit dt (independent of solver's dt)
+                new_clt_sample(y, n, num_samples)
+            return super_dy_dt(t, y, *other_args) + D * self._sample_means
 
         self.sample_size = sample_size
         self.dy_dt = dy_dt
 
     def _args(self, *args):
-        temp = super()._args(*args)
-        return (self.sample_size, self.N, *temp)
+        return super()._args(*args, self.sample_size, self.N)
+
+    # TODO: add sample_size to repr
 
 
 def example():
