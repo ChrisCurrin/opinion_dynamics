@@ -258,7 +258,9 @@ def run_periodic_noise(
 
     return nec
 
+
 # TODO: replace multiprocessing with await/async
+
 
 def run_product(
     parameters: Dict[str, Dict[str, Union[list, str]]],
@@ -334,7 +336,7 @@ def run_product(
 
     # create helper functions for running synchronously or asynchronously
 
-    def comp_unit(values: list, write_mapping: bool= True) -> (EC, dict):
+    def comp_unit(values: list, write_mapping: bool = True) -> (EC, dict):
         """Define unit of computation to be parallelizable.
 
         :param values: Values to update in kwargs according. Same order as keys.
@@ -368,7 +370,11 @@ def run_product(
             )
         else:
             nec = run_params(
-                cls, name=name, cache=cache, write_mapping=write_mapping, **updated_kwargs
+                cls,
+                name=name,
+                cache=cache,
+                write_mapping=write_mapping,
+                **updated_kwargs,
             )
         return nec, updated_kwargs
 
@@ -405,7 +411,8 @@ def run_product(
         with open(os.path.join(get_cache_dir(), "map.txt"), "a+") as write_file:
             # generator of tasks for ``comp_unit`` with keys-values to overwrite in (a copy of) kwargs.
             TASKS = (
-                keys, values, base_name, kwargs, write_mapping for values in full_range
+                (keys, values, base_name, kwargs, write_mapping)
+                for values in full_range
             )
             for nec, params in p.imap(comp_unit, TASKS):
                 write_file.write(nec.save_txt)
