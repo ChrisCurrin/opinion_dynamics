@@ -790,7 +790,8 @@ class SampleChamber(NoisyEchoChamber):
     def _args(self, *args):
         return super()._args(*args, self, self.sample_size, self.N)
 
-    # TODO: add sample_size to repr
+    def __repr__(self):
+        return f"{super().__repr__()} n={self.sample_size}"
 
 
 def example():
