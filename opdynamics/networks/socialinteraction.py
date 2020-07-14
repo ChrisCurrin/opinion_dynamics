@@ -3,7 +3,7 @@ import logging
 import numpy as np
 from tqdm import tqdm
 
-from opdynamics.dynamics.echochamber import EchoChamber
+from opdynamics.networks.echochamber import EchoChamber
 
 logger = logging.getLogger("social interaction")
 
@@ -94,6 +94,9 @@ class SocialInteraction(object):
         )
         self._accumulator += self._last_adj_mat
         return self._last_adj_mat
+
+    def __repr__(self):
+        return f"Aij[r={self.p_mutual_interaction}]"
 
 
 # TODO: Test

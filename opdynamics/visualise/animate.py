@@ -9,7 +9,7 @@ from matplotlib import animation
 from matplotlib.collections import QuadMesh
 from matplotlib.colors import LogNorm, colorConverter
 
-from opdynamics.dynamics.echochamber import EchoChamber
+from opdynamics.networks.echochamber import EchoChamber
 from opdynamics.utils.decorators import optional_fig_ax
 from opdynamics.utils.distributions import negpowerlaw
 from opdynamics.utils.plot_utils import get_equal_limits

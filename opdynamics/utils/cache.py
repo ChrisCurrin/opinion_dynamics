@@ -4,7 +4,7 @@ from typing import Union
 
 import pandas as pd
 
-from opdynamics.dynamics.echochamber import EchoChamber
+from opdynamics.networks.echochamber import EchoChamber
 from opdynamics.utils.constants import DEFAULT_COMPRESSION_LEVEL
 
 
@@ -57,6 +57,10 @@ def save_results(file_name: str, ec: EchoChamber, **kwargs) -> None:
     :return:
     """
     df_builder = []
+
+    kwargs.pop("cls", None)
+    kwargs.pop("method", None)
+
     # put data into dictionaries with keys for column names
     for y_idx, opinion in enumerate(ec.result.y[:, -1]):
         df_builder.append({"i": y_idx, "opinion": opinion, **kwargs})

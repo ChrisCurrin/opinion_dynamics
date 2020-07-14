@@ -9,8 +9,10 @@ import logging
 from typing import Callable, Tuple, Union
 
 from numpy.random import default_rng
+from pandas.errors import PerformanceWarning
 from scipy.stats import powerlaw
 
+from opdynamics.dynamics.dy_dt import dy_dt, dynamic_conn, sample_dy_dt
 from opdynamics.metrics.opinions import (
     distribution_modality,
     nearest_neighbours,
@@ -59,7 +61,7 @@ class EchoChamber(object):
         *args,
         **kwargs,
     ):
-        from opdynamics.dynamics.socialinteraction import SocialInteraction
+        from opdynamics.networks.socialinteraction import SocialInteraction
 
         # create a random number generator for this object (to be thread-safe)
         self.rn = default_rng(seed)
@@ -172,7 +174,7 @@ class EchoChamber(object):
         :param t_end: Last time point. Together with dt, determines the size of the social interaction array.
 
         """
-        from opdynamics.dynamics.socialinteraction import SocialInteraction
+        from opdynamics.networks.socialinteraction import SocialInteraction
 
         if self.activities is None or self.p_conn is None:
             raise RuntimeError(
@@ -198,20 +200,6 @@ class EchoChamber(object):
 
         `self.dy_dt` is a function to be called by the ODE solver, which expects a signature of (t, y, *args).
         """
-
-        def dy_dt(t: float, y: np.ndarray, *args) -> np.ndarray:
-            """Activity-Driven (AD) network dynamics.
-
-            1. get the interactions (A) that happen at this time point between each of N agents based on activity
-            probabilities (p_conn) and the number of agents to interact with (m).
-            2. calculate opinion derivative by getting the scaled (by social influence, alpha) opinions (y.T) of agents
-            interacting with each other (A), multiplied by social interaction strength (K).
-
-            """
-            K, alpha, A, dt = args
-            # get activity matrix for this time point
-            At = A[int(t / dt)]
-            return -y.T + K * np.sum(At * np.tanh(alpha * y.T), axis=1)
 
         self.dy_dt = dy_dt
 
@@ -479,6 +467,7 @@ class EchoChamber(object):
         df_meta = pd.Series(meta, name="meta")
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", NaturalNameWarning)
+            warnings.simplefilter("ignore", PerformanceWarning)
             for df in [
                 df_opinions,
                 df_conn,
@@ -489,14 +478,13 @@ class EchoChamber(object):
             ]:
                 df.to_hdf(filename, df.name, complevel=7, complib="blosc:zstd")
         logger.debug(f"saved to {filename}\n{self}")
-        save_txt = f"\n{self}\n\t{hash_txt}"
+        self.save_txt = f"\n{self}\n\t{hash_txt}"
         if write_mapping:
+            print("write to file")
             with open(
                 os.path.join(os.path.split(filename)[0], "map.txt"), "a+"
             ) as f_map:
-                f_map.write(save_txt)
-        else:
-            self.save_txt = save_txt
+                f_map.write(self.save_txt)
 
         return filename
 
@@ -559,7 +547,6 @@ class EchoChamber(object):
                             compressed = True
                     else:
                         raise KeyError(f"unexpected key '{key}' in hdf '{filename}'")
-
             logger.debug(f"{self.name} loaded from {filename}")
             if not compressed:
                 self.save(only_last=self.result.y.shape[1] > 1)
@@ -620,26 +607,7 @@ class ConnChamber(EchoChamber):
         `self.dy_dt` is a function to be called by the ODE solver, which expects a signature of (t, y, *args).
         """
 
-        def dy_dt(t: float, y: np.ndarray, *args) -> np.ndarray:
-            """Activity-Driven (AD) network dynamics.
-
-            1. calculate connection probabilities based on difference in opinions
-            2. get the interactions (A) that happen at this time point between each of N agents based on activity
-            probabilities (p_conn) and the number of agents to interact with (m).
-            3. calculate opinion derivative by getting the scaled (by social influence, alpha) opinions (y.T) of agents
-            interacting with each other (A), multiplied by social interaction strength (K).
-
-            """
-            K, alpha, A, set_p_conn, beta, p_opp, dt = args
-            # recalculate connection probabilities to be used in A
-            if np.round(t % dt, 6) == 0:
-                # keep time-scale in-sync with At by reassigning self.p_conn according to dt
-                set_p_conn(beta, p_opp)
-            # get activity matrix for this time point
-            At = A[int(t / dt)]
-            return -y.T + K * np.sum(At * np.tanh(alpha * y.T), axis=1)
-
-        self.dy_dt = dy_dt
+        self.dy_dt = dynamic_conn
 
     def _args(self, *args):
         return super()._args(
@@ -811,47 +779,16 @@ class SampleChamber(NoisyEchoChamber):
         """Set the dynamics of network by assigning a function to `self.dy_dt`.
         """
         super().set_dynamics(D, *args, **kwargs)
-        super_dy_dt = self.dy_dt
+        self.super_dy_dt = self.dy_dt
 
         # object to store sample_means value at distinct time points
         self._sample_means = 0
-
-        # method to re-assign self._sample_means
-        def new_clt_sample(y, n, num_samples):
-            """
-            :math:`\\sqrt {n}\\left({\\bar{X}}_{n}-\\mu \\right) \\rightarrow \mathcal{N}\\left(0,\\sigma ^{2}\\right)`
-
-            where :math:`X` is a random sample and :math:`\\bar{X}_{n}` is the sample mean for :math:`n` random samples.
-            """
-            self._sample_means = np.sqrt(n) * (
-                sample_means(y, n, num_samples=num_samples, rng=self.rn) - np.mean(y)
-            )
-
-        def dy_dt(t: float, y: np.ndarray, *all_args) -> np.ndarray:
-            """Activity-Driven (AD) network dynamics.
-
-            1 - 3 as in ``ConnChamber``
-
-            4. add a "population opinion" term that captures the Lindeberg–Lévy Central Limit Theorem -
-            :math:`\\sqrt {n}\\left({\\bar{X}}_{n}-\\mu \\right) \\rightarrow \mathcal{N}\\left(0,\\sigma ^{2}\\right)`
-            \\
-            where :math:`X` is a random sample and :math:`\\bar{X}_{n}` is the sample mean for :math:`n` random samples.
-
-            """
-            n, num_samples, *other_args = all_args
-            if type(n) is tuple:
-                # choose between low and high values (randint not implemented for default_rng)
-                n = self.rn.choice(np.arange(n[0], n[1], dtype=int))
-            if np.round(t % other_args[-1], 6) == 0:
-                # calculate sample means every explicit dt (independent of solver's dt)
-                new_clt_sample(y, n, num_samples)
-            return super_dy_dt(t, y, *other_args) + D * self._sample_means
-
+        self.D = D
         self.sample_size = sample_size
-        self.dy_dt = dy_dt
+        self.dy_dt = sample_dy_dt
 
     def _args(self, *args):
-        return super()._args(*args, self.sample_size, self.N)
+        return super()._args(*args, self, self.sample_size, self.N)
 
     # TODO: add sample_size to repr
 

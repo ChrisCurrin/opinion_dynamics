@@ -1,18 +1,17 @@
 """"""
 import logging
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from typing import Callable, Tuple
+from typing import Tuple
 
 from matplotlib.axes import Axes
 from matplotlib.cm import ScalarMappable
-from matplotlib.colors import LogNorm, Normalize, TwoSlopeNorm
+from matplotlib.colors import Normalize, TwoSlopeNorm
 from matplotlib.figure import Figure
 from matplotlib.ticker import MaxNLocator
 
-from opdynamics.dynamics.echochamber import EchoChamber
+from opdynamics.networks.echochamber import EchoChamber
 from opdynamics.utils.constants import *
 from opdynamics.utils.decorators import optional_fig_ax
 from opdynamics.utils.plot_utils import use_self_args

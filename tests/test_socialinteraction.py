@@ -2,8 +2,8 @@ import numpy as np
 
 from unittest import TestCase
 
-from opdynamics.dynamics.echochamber import EchoChamber
-from opdynamics.dynamics.socialinteraction import (
+from opdynamics.networks.echochamber import EchoChamber
+from opdynamics.networks.socialinteraction import (
     get_social_interaction,
     get_social_interaction_exp,
 )
@@ -15,7 +15,6 @@ class TestSocialInteraction(TestCase):
         self.ec = EchoChamber(1000, m=10, K=3.0, alpha=3.0)
 
     def test_get_social_interaction(self):
-        from opdynamics.dynamics.socialinteraction import SocialInteraction
         from scipy.stats import norm
 
         # required setup

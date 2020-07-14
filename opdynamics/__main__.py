@@ -5,10 +5,9 @@ import logging
 
 from scipy.integrate._ivp.ivp import METHODS as SCIPY_METHODS
 
-from opdynamics.dynamics.echochamber import EchoChamber, NoisyEchoChamber
-from opdynamics.simulation import run_noise_range, run_params
+from opdynamics.networks.echochamber import EchoChamber, NoisyEchoChamber
+from opdynamics.simulation import run_params
 from opdynamics.integrate.solvers import ODE_INTEGRATORS, SDE_INTEGRATORS
-from opdynamics.utils.constants import EXTERNAL_NOISE
 from opdynamics.utils.distributions import negpowerlaw
 
 

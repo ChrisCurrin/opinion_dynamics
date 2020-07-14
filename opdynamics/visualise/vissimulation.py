@@ -2,7 +2,7 @@ import logging
 
 import numpy as np
 
-from opdynamics.dynamics.echochamber import EchoChamber
+from opdynamics.networks.echochamber import EchoChamber
 
 logger = logging.getLogger("vis simulation")
 

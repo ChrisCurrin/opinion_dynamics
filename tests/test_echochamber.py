@@ -1,4 +1,3 @@
-import copy
 import logging
 import inspect
 import os
@@ -7,7 +6,7 @@ import numpy as np
 
 from unittest import TestCase
 
-from opdynamics.dynamics.echochamber import EchoChamber, NoisyEchoChamber
+from opdynamics.networks.echochamber import EchoChamber, NoisyEchoChamber
 
 # noinspection PyUnusedName
 from opdynamics.integrate.types import OdeResult
@@ -104,7 +103,7 @@ class TestEchoChamber(TestCase):
         )
 
     def test_set_social_interactions(self):
-        from opdynamics.dynamics.socialinteraction import SocialInteraction
+        from opdynamics.networks.socialinteraction import SocialInteraction
         from scipy.stats import norm
 
         # this must be first (before setting activities and connection probabilities)
@@ -198,7 +197,6 @@ class TestEchoChamber(TestCase):
 
     def test_run_network(self):
         from opdynamics.utils.distributions import negpowerlaw
-        from opdynamics.integrate.types import SolverResult
 
         self.ec.alpha = 3  # controversialness of issue (sigmoidal shape)
         self.ec.K = 3  # social interaction strength
@@ -269,7 +267,6 @@ class TestEchoChamber(TestCase):
         self.fail()
 
     def test_save_load(self):
-        from opdynamics.utils.distributions import negpowerlaw
 
         self.ec.alpha = 3  # controversialness of issue (sigmoidal shape)
         self.ec.K = 3  # social interaction strength
@@ -416,7 +413,6 @@ class TestNoisyEchoChamber(TestCase):
         self.ec = NoisyEchoChamber(1000, m=10, K=3.0, alpha=3.0)
 
     def test_save_load(self):
-        from opdynamics.utils.distributions import negpowerlaw
 
         self.ec.alpha = 3  # controversialness of issue (sigmoidal shape)
         self.ec.K = 3  # social interaction strength

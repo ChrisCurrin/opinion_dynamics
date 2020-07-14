@@ -5,11 +5,12 @@ import os
 
 import numpy as np
 import pandas as pd
+from functools import partial
 from tqdm import tqdm, trange
 from typing import Callable, Dict, List, Type, TypeVar, Union
 
 from opdynamics.utils.cache import save_results
-from opdynamics.dynamics.echochamber import EchoChamber, OpenChamber
+from opdynamics.networks.echochamber import EchoChamber, OpenChamber
 from opdynamics.utils.distributions import negpowerlaw
 from opdynamics.visualise import (
     show_periodic_noise,
@@ -262,6 +263,55 @@ def run_periodic_noise(
 # TODO: replace multiprocessing with await/async
 
 
+def _comp_unit(
+    cls, keys, values: list, cache, write_mapping: bool = True, **kwargs
+) -> (EC, dict):
+    """Define unit of computation to be parallelizable.
+
+    :param values: Values to update in kwargs according. Same order as keys.
+    :param write_mapping: Whether to write to a file. Defaults to `True`.
+    :return: Pair of EchoChamber object, parameters used.
+    """
+
+    # create copy of kwargs
+    updated_kwargs = dict(kwargs)
+
+    base_name = updated_kwargs.pop("name", "")
+    noise_start = updated_kwargs.pop("noise_start", 0)
+    if noise_start > 0:
+        T = updated_kwargs.pop("T", 1.0)
+        noise_length = updated_kwargs.pop("noise_length", T)
+        recovery = updated_kwargs.pop("recovery", 0)
+
+    names = []
+
+    # re-assign
+    for key, value in zip(keys, values):
+        updated_kwargs[key] = value
+        names.append(f"{key}={value}")
+
+    # create a name based on changed key-values
+    name = base_name + ", ".join(names)
+
+    # run according to noise_start
+    if noise_start > 0:
+        nec = run_periodic_noise(
+            noise_start,
+            noise_length,
+            recovery,
+            cls=cls,
+            name=name,
+            cache=cache,
+            write_mapping=write_mapping,
+            **updated_kwargs,
+        )
+    else:
+        nec = run_params(
+            cls, name=name, cache=cache, write_mapping=write_mapping, **updated_kwargs,
+        )
+    return nec, updated_kwargs
+
+
 def run_product(
     parameters: Dict[str, Dict[str, Union[list, str]]],
     cls: Type[EC] = EchoChamber,
@@ -327,61 +377,11 @@ def run_product(
     # list to store EchoChamber objects (only if not cache_sim)
     nec_list = []
 
-    base_name = kwargs.pop("name", "")
-    noise_start = kwargs.pop("noise_start", 0)
-    if noise_start > 0:
-        T = kwargs.pop("T", 1.0)
-        noise_length = kwargs.pop("noise_length", T)
-        recovery = kwargs.pop("recovery", 0)
-
     # create helper functions for running synchronously or asynchronously
-
-    def comp_unit(values: list, write_mapping: bool = True) -> (EC, dict):
-        """Define unit of computation to be parallelizable.
-
-        :param values: Values to update in kwargs according. Same order as keys.
-        :param write_mapping: Whether to write to a file. Defaults to `True`.
-        :return: Pair of EchoChamber object, parameters used.
-        """
-        names = []
-
-        # create copy of kwargs
-        updated_kwargs = dict(kwargs)
-
-        # re-assign
-        for key, value in zip(keys, values):
-            updated_kwargs[key] = value
-            names.append(f"{key}={value}")
-
-        # create a name based on changed key-values
-        name = base_name + ", ".join(names)
-
-        # run according to noise_start
-        if noise_start > 0:
-            nec = run_periodic_noise(
-                noise_start,
-                noise_length,
-                recovery,
-                cls=cls,
-                name=name,
-                cache=cache,
-                write_mapping=write_mapping,
-                **updated_kwargs,
-            )
-        else:
-            nec = run_params(
-                cls,
-                name=name,
-                cache=cache,
-                write_mapping=write_mapping,
-                **updated_kwargs,
-            )
-        return nec, updated_kwargs
-
     def run_sync():
         """Normal ``for`` loop over range."""
         for values in tqdm(full_range, desc="full range"):
-            nec, params = comp_unit(values)
+            nec, params = _comp_unit(cls, keys, values, cache=cache, **kwargs)
             if cache_sim:
                 save_results(file_name, nec, **params)
             else:
@@ -406,16 +406,14 @@ def run_product(
 
         # change mapping to False as it may cause multi-access errors
         kwargs.pop("write_mapping", False)
-        write_mapping = False
 
         with open(os.path.join(get_cache_dir(), "map.txt"), "a+") as write_file:
-            # generator of tasks for ``comp_unit`` with keys-values to overwrite in (a copy of) kwargs.
-            TASKS = (
-                (keys, values, base_name, kwargs, write_mapping)
-                for values in full_range
-            )
-            for nec, params in p.imap(comp_unit, TASKS):
-                write_file.write(nec.save_txt)
+            for nec, params in p.imap(
+                partial(_comp_unit, cls, keys, cache=cache, write_mapping=False),
+                full_range,
+            ):
+                if cache and nec.save_txt is not None:
+                    write_file.write(nec.save_txt)
                 if cache_sim:
                     save_results(file_name, nec, **params)
                 else:
@@ -469,12 +467,11 @@ def example():
         k_steps=10,
     )
 
-    _D_range = np.round(np.arange(0.000, 0.01, 0.002), 3)
-
     _other_vars = {
+        "D": {"range": np.round(np.arange(0.000, 0.01, 0.002), 3)},
         "k_steps": {"range": [1, 10, 100], "title": "k",},
     }
-    run_product(_D_range, _other_vars, **kwargs)
+    run_product(_other_vars, **kwargs)
     plt.show()
 
 

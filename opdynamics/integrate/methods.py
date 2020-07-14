@@ -39,12 +39,10 @@ class Euler(ODEIntegrator):
     def step(self, t: float, dt: float):
         """Calculate new y from a single step of an ODE in the form
 
-        `dy_dt = -y + ...`
+        :math:`\\frac{dy}{dt} = -y + ...`
 
         """
-        dy_dt = self.dy_dt(t, self.y, *self.args)
-        dy = dy_dt * dt
-        self.y += dy
+        self.y += self.dy_dt(t, self.y, *self.args) * dt
 
 
 class SDEIntegrator(metaclass=ABCMeta):
