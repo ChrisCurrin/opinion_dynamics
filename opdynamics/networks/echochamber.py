@@ -427,7 +427,11 @@ class EchoChamber(object):
         return os.path.join(cache_dir, f"{hash(self)}.h5")
 
     def save(
-        self, only_last=True, complevel=DEFAULT_COMPRESSION_LEVEL, write_mapping=True
+        self,
+        only_last=True,
+        complevel=DEFAULT_COMPRESSION_LEVEL,
+        write_mapping=True,
+        dt=None,
     ) -> str:
         """Save the echochamber to the cache using the HDF file format.
 
@@ -436,7 +440,8 @@ class EchoChamber(object):
         :param only_last: Save only the last time point (default True).
         :param complevel: Compression level (default DEFAULT_COMPRESSION_LEVEL defined in ``constants``).
         :param write_mapping: Write to a file that maps the object's string representation and it's hash value.
-
+        :param dt: Explicitly include the dt value for the index name. If not provided, it is calculated as the
+            maximum time step from ``result_df``..
         :return Saved filename.
         """
         import warnings
@@ -448,7 +453,7 @@ class EchoChamber(object):
         df_opinions = self.result_df()
         _name = df_opinions.name
         # get dt
-        _index_name = np.max(np.diff(df_opinions.index))
+        _index_name = np.max(np.diff(df_opinions.index)) if dt is None else dt
         if only_last:
             logger.debug("saving only last time point")
             # take last value but keep df_opinions as a DataFrame by including a `:`
@@ -461,8 +466,8 @@ class EchoChamber(object):
         df_act.name = "activities"
         df_adj_mat_accum = pd.DataFrame(self.adj_mat.accumulator)
         df_adj_mat_last = pd.DataFrame(self.adj_mat[-1])
-        df_adj_mat_accum.name = f"adj_mat_accum-{self.adj_mat.p_mutual_interaction}"
-        df_adj_mat_last.name = f"adj_mat_last-{self.adj_mat.p_mutual_interaction}"
+        df_adj_mat_accum.name = f"adj_mat_accum"
+        df_adj_mat_last.name = f"adj_mat_last"
         meta = dict(complevel=complevel, complib="blosc:zstd")
         df_meta = pd.Series(meta, name="meta")
         with warnings.catch_warnings():
@@ -524,6 +529,13 @@ class EchoChamber(object):
                 )
                 self._post_run()
                 compressed = False
+                loaded_keys = {
+                    "opinions": True,
+                    "p_conn": False,
+                    "activities": False,
+                    "adj_mat_accum": False,
+                    "adj_mat_last": False,
+                }
                 for key in keys:
                     df: Union[pd.DataFrame, pd.Series, object] = hdf.get(key)
                     if "opinions" in key:
@@ -533,7 +545,9 @@ class EchoChamber(object):
                     elif "activities" in key:
                         self.activities = df.values
                     elif "adj_mat" in key:
-                        self.adj_mat.p_mutual_interaction = float(key.split("-")[-1])
+                        if "-" in key:
+                            key, p = key.split("-")
+                            self.adj_mat.p_mutual_interaction = float(p)
                         if "accum" in key:
                             self.adj_mat._accumulator = df.values
                         elif "last" in key:
@@ -547,9 +561,13 @@ class EchoChamber(object):
                             compressed = True
                     else:
                         raise KeyError(f"unexpected key '{key}' in hdf '{filename}'")
+                    loaded_keys[key] = True
+            if not all(loaded_keys.values()):
+                # not everything loaded
+                return False
             logger.debug(f"{self.name} loaded from {filename}")
             if not compressed:
-                self.save(only_last=self.result.y.shape[1] > 1)
+                self.save(only_last=self.result.y.shape[1] > 1, dt=_dt)
             return True
         return False
 
