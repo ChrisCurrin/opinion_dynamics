@@ -511,6 +511,16 @@ class EchoChamber(object):
         if os.path.exists(filename):
             dt_precision, dt_scale = precision_and_scale(dt)
             T_precision, T_scale = precision_and_scale(T)
+
+            cached_results = {
+                "opinions": False,
+                "p_conn": False,
+                "activities": False,
+                "adj_mat_accum": False,
+                "adj_mat_last": False,
+            }
+            loaded_keys = copy.deepcopy(cached_results)
+
             with pd.HDFStore(filename, mode="r") as hdf:
                 keys = hdf.keys()
                 # retrieve opinions for the time info first
@@ -524,47 +534,33 @@ class EchoChamber(object):
                     or np.round(dt - _dt, dt_scale) != 0.0
                 ):
                     return False
-                self.result = SolverResult(
+                compressed = False
+                cached_results["opinions"] = SolverResult(
                     t_arr, y_arr.T, None, None, None, 0, 0, 0, 1, "success", True,
                 )
-                self._post_run()
-                compressed = False
-                loaded_keys = {
-                    "opinions": True,
-                    "p_conn": False,
-                    "activities": False,
-                    "adj_mat_accum": False,
-                    "adj_mat_last": False,
-                }
                 for key in keys:
                     df: Union[pd.DataFrame, pd.Series, object] = hdf.get(key)
+                    if "-" in key:
+                        # backwards compatible
+                        key, p = key.split("-")
                     if "opinions" in key:
                         pass
-                    elif "p_conn" in key:
-                        self.p_conn = df.values
-                    elif "activities" in key:
-                        self.activities = df.values
-                    elif "adj_mat" in key:
-                        if "-" in key:
-                            key, p = key.split("-")
-                            self.adj_mat.p_mutual_interaction = float(p)
-                        if "accum" in key:
-                            self.adj_mat._accumulator = df.values
-                        elif "last" in key:
-                            self.adj_mat._last_adj_mat = df.values
-                        else:
-                            raise KeyError(
-                                f"unexpected adj_mat key '{key}' in hdf '{filename}'"
-                            )
                     elif "meta" in key:
                         if df.loc["complevel"] > 0:
                             compressed = True
-                    else:
-                        raise KeyError(f"unexpected key '{key}' in hdf '{filename}'")
+                    cached_results[key] = df.values
                     loaded_keys[key] = True
-            if not all(loaded_keys.values()):
-                # not everything loaded
-                return False
+
+                if all(loaded_keys.values()):
+                    self.result = cached_results["opinions"]
+                    self.p_conn = cached_results["p_conn"]
+                    self.activities = cached_results["activities"]
+                    self.adj_mat._accumulator = cached_results["adj_mat_accum"]
+                    self.adj_mat._last_adj_mat = cached_results["adj_mat_last"]
+                    self._post_run()
+                else:
+                    # not everything loaded
+                    return False
             logger.debug(f"{self.name} loaded from {filename}")
             if not compressed:
                 self.save(only_last=self.result.y.shape[1] > 1, dt=_dt)
