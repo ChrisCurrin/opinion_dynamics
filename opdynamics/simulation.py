@@ -384,7 +384,8 @@ def run_product(
             nec, params = _comp_unit(cls, keys, values, cache=cache, **kwargs)
             if cache_sim:
                 save_results(file_name, nec, **params)
-            else:
+            if not (cache or cache_sim):
+                # if not being run for caching, store results in a list
                 nec_list.append(nec)
 
     def run_async(n_processes=None):
@@ -406,18 +407,20 @@ def run_product(
 
         # change mapping to False as it may cause multi-access errors
         kwargs.pop("write_mapping", False)
+        write_file_name = os.path.join(get_cache_dir(), "map.txt")
 
-        with open(os.path.join(get_cache_dir(), "map.txt"), "a+") as write_file:
-            for nec, params in p.imap(
-                partial(_comp_unit, cls, keys, cache=cache, write_mapping=False),
-                full_range,
-            ):
-                if cache and nec.save_txt is not None:
+        for nec, params in p.imap(
+            partial(_comp_unit, cls, keys, cache=cache, write_mapping=False),
+            full_range,
+        ):
+            if cache and nec.save_txt is not None:
+                with open(write_file_name, "a+") as write_file:
                     write_file.write(nec.save_txt)
-                if cache_sim:
-                    save_results(file_name, nec, **params)
-                else:
-                    nec_list.append(nec)
+            if cache_sim:
+                save_results(file_name, nec, **params)
+            if not (cache or cache_sim):
+                # if not being run for caching, store results in a list
+                nec_list.append(nec)
         p.close()
         p.join()
 

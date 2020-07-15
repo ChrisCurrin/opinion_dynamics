@@ -91,7 +91,7 @@ Update `environment.yml` using `conda env export --from-history > environment.ym
     - [ ] Convert from multiprocessing to async/await 
     - [ ] Test 
 - [ ] Create metric for determining whether opinions are polarised or uniform. 
-- [ ] Add `sample_size` to `SampleChamber.__repr__` 
+- [x] Add `sample_size` to `SampleChamber.__repr__` 
 - [ ] Test more efficient `get_social_interaction`
 - [ ] Test more efficient `get_connection_probabilities`
 - [x] Test and plot results for "internal noise".
