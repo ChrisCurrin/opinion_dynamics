@@ -1,3 +1,4 @@
+import itertools
 import logging
 import numpy as np
 import pandas as pd
@@ -9,10 +10,11 @@ from matplotlib.colors import LogNorm, Normalize
 from matplotlib.figure import Figure
 from scipy.interpolate import interpn
 from seaborn.matrix import ClusterGrid
-from typing import Callable
+from typing import Callable, Collection
 
+from opdynamics.metrics.opinions import distribution_modality
 from opdynamics.utils.decorators import optional_fig_ax
-from opdynamics.utils.plot_utils import get_equal_limits, colorbar_inset
+from opdynamics.utils.plot_utils import df_multi_mask, get_equal_limits, colorbar_inset
 from opdynamics.utils.constants import *
 
 logger = logging.getLogger("dense plots")
@@ -353,3 +355,31 @@ def show_opinion_grid(
     else:
         g.map(sns.kdeplot, "opinion", "D", **kde_kwargs)
     return g
+
+
+def plot_surfaces(
+    data: pd.DataFrame, x: str, y: str, params: dict, variables: dict, **kwargs
+):
+    x_range = variables[x]["range"] if "range" in variables[x] else variables[x]
+    y_range = variables[y]["range"] if "range" in variables[y] else variables[y]
+    x_label = variables[x]["title"] if "title" in variables[x] else x
+    y_label = variables[y]["title"] if "title" in variables[y] else y
+
+    z_vars = [k for k in variables if k != x and k != y]
+    fig, axs = plt.subplots(nrows=len(z_vars))
+    cmap = kwargs.pop("cmap", "viridis")
+    norm = kwargs.pop("norm", None)
+    for ax, key in zip(axs, z_vars):
+        default_kwargs = {k: v for k, v in params.items() if k != key}
+        df = df_multi_mask(data, default_kwargs)
+        z = pd.DataFrame(index=x_range, columns=y_range, dtype=np.float64)
+        for x_val, y_val in itertools.product(x_range, y_range):
+            mask = np.logical_and(df[x] == x_val, df[y] == y_val)
+            z.loc[x_val, y_val] = distribution_modality(df.loc[mask, "opinion"])
+        XX, YY = np.meshgrid(x_range, y_range)
+        mesh = ax.pcolormesh(XX, YY, z.T, cmap=cmap, norm=norm, **kwargs)
+        cbar = fig.colorbar(mesh, ax=ax, cmap=cmap, norm=norm)
+        desc = variables[key]["title"] if "title" in variables[key] else key
+        ax.set_xlabel(x_label)
+        ax.set_ylabel(y_label)
+        cbar.ax.set_title(desc)

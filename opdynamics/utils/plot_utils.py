@@ -230,3 +230,11 @@ def move_cbar_label_to_title(cbar_ax: Axes):
         cbar_ax = cbar_ax.axes[-1]
     cbar_ax.set_title(cbar_ax.get_ylabel(), rotation=0)
     cbar_ax.set_ylabel("")
+
+
+def df_multi_mask(df, masks):
+    mask = np.ones(df.shape[0]).astype(bool)
+    for key, value in masks.items():
+        if key in df.columns:
+            mask = np.logical_and(mask, df[key] == value)
+    return df[mask]

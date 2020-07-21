@@ -1,46 +1,18 @@
 """
 Run a large parameter range to plot noise (D) x sample_size (n) x <another variable>
 """
-import itertools
-import sys
-
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-
-from opdynamics.networks.echochamber import SampleChamber
-from opdynamics.metrics.opinions import distribution_modality
-from opdynamics.simulation import run_product
-
-
-def mask_df(masks):
-    N_val = masks.pop("N", 1000)
-    mask = df["N"] == N_val
-    for key, value in masks.items():
-        mask = np.logical_and(mask, df[key] == value)
-    return df[mask]
-
-
-def plot_surfaces(params, variables):
-    z_vars = [k for k in variables if k != "D" and k != "sample_size"]
-    fig, axs = plt.subplots(nrows=len(z_vars))
-
-    for ax, key in zip(axs, z_vars):
-        default_kwargs = {k: v for k, v in params.items() if k != key}
-        df = mask_df(default_kwargs)
-        z = pd.DataFrame(columns=sample_size_range, index=D_range, dtype=np.float64)
-        for D, sample_size in itertools.product(D_range, sample_size_range):
-            mask = np.logical_and(df["D"] == D, df["sample_size"] == sample_size)
-            z.loc[D, sample_size] = distribution_modality(df.loc[mask, "opinion"])
-        mesh = ax.pcolormesh(D_range, sample_size_range, z, cmap="viridis")
-        cbar = fig.colorbar(mesh, ax=ax, cmap="viridis")
-        desc = variables[key]["title"] if "title" in variables[key] else key
-        ax.set_xlabel("D")
-        ax.set_ylabel("n")
-        cbar.ax.set_title(desc)
-
 
 if __name__ == "__main__":
+    import sys
+
+    import numpy as np
+    import pandas as pd
+    import matplotlib.pyplot as plt
+
+    from opdynamics.networks.echochamber import SampleChamber
+    from opdynamics.simulation import run_product
+    from opdynamics.visualise.dense import plot_surfaces
+
     parameters = dict(
         N=1000,
         m=10,

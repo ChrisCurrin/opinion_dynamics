@@ -63,27 +63,32 @@ def sample_means(
 
 
 # noinspection NonAsciiCharacters
-def distribution_modality(opinions) -> float:
-    """Calculate Test of unimodality for normal distribution(s)
+def _basic_unimodal(opinions: np.ndarray) -> bool:
+    """Check if a Gaussian distribution using
 
     .. math::
-            \\frac{v - \\mu}{\\sigma} \\leq \\sqrt{\\frac{3}{5}}
+         \\frac{v - \\mu}{\\sigma} \\leq \\sqrt{\\frac{3}{5}}
 
     where :math:`v` is the median, :math:`\\mu`` is the mean, and :math:`\\sigma` is the standard deviation.
 
-    see https://en.wikipedia.org/wiki/Unimodality
-    see https://doi.org/10.1007/s10182-008-0057-2 
 
     """
-    # mean, median, mode
     ν = np.median(opinions)
     μ = np.mean(opinions)
     σ = np.var(opinions)
-    is_unimodal_gauss = np.abs(ν - μ) / σ <= np.sqrt(3 / 5)
+    return np.abs(ν - μ) / σ <= np.sqrt(3 / 5)
 
+
+# noinspection NonAsciiCharacters
+def _holzmann_unimodal(opinions) -> bool:
+    """
+    see https://en.wikipedia.org/wiki/Unimodality
+    see https://doi.org/10.1007/s10182-008-0057-2 
+    """
     # holzmann
     pop1 = opinions[opinions < 0]
     pop2 = opinions[opinions > 0]
+
     μ1 = np.mean(pop1)
     μ2 = np.mean(pop2)
     σ1 = np.var(pop1)
@@ -93,22 +98,48 @@ def distribution_modality(opinions) -> float:
     p = pop1.size / opinions.size
     rhs = 2 * np.log(d - np.sqrt(d ** 2 - 1)) + 2 * d * np.sqrt(d ** 2 - 1)
     is_unimodal_alt = np.abs(np.log(1 - p) - np.log(p)) >= rhs
+    return is_unimodal and is_unimodal_alt
 
-    # Ashman's D
-    #  > For a mixture of two normal distributions D > 2 is required for a clean separation of the distributions.
-    a_D = np.sqrt(2) * np.abs(μ1 - μ2) / np.sqrt(σ1 ** 2 + σ2 ** 2)
-    logging.debug(
-        f"d = {d}"
-        f" \t a_D = {a_D}"
-        f"\nis_unimodal_gauss = {is_unimodal_gauss}"
-        f" \t is_unimodal = {is_unimodal}"
-        f" \t is_unimodal_alt = {is_unimodal_alt}"
+
+# noinspection NonAsciiCharacters
+def _ashmans_d(opinions: np.ndarray) -> float:
+    """Ashman's D
+
+    For a mixture of two normal distributions D > 2 is required for a clean separation of the distributions.
+
+    """
+    pop1 = opinions[opinions < 0]
+    pop2 = opinions[opinions > 0]
+
+    μ1 = np.mean(pop1)
+    μ2 = np.mean(pop2)
+    σ1 = np.var(pop1)
+    σ2 = np.var(pop2)
+    return np.sqrt(2) * np.abs(μ1 - μ2) / np.sqrt(σ1 ** 2 + σ2 ** 2)
+
+
+# noinspection NonAsciiCharacters
+def distribution_modality(opinions: np.ndarray) -> float:
+    """Determine the distance between population density peaks.
+    Closer to 0 indicates a unimodal distribution.
+
+    """
+    pop1 = opinions[opinions < 0]
+    pop2 = opinions[opinions > 0]
+
+    if pop1.size == 0 or pop2.size == 0:
+        return np.nan
+
+    hist, bin_edges = np.histogram(
+        pop1,
+        bins=np.round(np.arange(np.floor(np.min(pop1)), 0.01, 0.1), 1),
+        range=(np.floor(np.min(pop1)), 0),
     )
-
-    # get the maximum
-    # TODO: finish
-    max_opinion_pop1 = np.argmax(np.histogram(pop1))
-    max_opinion_pop2 = np.argmax(np.histogram(pop2))
-    if np.abs(max_opinion_pop1 - max_opinion_pop2) > 0.5:
-        return 1
-    return a_D
+    max_opinion_pop1 = bin_edges[1 + np.argmax(hist)]
+    hist, bin_edges = np.histogram(
+        pop2,
+        bins=np.round(np.arange(0, np.ceil(np.max(pop2)), 0.1), 1),
+        range=(0, np.ceil(np.max(pop2))),
+    )
+    max_opinion_pop2 = bin_edges[1 + np.argmax(hist)]
+    return max_opinion_pop2 - max_opinion_pop1

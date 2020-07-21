@@ -140,3 +140,7 @@ dmypy.json
 .idea/modules.xml
 .idea/opinion_dynamics.iml
 .idea/vcs.xml
+
+.idea/
+
+output/
