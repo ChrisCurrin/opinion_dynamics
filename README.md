@@ -1,5 +1,7 @@
 # Depolarisation of opinions
 
+[Link to paper]()
+
 Authors: 
 - [Christopher Currin](https://chriscurrin.com)
 

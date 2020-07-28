@@ -6,8 +6,10 @@ import os
 import numpy as np
 import pandas as pd
 from functools import partial
+
+import vaex
 from tqdm import tqdm, trange
-from typing import Callable, Dict, List, Type, TypeVar, Union
+from typing import Callable, Dict, Iterable, List, Type, TypeVar, Union
 
 from opdynamics.utils.cache import save_results
 from opdynamics.networks.echochamber import EchoChamber, OpenChamber
@@ -359,21 +361,28 @@ def run_product(
 
     keys = list(parameters.keys())
 
-    ## This allows a mixed-type to be passed where `range` isn't necessary.
+    # # This allows a mixed-type to be passed where `range` isn't necessary.
     # verbose_other_vars = {
     #     k: {"range": v} for k, v in parameters.items() if type(v) is not dict
     # }
     # parameters.update(verbose_other_vars)
+
+    # determine combination of parameters
     full_range = itertools.product(*[parameters[key]["range"] for key in keys])
     cache_dir = get_cache_dir()
     file_name = os.path.join(cache_dir, "noise_source.h5")
+    vaex_file_name = file_name.replace(".h5", ".hdf5")
 
-    # the efficient HDF format is used for saving and loading DataFrames.
+    # exclude parameter combinations that have already been saved
     if cache_sim and os.path.exists(file_name):
+        logger.debug("reading from existing file...")
+        run_range = set()
         # noinspection PyTypeChecker
-        df: pd.DataFrame = pd.read_hdf(file_name)
-        run_range = set(df.groupby([*keys]).count().index)
+        chunks: Iterable = pd.read_hdf(file_name, iterator=True, chunksize=10000)
+        for chunk in chunks:
+            run_range.update(set(chunk.groupby([*keys]).count().index))
         full_range = (x for x in full_range if x not in run_range)
+
     # list to store EchoChamber objects (only if not cache_sim)
     nec_list = []
 
@@ -424,14 +433,61 @@ def run_product(
         p.close()
         p.join()
 
+    logger.debug(f"running")
     if parallel:
         run_async(n_processes=parallel if type(parallel) is int else None)
     else:
         run_sync()
+    logger.debug(f"done")
 
+    # load all results into a DataFrame
+    #   if the system does not have enough memory, the ``vaex`` library is used.
+    #       the existing file is converted to a vaex-compatible format (different hdf5 implementations)
+    #       if this converted file already exists, load it directly
+    #       else, conversion involves chunking and exporting the file as batches of vaex-compatible mini-files.
+    #           these are combined and exported as a singular file
     if cache_sim and os.path.exists(file_name):
-        # noinspection PyTypeChecker
-        df = pd.read_hdf(file_name)
+        logger.debug("loading full DataFrame from storage")
+        if os.path.exists(vaex_file_name):
+            return vaex.open(vaex_file_name)
+        try:
+            # noinspection PyTypeChecker
+            df = pd.read_hdf(file_name)
+        except MemoryError:
+            logger.warning(
+                "Environment ran out of memory, loading data using `vaex` insatead of `pandas`. "
+                "The existing file will remain the same but needs to be converted to `vaex-hdf5` format. "
+                "This will take additional space and may take a while. "
+            )
+            # noinspection PyTypeChecker
+            chunks: Iterable = pd.read_hdf(file_name, iterator=True, chunksize=50000)
+            convert_dir = os.path.join(".temp", "convert")
+            try:
+                os.makedirs(convert_dir)
+            except IOError as err:
+                logger.error(
+                    "Needed to create a temporary directory for conversion but failed."
+                )
+                raise err
+            logger.debug("converting...")
+            for i, chunk in enumerate(chunks):
+                vaex_df = vaex.from_pandas(chunk, copy_index=False)
+                vaex_df.export(f"batch_{i}.hdf5")
+            df = vaex.open("batch*.hdf5")
+            logger.debug(f"saving new version to {vaex_file_name}...")
+            df.export(vaex_file_name)
+            logger.debug("re-assigning")
+            df = vaex.open(vaex_file_name)
+            logger.debug("removing conversion directory")
+            try:
+                os.removedirs(convert_dir)
+            except IOError:
+                logger.error(
+                    f"Tried to delete temporary conversion directory '{convert_dir}' but failed. "
+                    f"Please delete manually."
+                )
+                pass
+            logger.debug("converted")
         return df
     return nec_list
 

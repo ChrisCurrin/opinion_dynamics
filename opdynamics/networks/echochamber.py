@@ -584,7 +584,7 @@ class ConnChamber(EchoChamber):
             other agent.
 
             .. math::
-                p_{ij} = \\frac{|x_i - x_j|^{-\\beta}}{\sum_j |x_i - x_j|^{-\\beta}}
+                p_{ij} = \\frac{|x_i - x_j|^{-\\beta}}{\\sum_j |x_i - x_j|^{-\\beta}}
 
             :param beta: Power law decay of connection probability. Decay when beta>0, increase when beta<0.
                 When beta=0, then connection probabilities are uniform.

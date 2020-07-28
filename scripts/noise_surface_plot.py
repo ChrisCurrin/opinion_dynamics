@@ -55,5 +55,5 @@ if __name__ == "__main__":
     if len(sample_size_range) > 1 and isinstance(df, pd.DataFrame):
         # plot range of sample sizes
 
-        plot_surfaces(parameters, range_variables)
+        plot_surfaces(df, "D", "sample_size", parameters, range_variables)
         plt.show()

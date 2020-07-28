@@ -1,11 +1,14 @@
 import itertools
 import logging
+from functools import reduce
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from matplotlib.axes import Axes
 from matplotlib.cm import ScalarMappable
+from matplotlib.collections import QuadMesh
 from matplotlib.colors import LogNorm, Normalize
 from matplotlib.figure import Figure
 from scipy.interpolate import interpn
@@ -44,6 +47,7 @@ def show_activity_vs_opinion(
     Density scatter plot colored by 2d histogram
 
     https://stackoverflow.com/a/53865762
+
     :param opinions: Array of opinions.
     :param activities: Array of activities, with indices corresponding to opninions
     :param bins: Number of bins to group opinions for determining density.
@@ -364,22 +368,53 @@ def plot_surfaces(
     y_range = variables[y]["range"] if "range" in variables[y] else variables[y]
     x_label = variables[x]["title"] if "title" in variables[x] else x
     y_label = variables[y]["title"] if "title" in variables[y] else y
+    XX, YY = np.meshgrid(x_range, y_range)
 
-    z_vars = [k for k in variables if k != x and k != y]
-    fig, axs = plt.subplots(nrows=len(z_vars))
+    z_vars = {k: v for k, v in variables.items() if k != x and k != y}
+    ncols = 0
+    for v in z_vars.values():
+        ncols = np.max([ncols, len(v["range"]) if "range" in v else len(v)])
+    fig, axs = plt.subplots(nrows=len(z_vars), ncols=ncols, sharex="all", sharey="all",)
     cmap = kwargs.pop("cmap", "viridis")
-    norm = kwargs.pop("norm", None)
-    for ax, key in zip(axs, z_vars):
+    norm = kwargs.pop("norm", Normalize(vmin=0, vmax=2.5))
+    for i, key in enumerate(z_vars):
         default_kwargs = {k: v for k, v in params.items() if k != key}
         df = df_multi_mask(data, default_kwargs)
-        z = pd.DataFrame(index=x_range, columns=y_range, dtype=np.float64)
-        for x_val, y_val in itertools.product(x_range, y_range):
-            mask = np.logical_and(df[x] == x_val, df[y] == y_val)
-            z.loc[x_val, y_val] = distribution_modality(df.loc[mask, "opinion"])
-        XX, YY = np.meshgrid(x_range, y_range)
-        mesh = ax.pcolormesh(XX, YY, z.T, cmap=cmap, norm=norm, **kwargs)
-        cbar = fig.colorbar(mesh, ax=ax, cmap=cmap, norm=norm)
-        desc = variables[key]["title"] if "title" in variables[key] else key
-        ax.set_xlabel(x_label)
-        ax.set_ylabel(y_label)
-        cbar.ax.set_title(desc)
+        values = (
+            variables[key]["range"] if "range" in variables[key] else variables[key]
+        )
+        desc: str = None
+        mesh: QuadMesh = None
+        for j, val in enumerate(values[::-1]):
+            ax = axs[i, ncols - 1 - j]
+            z = pd.DataFrame(index=x_range, columns=y_range, dtype=np.float64)
+            for x_val, y_val in itertools.product(x_range, y_range):
+                sub_df = df_multi_mask(df, {x: x_val, y: y_val, key: val})
+                z.loc[x_val, y_val] = distribution_modality(sub_df["opinion"])
+            mesh = ax.pcolormesh(XX, YY, z.T, cmap=cmap, norm=norm, **kwargs)
+            desc = variables[key]["title"] if "title" in variables[key] else key
+            ax.set_title(val)
+            if i == len(z_vars) - 1:
+                ax.set_xlabel(x_label)
+
+        axs[i, 0].set_ylabel(y_label)
+        if desc is not None:
+            axs[i, 0].annotate(
+                desc,
+                xy=(-0.1, 1.05),
+                xycoords="axes fraction",
+                va="bottom",
+                ha="right",
+                fontsize="large",
+            )
+        if mesh is not None:
+            cbar = colorbar_inset(
+                mesh,
+                position="outer right",
+                size="10%",
+                pad=0.1,
+                ax=axs[i, -1],
+                cmap=cmap,
+                norm=norm,
+            )
+            cbar.set_label("peak distance")

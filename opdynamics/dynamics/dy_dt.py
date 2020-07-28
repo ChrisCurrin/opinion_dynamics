@@ -8,6 +8,7 @@ def dy_dt(t: float, y: np.ndarray, *args) -> np.ndarray:
 
     1. get the interactions (A) that happen at this time point between each of N agents based on activity
     probabilities (p_conn) and the number of agents to interact with (m).
+
     2. calculate opinion derivative by getting the scaled (by social influence, alpha) opinions (y.T) of agents
     interacting with each other (A), multiplied by social interaction strength (K).
 
@@ -22,8 +23,10 @@ def dynamic_conn(t: float, y: np.ndarray, *args) -> np.ndarray:
     """Activity-Driven (AD) network dynamics.
 
     1. calculate connection probabilities based on difference in opinions
+
     2. get the interactions (A) that happen at this time point between each of N agents based on activity
     probabilities (p_conn) and the number of agents to interact with (m).
+
     3. calculate opinion derivative by getting the scaled (by social influence, alpha) opinions (y.T) of agents
     interacting with each other (A), multiplied by social interaction strength (K).
 
@@ -53,7 +56,7 @@ def _new_clt_sample(ec, y, n, num_samples):
 def sample_dy_dt(t: float, y: np.ndarray, *all_args) -> np.ndarray:
     """Activity-Driven (AD) network dynamics.
 
-    1 - 3 as in ``ConnChamber``
+    1 - 3 from either `dy_dt` or `dynamic_conn` (specified by `ec.super_dy_dt`).
 
     4. add a "population opinion" term that captures the Lindeberg–Lévy Central Limit Theorem -
     :math:`\\sqrt {n}\\left({\\bar{X}}_{n}-\\mu \\right) \\rightarrow \mathcal{N}\\left(0,\\sigma ^{2}\\right)`

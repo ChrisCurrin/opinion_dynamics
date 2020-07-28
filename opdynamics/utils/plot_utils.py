@@ -232,9 +232,28 @@ def move_cbar_label_to_title(cbar_ax: Axes):
     cbar_ax.set_ylabel("")
 
 
-def df_multi_mask(df, masks):
-    mask = np.ones(df.shape[0]).astype(bool)
-    for key, value in masks.items():
-        if key in df.columns:
-            mask = np.logical_and(mask, df[key] == value)
-    return df[mask]
+def df_multi_mask(df, columns_values: dict):
+    """Generic method for masking a DataFrame where the columns to mask are not known ahead of time.
+
+    Equivalent to ``df[(df[key1]==value1) & (df[key2]==value2) ...]``
+
+    .. note::
+
+        the original implementation of
+
+        .. code-block :: python
+
+            mask = np.ones(df.shape[0]).astype(bool)
+            for key, value in masks.items():
+                if key in df.columns:
+                    mask = np.logical_and(mask, df[key] == value)
+            return df[mask]
+
+        did **not** handle ``vaex`` DataFrames (produced ``None`` due to ``df[key] == value`` being an expression.
+
+    """
+    masked_df = df.copy()
+    for col, value in columns_values.items():
+        if col in df.columns:
+            masked_df = masked_df[masked_df[col] == value]
+    return masked_df

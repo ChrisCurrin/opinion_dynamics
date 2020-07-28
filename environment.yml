@@ -12,5 +12,7 @@ dependencies:
   - black
   - tqdm
   - pytables
+  - vaex-hdf5
+  - vaex
 prefix: C:\Users\Chris\Anaconda3\envs\opinion_dynamics
 
