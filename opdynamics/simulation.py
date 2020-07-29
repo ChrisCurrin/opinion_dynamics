@@ -416,7 +416,7 @@ def run_product(
 
         # change mapping to False as it may cause multi-access errors
         kwargs.pop("write_mapping", False)
-        write_file_name = os.path.join(get_cache_dir(), "map.txt")
+        write_file_name = os.path.join(cache_dir, "map.txt")
 
         for nec, params in p.imap(
             partial(_comp_unit, cls, keys, cache=cache, write_mapping=False),

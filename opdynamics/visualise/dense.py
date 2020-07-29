@@ -1,11 +1,13 @@
 import itertools
 import logging
+import os
 from functools import reduce
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import vaex
 from matplotlib.axes import Axes
 from matplotlib.cm import ScalarMappable
 from matplotlib.collections import QuadMesh
@@ -16,7 +18,7 @@ from seaborn.matrix import ClusterGrid
 from typing import Callable, Collection
 
 from opdynamics.metrics.opinions import distribution_modality
-from opdynamics.utils.decorators import optional_fig_ax
+from opdynamics.utils.decorators import hash_repeat, hashable, optional_fig_ax
 from opdynamics.utils.plot_utils import df_multi_mask, get_equal_limits, colorbar_inset
 from opdynamics.utils.constants import *
 
@@ -364,11 +366,42 @@ def show_opinion_grid(
 def plot_surfaces(
     data: pd.DataFrame, x: str, y: str, params: dict, variables: dict, **kwargs
 ):
+    """
+    Show the polarisation of opinions (color) for variables.
+
+    ``x`` and ``y`` set the axes for each subplot.
+
+    Each **key** in ``variables`` is a row in the figure.
+
+    Each **value** for a variable in ``variables`` (other than those specified in ``x`` and ``y``) will be a column
+    of the figure.
+
+    Optionally, ``variables`` can specify a title to use. The dict then becomes
+
+    .. code-block:: python
+
+        {
+        key1: {'range':values, 'title': "v"},
+        "key": {'range':[1,2,3]], 'title': "k"}
+        }
+
+    :param data: Long-form DataFrame to plot (supports ``pandas`` and ``vaex``)
+    :param x: Variable in ``variables`` to use for x-axis
+    :param y: Variable in ``variables`` to use for y-axis
+    :param params: Dictionary of all default parameters
+    :param variables: Dictionary of variables to construct surface plot for. Each variable, other than those
+        specified in ``x`` and ``y``, will be a row. Each value of variable will be a column.
+    :param kwargs: Keywords passed to ``Axes.pcolormesh``.
+    """
     x_range = variables[x]["range"] if "range" in variables[x] else variables[x]
     y_range = variables[y]["range"] if "range" in variables[y] else variables[y]
     x_label = variables[x]["title"] if "title" in variables[x] else x
     y_label = variables[y]["title"] if "title" in variables[y] else y
-    XX, YY = np.meshgrid(x_range, y_range)
+
+    # up-sample x and y for smoother plotting
+    new_x = np.round(np.linspace(x_range[0], x_range[-1], len(x_range) * 10), 5)
+    new_y = np.round(np.linspace(y_range[0], y_range[-1], len(y_range) * 10), 5)
+    XX, YY = np.meshgrid(new_x, new_y)
 
     z_vars = {k: v for k, v in variables.items() if k != x and k != y}
     ncols = 0
@@ -377,6 +410,7 @@ def plot_surfaces(
     fig, axs = plt.subplots(nrows=len(z_vars), ncols=ncols, sharex="all", sharey="all",)
     cmap = kwargs.pop("cmap", "viridis")
     norm = kwargs.pop("norm", Normalize(vmin=0, vmax=2.5))
+
     for i, key in enumerate(z_vars):
         default_kwargs = {k: v for k, v in params.items() if k != key}
         df = df_multi_mask(data, default_kwargs)
@@ -387,11 +421,28 @@ def plot_surfaces(
         mesh: QuadMesh = None
         for j, val in enumerate(values[::-1]):
             ax = axs[i, ncols - 1 - j]
-            z = pd.DataFrame(index=x_range, columns=y_range, dtype=np.float64)
-            for x_val, y_val in itertools.product(x_range, y_range):
-                sub_df = df_multi_mask(df, {x: x_val, y: y_val, key: val})
-                z.loc[x_val, y_val] = distribution_modality(sub_df["opinion"])
-            mesh = ax.pcolormesh(XX, YY, z.T, cmap=cmap, norm=norm, **kwargs)
+            file_name = f"{hash_repeat({x: x_range, y: y_range, key: val})}.h5"
+            if os.path.exists(file_name):
+                z = pd.read_hdf(file_name)
+            else:
+                z = pd.DataFrame(index=x_range, columns=y_range, dtype=np.float64)
+                for x_val, y_val in itertools.product(x_range, y_range):
+                    opinions = df_multi_mask(df, {x: x_val, y: y_val, key: val})[
+                        "opinion"
+                    ]
+                    if isinstance(opinions, vaex.expression.Expression):
+                        # convert to actual data from an expression, as the metric function expects
+                        opinions = opinions.to_numpy()
+                    z.loc[x_val, y_val] = distribution_modality(opinions)
+                z.to_hdf(file_name, key="df")
+
+            # interpolate
+            ZZ = z.reindex(index=new_x, columns=new_y).interpolate(method="cubic")
+
+            # remove nans (if they do still exist) from plot
+            ZZ = np.ma.masked_invalid(ZZ)
+
+            mesh = ax.pcolormesh(XX, YY, ZZ.T, cmap=cmap, norm=norm, **kwargs)
             desc = variables[key]["title"] if "title" in variables[key] else key
             ax.set_title(val)
             if i == len(z_vars) - 1:

@@ -1,7 +1,6 @@
 import time
 import logging
-import numpy as np
-import pandas as pd
+
 from functools import wraps
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
@@ -113,3 +112,16 @@ def hashable(cls):
     cls.__hash__ = __hash__
     cls.hash_extra = hash_extra
     return cls
+
+
+def hash_repeat(*args, **kwargs):
+    """Given the same arguments, the same number is produced."""
+    import hashlib
+    import json
+
+    return int(
+        hashlib.sha256(
+            (str(args) + str(json.dumps(kwargs, sort_keys=True))).encode("utf-8")
+        ).hexdigest(),
+        16,
+    )

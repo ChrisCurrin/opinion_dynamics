@@ -127,8 +127,11 @@ def distribution_modality(opinions: np.ndarray) -> float:
     pop1 = opinions[opinions < 0]
     pop2 = opinions[opinions > 0]
 
-    if pop1.size == 0 or pop2.size == 0:
-        return np.nan
+    # 10 % weighted threshold
+    thresh = int(opinions.size * 0.1)
+    if pop1.size <= thresh or pop2.size <= thresh:
+        # return the negative absolute mean value for the radicalised population
+        return -1 * np.max([np.abs(np.mean(pop1)), np.abs(np.mean(pop2))])
 
     hist, bin_edges = np.histogram(
         pop1,
