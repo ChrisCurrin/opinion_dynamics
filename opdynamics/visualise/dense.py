@@ -13,11 +13,13 @@ from matplotlib.cm import ScalarMappable
 from matplotlib.collections import QuadMesh
 from matplotlib.colors import LogNorm, Normalize
 from matplotlib.figure import Figure
+from scipy import interpolate
 from scipy.interpolate import interpn
 from seaborn.matrix import ClusterGrid
 from typing import Callable, Collection
 
 from opdynamics.metrics.opinions import distribution_modality
+from opdynamics.utils.cache import get_cache_dir
 from opdynamics.utils.decorators import hash_repeat, hashable, optional_fig_ax
 from opdynamics.utils.plot_utils import df_multi_mask, get_equal_limits, colorbar_inset
 from opdynamics.utils.constants import *
@@ -399,8 +401,12 @@ def plot_surfaces(
     y_label = variables[y]["title"] if "title" in variables[y] else y
 
     # up-sample x and y for smoother plotting
-    new_x = np.round(np.linspace(x_range[0], x_range[-1], len(x_range) * 10), 5)
-    new_y = np.round(np.linspace(y_range[0], y_range[-1], len(y_range) * 10), 5)
+    new_x = np.round(
+        np.arange(x_range[0], x_range[-1] + 1e-5, (x_range[1] - x_range[0]) / 10), 5
+    )
+    new_y = np.round(
+        np.arange(y_range[0], y_range[-1] + 1e-5, (y_range[1] - y_range[0]) / 10), 5
+    )
     XX, YY = np.meshgrid(new_x, new_y)
 
     z_vars = {k: v for k, v in variables.items() if k != x and k != y}
@@ -410,6 +416,10 @@ def plot_surfaces(
     fig, axs = plt.subplots(nrows=len(z_vars), ncols=ncols, sharex="all", sharey="all",)
     cmap = kwargs.pop("cmap", "viridis")
     norm = kwargs.pop("norm", Normalize(vmin=0, vmax=2.5))
+
+    N = params.get("N", 1000)
+
+    cache_dir = get_cache_dir()
 
     for i, key in enumerate(z_vars):
         default_kwargs = {k: v for k, v in params.items() if k != key}
@@ -421,28 +431,46 @@ def plot_surfaces(
         mesh: QuadMesh = None
         for j, val in enumerate(values[::-1]):
             ax = axs[i, ncols - 1 - j]
-            file_name = f"{hash_repeat({x: x_range, y: y_range, key: val})}.h5"
+            file_name = os.path.join(
+                cache_dir, f"{hash_repeat({x: x_range, y: y_range, key: val})}.h5"
+            )
             if os.path.exists(file_name):
                 z = pd.read_hdf(file_name)
             else:
                 z = pd.DataFrame(index=x_range, columns=y_range, dtype=np.float64)
-                for x_val, y_val in itertools.product(x_range, y_range):
-                    opinions = df_multi_mask(df, {x: x_val, y: y_val, key: val})[
-                        "opinion"
-                    ]
-                    if isinstance(opinions, vaex.expression.Expression):
-                        # convert to actual data from an expression, as the metric function expects
-                        opinions = opinions.to_numpy()
-                    z.loc[x_val, y_val] = distribution_modality(opinions)
+                if isinstance(df, pd.DataFrame):
+                    for x_val, y_val in itertools.product(x_range, y_range):
+                        opinions = df_multi_mask(df, {x: x_val, y: y_val, key: val})[
+                            "opinion"
+                        ]
+                        if isinstance(opinions, vaex.expression.Expression):
+                            # convert to actual data from an expression, as the metric function expects
+                            opinions = opinions.to_numpy()
+                        z.loc[x_val, y_val] = distribution_modality(opinions)
+                else:
+                    for start, stop, arrs in df.sort([x, y, key]).to_arrays(
+                        column_names=[x, y, key, "opinion"], chunk_size=N
+                    ):
+                        _xs, _ys, _keys, opinions = arrs
+                        # key_check = all(_keys == _keys[0])
+                        # x_check = all(_xs == _xs[0])
+                        # y_check = all(_ys == _ys[0])
+                        # print(f"{start}-{stop}", end="\r")
+                        # if not (key_check and x_check and y_check):
+                        #     print(_xs, _ys, _keys)
+                        #     df.iteitpe
+                        z.loc[_xs[0], _ys[0]] = distribution_modality(opinions)
                 z.to_hdf(file_name, key="df")
 
-            # interpolate
-            ZZ = z.reindex(index=new_x, columns=new_y).interpolate(method="cubic")
+            # remove radicals from plot
+            z[z < 0] = np.nan
+            z = np.ma.masked_invalid(z)
 
-            # remove nans (if they do still exist) from plot
-            ZZ = np.ma.masked_invalid(ZZ)
+            # 2D interpolation
+            f = interpolate.interp2d(x_range, y_range, z.T, kind="cubic")
+            ZZ = f(new_x, new_y)
 
-            mesh = ax.pcolormesh(XX, YY, ZZ.T, cmap=cmap, norm=norm, **kwargs)
+            mesh = ax.pcolormesh(XX, YY, ZZ, cmap=cmap, norm=norm, **kwargs)
             desc = variables[key]["title"] if "title" in variables[key] else key
             ax.set_title(val)
             if i == len(z_vars) - 1:

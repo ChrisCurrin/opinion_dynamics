@@ -376,11 +376,17 @@ def run_product(
     # exclude parameter combinations that have already been saved
     if cache_sim and os.path.exists(file_name):
         logger.debug("reading from existing file...")
+        col_names = [*keys]
         run_range = set()
-        # noinspection PyTypeChecker
-        chunks: Iterable = pd.read_hdf(file_name, iterator=True, chunksize=10000)
-        for chunk in chunks:
-            run_range.update(set(chunk.groupby([*keys]).count().index))
+        if os.path.exists(vaex_file_name):
+            df = vaex.open(vaex_file_name).groupby(col_names, agg="count")
+            for start, end, chunk in df.to_pandas_df(chunk_size=50000):
+                run_range.update(chunk.set_index(col_names).index)
+        else:
+            # noinspection PyTypeChecker
+            chunks: Iterable = pd.read_hdf(file_name, iterator=True, chunksize=50000)
+            for chunk in chunks:
+                run_range.update(set(chunk.groupby(col_names).count().index))
         full_range = (x for x in full_range if x not in run_range)
 
     # list to store EchoChamber objects (only if not cache_sim)
