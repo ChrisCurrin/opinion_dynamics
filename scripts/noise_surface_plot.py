@@ -28,7 +28,8 @@ if __name__ == "__main__":
         method="Euler",
     )
 
-    D_range = np.round(np.arange(0.0, 5.0001, 0.1), 3)
+    # D_range = np.round(np.arange(0.0, 5.0001, 0.1), 3)
+    D_range = np.round(np.geomspace(0.1, 1, 10), 2)
 
     if len(sys.argv) > 1:
         sample_size_range = [int(sys.argv[-1])]
@@ -39,14 +40,14 @@ if __name__ == "__main__":
         "D": {"range": D_range, "title": "D"},
         "sample_size": {"range": sample_size_range, "title": "n"},
         "alpha": {"range": [1, 2, 3], "title": "α"},
-        "beta": {"range": [0, 1, 2, 3], "title": "β"},
+        "beta": {"range": [1, 2, 3], "title": "β"},
         "K": {"range": [1, 2, 3]},
     }
 
     df = run_product(
         range_variables,
         noise_start=0,
-        cache=True,
+        cache=False,
         cache_sim=True,
         parallel=True,
         **parameters
