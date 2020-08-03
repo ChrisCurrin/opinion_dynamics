@@ -1,4 +1,5 @@
 """Run a full simulation of a network of agents without worrying about object details."""
+import copy
 import itertools
 import logging
 import os
@@ -262,9 +263,6 @@ def run_periodic_noise(
     return nec
 
 
-# TODO: replace multiprocessing with await/async
-
-
 def _comp_unit(
     cls, keys, values: list, cache, write_mapping: bool = True, **kwargs
 ) -> (EC, dict):
@@ -331,7 +329,7 @@ def run_product(
 
         other_vars = {
             'D':{
-                'range':np.round(np.arange(0.000, 0.01, 0.002), 3),
+                'range':np.round(np.arange(0.0, 5., 0.1), 3),
                 'title': 'nudge',
             },
             'alpha':{
@@ -363,13 +361,17 @@ def run_product(
 
     # # This allows a mixed-type to be passed where `range` isn't necessary.
     # verbose_other_vars = {
-    #     k: {"range": v} for k, v in parameters.items() if type(v) is not dict
+    #     k: {"range": v, "title": k} for k, v in parameters.items() if type(v) is not dict
     # }
     # parameters.update(verbose_other_vars)
 
     # determine combination of parameters
-    full_range = itertools.product(*[parameters[key]["range"] for key in keys])
+    ranges_to_run = set(itertools.product(*[parameters[key]["range"] for key in keys]))
+    number_of_combinations = len(ranges_to_run)
+    ranges_have_run = set()
+
     cache_dir = get_cache_dir()
+    # TODO: change name of file
     file_name = os.path.join(cache_dir, "noise_source.h5")
     vaex_file_name = file_name.replace(".h5", ".hdf5")
 
@@ -377,25 +379,23 @@ def run_product(
     if cache_sim and os.path.exists(file_name):
         logger.debug("reading from existing file...")
         col_names = [*keys]
-        run_range = set()
         if os.path.exists(vaex_file_name):
             df = vaex.open(vaex_file_name).groupby(col_names, agg="count")
             for start, end, chunk in df.to_pandas_df(chunk_size=50000):
-                run_range.update(chunk.set_index(col_names).index)
+                ranges_have_run.update(chunk.set_index(col_names).index)
         else:
             # noinspection PyTypeChecker
             chunks: Iterable = pd.read_hdf(file_name, iterator=True, chunksize=50000)
             for chunk in chunks:
-                run_range.update(set(chunk.groupby(col_names).count().index))
-        full_range = (x for x in full_range if x not in run_range)
-
+                ranges_have_run.update(set(chunk.groupby(col_names).count().index))
+        ranges_to_run = {x for x in ranges_to_run if x not in ranges_have_run}
     # list to store EchoChamber objects (only if not cache_sim)
     nec_list = []
 
     # create helper functions for running synchronously or asynchronously
     def run_sync():
         """Normal ``for`` loop over range."""
-        for values in tqdm(full_range, desc="full range"):
+        for values in tqdm(ranges_to_run, desc="full range"):
             nec, params = _comp_unit(cls, keys, values, cache=cache, **kwargs)
             if cache_sim:
                 save_results(file_name, nec, **params)
@@ -426,7 +426,7 @@ def run_product(
 
         for nec, params in p.imap(
             partial(_comp_unit, cls, keys, cache=cache, write_mapping=False),
-            full_range,
+            ranges_to_run,
         ):
             if cache and nec.save_txt is not None:
                 with open(write_file_name, "a+") as write_file:
@@ -446,27 +446,16 @@ def run_product(
         run_sync()
     logger.debug(f"done")
 
-    # load all results into a DataFrame
-    #   if the system does not have enough memory, the ``vaex`` library is used.
-    #       the existing file is converted to a vaex-compatible format (different hdf5 implementations)
-    #       if this converted file already exists, load it directly
-    #       else, conversion involves chunking and exporting the file as batches of vaex-compatible mini-files.
-    #           these are combined and exported as a singular file
+    # load all results into a vaex DataFrame
+    #   the existing file is converted to a vaex-compatible format (different hdf5 implementations)
+    #   if this converted file already exists, load it directly
+    #   else, conversion involves chunking and exporting the file as batches of vaex-compatible mini-files.
+    #       these are combined and exported as a singular file
     if cache_sim and os.path.exists(file_name):
-        logger.debug("loading full DataFrame from storage")
-        if os.path.exists(vaex_file_name):
-            return vaex.open(vaex_file_name)
-        try:
+        if len(ranges_to_run) or not os.path.exists(vaex_file_name):
+            logger.debug(f"changes detected to {file_name}")
             # noinspection PyTypeChecker
-            df = pd.read_hdf(file_name)
-        except MemoryError:
-            logger.warning(
-                "Environment ran out of memory, loading data using `vaex` insatead of `pandas`. "
-                "The existing file will remain the same but needs to be converted to `vaex-hdf5` format. "
-                "This will take additional space and may take a while. "
-            )
-            # noinspection PyTypeChecker
-            chunks: Iterable = pd.read_hdf(file_name, iterator=True, chunksize=50000)
+            chunks: Iterable = pd.read_hdf(file_name, iterator=True, chunksize=100000)
             convert_dir = os.path.join(".temp", "convert")
             try:
                 os.makedirs(convert_dir)
@@ -482,8 +471,6 @@ def run_product(
             df = vaex.open("batch*.hdf5")
             logger.debug(f"saving new version to {vaex_file_name}...")
             df.export(vaex_file_name)
-            logger.debug("re-assigning")
-            df = vaex.open(vaex_file_name)
             logger.debug("removing conversion directory")
             try:
                 os.removedirs(convert_dir)
@@ -494,6 +481,16 @@ def run_product(
                 )
                 pass
             logger.debug("converted")
+
+        logger.debug("loading full DataFrame from storage")
+        df = vaex.open(vaex_file_name)
+        if number_of_combinations == len(ranges_have_run):
+            # load the entire file
+            return df
+        # mask df to only ranges that were provided
+        for col, value in parameters.items():
+            if col in df.columns:
+                df = df[df[col].isin(value["range"] if "range" in value else value)]
         return df
     return nec_list
 
