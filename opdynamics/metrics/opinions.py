@@ -10,9 +10,6 @@ import pandas as pd
 import vaex
 from numpy.random._generator import Generator
 
-from opdynamics.utils.cache import get_cache_dir
-from opdynamics.utils.decorators import hash_repeat
-from opdynamics.utils.plot_utils import df_multi_mask
 
 logger = logging.getLogger("opinion metrics")
 
@@ -187,6 +184,10 @@ def calc_distribution_differences(
 
 
 def mask_and_metric(data, keys, values, x, y, x_range, y_range, N, **kwargs):
+    from opdynamics.utils.cache import get_cache_dir
+    from opdynamics.utils.decorators import hash_repeat
+    from opdynamics.utils.plot_utils import df_multi_mask
+
     default_kwargs = {k: v for k, v in zip(keys, values)}
     desc = json.dumps(default_kwargs, sort_keys=True)
     logger.debug(f"{desc}")
