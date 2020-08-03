@@ -192,7 +192,7 @@ def mask_and_metric(data, keys, values, x, y, x_range, y_range, N, **kwargs):
     desc = json.dumps(default_kwargs, sort_keys=True)
     logger.debug(f"{desc}")
     df = df_multi_mask(data, default_kwargs)
-    cache_dir = get_cache_dir()
+    cache_dir = get_cache_dir(sub_path="masked_data")
     file_name = os.path.join(
         cache_dir, f"{hash_repeat({x: x_range, y: y_range, **default_kwargs})}.h5"
     )

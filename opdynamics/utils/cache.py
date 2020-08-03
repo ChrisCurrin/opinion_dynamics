@@ -10,10 +10,17 @@ from opdynamics.utils.constants import DEFAULT_COMPRESSION_LEVEL
 _cache_dir = None
 
 
-def get_cache_dir() -> str:
-    """Construct a folder for caching under the root 'opinion_dynamics' directory.
+def get_cache_dir(sub_path: str = None) -> str:
+    """Construct and return a folder for caching under the root 'opinion_dynamics' directory.
 
-    If the `opinion_dynamics` is not in the working tree, the current working directory is used."""
+    If the `opinion_dynamics` is not in the working tree, the current working directory is used.
+
+    Alternatively, the cache directory to be used can be specified at any point by calling ``set_cache_dir(<path>)``.
+
+    :param sub_path: Optionally specify a subdirectory within the cache directory. Can be of arbitrary depth (limited by
+        filesystem, of course).
+    :return: Full absolute path to cache directory
+    """
     global _cache_dir
     if _cache_dir is None:
         pwd = os.getcwd()
@@ -33,6 +40,13 @@ def get_cache_dir() -> str:
         except FileExistsError:
             pass
         _cache_dir = os.path.abspath(local_cache_path)
+    if sub_path is not None:
+        sub_dir = os.path.join(_cache_dir, sub_path)
+        try:
+            os.makedirs(sub_dir)
+        except FileExistsError:
+            pass
+        return sub_dir
     return _cache_dir
 
 
