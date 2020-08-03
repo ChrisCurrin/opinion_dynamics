@@ -7,27 +7,50 @@ import pandas as pd
 from opdynamics.networks.echochamber import EchoChamber
 from opdynamics.utils.constants import DEFAULT_COMPRESSION_LEVEL
 
+_cache_dir = None
+
 
 def get_cache_dir() -> str:
     """Construct a folder for caching under the root 'opinion_dynamics' directory.
 
     If the `opinion_dynamics` is not in the working tree, the current working directory is used."""
-    pwd = os.getcwd()
-    path = os.path.split(pwd)
-    while (
-        path[0] != ""
-        and path[-1] != ""
-        and "opinion_dynamics" not in path[-1]
-        and path[-1] != "content"
-    ):
-        path = os.path.split(path[0])
-    if path[0] == "" or path[-1] == "":
-        path = pwd
+    global _cache_dir
+    if _cache_dir is None:
+        pwd = os.getcwd()
+        path = os.path.split(pwd)
+        while (
+            path[0] != ""
+            and path[-1] != ""
+            and "opinion_dynamics" not in path[-1]
+            and path[-1] != "content"
+        ):
+            path = os.path.split(path[0])
+        if path[0] == "" or path[-1] == "":
+            path = pwd
+        local_cache_path = os.path.join(*path, ".cache")
+        try:
+            os.makedirs(local_cache_path)
+        except FileExistsError:
+            pass
+        _cache_dir = os.path.abspath(local_cache_path)
+    return _cache_dir
+
+
+def set_cache_dir(path: str) -> str:
+    """
+    Customise where to store the cache by explicitly setting the location.
+
+    Folders will be created if they do not exist.
+    :param path: Where to save temporary files.
+    :return: Absolute path to directory.
+    """
+    global _cache_dir
     try:
-        os.makedirs(os.path.join(*path, ".cache"))
+        os.makedirs(path)
     except FileExistsError:
         pass
-    return os.path.join(*path, ".cache")
+    _cache_dir = os.path.abspath(path)
+    return _cache_dir
 
 
 def cache_ec(cache: Union[str, int, bool], ec: EchoChamber, write_mapping=True) -> None:

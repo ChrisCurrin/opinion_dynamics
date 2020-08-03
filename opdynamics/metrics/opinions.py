@@ -1,8 +1,20 @@
+import itertools
 import logging
+import os
+
+import json
 import numpy as np
+import pandas as pd
 
 # noinspection PyProtectedMember
+import vaex
 from numpy.random._generator import Generator
+
+from opdynamics.utils.cache import get_cache_dir
+from opdynamics.utils.decorators import hash_repeat
+from opdynamics.utils.plot_utils import df_multi_mask
+
+logger = logging.getLogger("opinion metrics")
 
 
 def nearest_neighbours(opinions: np.ndarray, accum_adj_mat: np.ndarray) -> np.ndarray:
@@ -119,7 +131,7 @@ def _ashmans_d(opinions: np.ndarray) -> float:
 
 
 # noinspection NonAsciiCharacters
-def distribution_modality(opinions: np.ndarray) -> float:
+def distribution_modality(opinions: np.ndarray, bin_width: float = 0.1) -> float:
     """Determine the distance between population density peaks.
     Closer to 0 indicates a unimodal distribution.
 
@@ -135,14 +147,77 @@ def distribution_modality(opinions: np.ndarray) -> float:
 
     hist, bin_edges = np.histogram(
         pop1,
-        bins=np.round(np.arange(np.floor(np.min(pop1)), 0.01, 0.1), 1),
+        bins=np.round(np.arange(np.floor(np.min(pop1)), 0.01, bin_width), 1),
         range=(np.floor(np.min(pop1)), 0),
     )
     max_opinion_pop1 = bin_edges[1 + np.argmax(hist)]
     hist, bin_edges = np.histogram(
         pop2,
-        bins=np.round(np.arange(0, np.ceil(np.max(pop2)), 0.1), 1),
+        bins=np.round(np.arange(0, np.ceil(np.max(pop2)), bin_width), 1),
         range=(0, np.ceil(np.max(pop2))),
     )
     max_opinion_pop2 = bin_edges[1 + np.argmax(hist)]
     return max_opinion_pop2 - max_opinion_pop1
+
+
+def calc_distribution_differences(
+    data: pd.DataFrame, x: str, y: str, variables: dict, N: int = 1000, **kwargs
+):
+
+    x_range = variables[x]["range"] if "range" in variables[x] else variables[x]
+    y_range = variables[y]["range"] if "range" in variables[y] else variables[y]
+
+    z_vars = {k: v for k, v in variables.items() if k != x and k != y}
+    zs = pd.DataFrame()
+    keys = list(z_vars.keys())
+    value_combinations = list(
+        itertools.product(*[z_vars[key]["range"] for key in keys])
+    )
+
+    for i, values in enumerate(value_combinations):
+        z = mask_and_metric(data, keys, values, x, y, x_range, y_range, N, **kwargs)
+
+        # mean across y range
+        comp = z.mean(axis="columns").reset_index()
+        for key, value in zip(keys, values):
+            comp.loc[:, key] = value
+        zs = pd.concat([zs, comp])
+    zs = zs.rename(columns={"index": "D", 0: "|peak distance|"})
+    return zs
+
+
+def mask_and_metric(data, keys, values, x, y, x_range, y_range, N, **kwargs):
+    default_kwargs = {k: v for k, v in zip(keys, values)}
+    desc = json.dumps(default_kwargs, sort_keys=True)
+    logger.debug(f"{desc}")
+    df = df_multi_mask(data, default_kwargs)
+    cache_dir = get_cache_dir()
+    file_name = os.path.join(
+        cache_dir, f"{hash_repeat({x: x_range, y: y_range, **default_kwargs})}.h5"
+    )
+    if os.path.exists(file_name):
+        logger.debug(f"\t load")
+        z = pd.read_hdf(file_name)
+    else:
+        z = pd.DataFrame(index=x_range, columns=y_range, dtype=np.float64)
+        if isinstance(df, pd.DataFrame):
+            for x_val, y_val in itertools.product(x_range, y_range):
+                opinions = df_multi_mask(df, {x: x_val, y: y_val})["opinion"]
+                z.loc[x_val, y_val] = distribution_modality(opinions, **kwargs)
+        else:
+            for start, stop, arrs in df.sort([x, y]).to_arrays(
+                column_names=[x, y, "opinion"], chunk_size=N
+            ):
+                _xs, _ys, opinions = arrs
+                x_check = all(_xs == _xs[0])
+                y_check = all(_ys == _ys[0])
+                print(f"{start}-{stop}", end="\r")
+                if not (x_check and y_check):
+                    raise IndexError(
+                        f"expected all {x} and {y} values to be the same for chunk sizes of {N}."
+                        f"\n{_xs} # {_ys}"
+                    )
+                z.loc[_xs[0], _ys[0]] = distribution_modality(opinions, **kwargs)
+        z.to_hdf(file_name, key="df")
+        logger.debug(f"\t saved")
+    return z

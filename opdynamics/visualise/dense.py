@@ -18,7 +18,7 @@ from scipy.interpolate import interpn
 from seaborn.matrix import ClusterGrid
 from typing import Callable, Collection
 
-from opdynamics.metrics.opinions import distribution_modality
+from opdynamics.metrics.opinions import distribution_modality, mask_and_metric
 from opdynamics.utils.cache import get_cache_dir
 from opdynamics.utils.decorators import hash_repeat, hashable, optional_fig_ax
 from opdynamics.utils.plot_utils import df_multi_mask, get_equal_limits, colorbar_inset
@@ -434,8 +434,8 @@ def plot_surfaces(
 
     N = params.get("N", 1000)
 
-    cache_dir = get_cache_dir()
-
+    desc: str = None
+    mesh: QuadMesh = None
     # store z dataframes
     zs = []
 
@@ -445,40 +445,10 @@ def plot_surfaces(
         values = (
             variables[key]["range"] if "range" in variables[key] else variables[key]
         )
-        desc: str = None
-        mesh: QuadMesh = None
+
         for j, val in enumerate(values[::-1]):
             ax = axs[i, ncols - 1 - j]
-            file_name = os.path.join(
-                cache_dir, f"{hash_repeat({x: x_range, y: y_range, key: val})}.h5"
-            )
-            if os.path.exists(file_name):
-                z = pd.read_hdf(file_name)
-            else:
-                z = pd.DataFrame(index=x_range, columns=y_range, dtype=np.float64)
-                if isinstance(df, pd.DataFrame):
-                    for x_val, y_val in itertools.product(x_range, y_range):
-                        opinions = df_multi_mask(df, {x: x_val, y: y_val, key: val})[
-                            "opinion"
-                        ]
-                        if isinstance(opinions, vaex.expression.Expression):
-                            # convert to actual data from an expression, as the metric function expects
-                            opinions = opinions.to_numpy()
-                        z.loc[x_val, y_val] = distribution_modality(opinions)
-                else:
-                    for start, stop, arrs in df.sort([x, y, key]).to_arrays(
-                        column_names=[x, y, key, "opinion"], chunk_size=N
-                    ):
-                        _xs, _ys, _keys, opinions = arrs
-                        # key_check = all(_keys == _keys[0])
-                        # x_check = all(_xs == _xs[0])
-                        # y_check = all(_ys == _ys[0])
-                        # print(f"{start}-{stop}", end="\r")
-                        # if not (key_check and x_check and y_check):
-                        #     print(_xs, _ys, _keys)
-                        #     df.iteitpe
-                        z.loc[_xs[0], _ys[0]] = distribution_modality(opinions)
-                z.to_hdf(file_name, key="df")
+            z = mask_and_metric(df, [key], [val], x, y, x_range, y_range, N)
 
             zs.append(z)
 
@@ -514,7 +484,7 @@ def plot_surfaces(
             )
     if mesh is not None:
         cbar = fig.colorbar(mesh, cax=cbar_ax, cmap=cmap, norm=norm)
-        cbar.set_label("|peak distance|")
+        cbar.set_label(PEAK_DISTANCE)
 
     return zs
 
@@ -522,7 +492,6 @@ def plot_surfaces(
 def plot_surface_product(
     data: pd.DataFrame, x: str, y: str, params: dict, variables: dict, **kwargs
 ):
-    import json
 
     x_range = variables[x]["range"] if "range" in variables[x] else variables[x]
     y_range = variables[y]["range"] if "range" in variables[y] else variables[y]
@@ -533,8 +502,6 @@ def plot_surface_product(
     norm = kwargs.pop("norm", Normalize(vmin=0, vmax=3))
 
     N = params.get("N", 1000)
-
-    cache_dir = get_cache_dir()
 
     # up-sample x and y for smoother plotting
     new_x = np.round(
@@ -560,43 +527,7 @@ def plot_surface_product(
     )
 
     for i, values in enumerate(value_combinations):
-        default_kwargs = {k: v for k, v in zip(keys, values)}
-        desc = json.dumps(default_kwargs, sort_keys=True)
-        logger.debug(f"{desc}")
-        df = df_multi_mask(data, default_kwargs)
-        file_name = os.path.join(
-            cache_dir, f"{hash_repeat({x: x_range, y: y_range, **default_kwargs})}.h5"
-        )
-        if os.path.exists(file_name):
-            logger.debug(f"\t load")
-            z = pd.read_hdf(file_name)
-        else:
-            z = pd.DataFrame(index=x_range, columns=y_range, dtype=np.float64)
-            if isinstance(df, pd.DataFrame):
-                for x_val, y_val in itertools.product(x_range, y_range):
-                    opinions = df_multi_mask(
-                        df, {x: x_val, y: y_val, **default_kwargs}
-                    )["opinion"]
-                    if isinstance(opinions, vaex.expression.Expression):
-                        # convert to actual data from an expression, as the metric function expects
-                        opinions = opinions.to_numpy()
-                    z.loc[x_val, y_val] = distribution_modality(opinions)
-            else:
-                for start, stop, arrs in df.sort([x, y]).to_arrays(
-                    column_names=[x, y, "opinion"], chunk_size=N
-                ):
-                    _xs, _ys, opinions = arrs
-                    # key_check = all(_keys == _keys[0])
-                    x_check = all(_xs == _xs[0])
-                    y_check = all(_ys == _ys[0])
-                    print(f"{start}-{stop}", end="\r")
-                    if not (x_check and y_check):
-                        raise IndexError(
-                            f"expected all {x} and {y} values to be the same for chunk sizes of {N}."
-                            f"\n{_xs} # {_ys}"
-                        )
-                    z.loc[_xs[0], _ys[0]] = distribution_modality(opinions)
-            z.to_hdf(file_name, key="df")
+        z = mask_and_metric(data, keys, values, x, y, x_range, y_range, N)
         # remove radicals from plot
         z[z < 0] = np.nan
         z = np.ma.masked_invalid(z)
@@ -619,95 +550,5 @@ def plot_surface_product(
             ax.set_ylabel(f"{', '.join(titles)}\n{values}", rotation=0)
         else:
             ax.set_ylabel(f"{values}", rotation=0)
+    axs[-1].set_xlabel(x_label)
     return
-
-
-def plot_product_grid(
-    data: pd.DataFrame, x: str, y: str, params: dict, variables: dict, **kwargs
-):
-    import json
-
-    x_range = variables[x]["range"] if "range" in variables[x] else variables[x]
-    y_range = variables[y]["range"] if "range" in variables[y] else variables[y]
-    x_label = variables[x]["title"] if "title" in variables[x] else x
-    y_label = variables[y]["title"] if "title" in variables[y] else y
-
-    cmap = kwargs.pop("cmap", "Spectral_r")
-    norm = kwargs.pop("norm", Normalize(vmin=0, vmax=3))
-
-    N = params.get("N", 1000)
-
-    cache_dir = get_cache_dir()
-
-    # up-sample x and y for smoother plotting
-    new_x = np.round(
-        np.arange(x_range[0], x_range[-1] + 1e-5, (x_range[1] - x_range[0]) / 2), 5
-    )
-    new_y = np.round(
-        np.arange(y_range[0], y_range[-1] + 1e-5, (y_range[1] - y_range[0]) / 2), 5
-    )
-    XX, YY = np.meshgrid(new_x, new_y)
-
-    z_vars = {k: v for k, v in variables.items() if k != x and k != y}
-    zs = pd.DataFrame()
-    keys = list(z_vars.keys())
-    value_combinations = list(
-        itertools.product(*[z_vars[key]["range"] for key in keys])
-    )
-
-    for i, values in enumerate(value_combinations):
-        default_kwargs = {k: v for k, v in zip(keys, values)}
-        desc = json.dumps(default_kwargs, sort_keys=True)
-        logger.debug(f"{desc}")
-        df = df_multi_mask(data, default_kwargs)
-        file_name = os.path.join(
-            cache_dir, f"{hash_repeat({x: x_range, y: y_range, **default_kwargs})}.h5"
-        )
-        if os.path.exists(file_name):
-            logger.debug(f"\t load")
-            z = pd.read_hdf(file_name)
-        else:
-            z = pd.DataFrame(index=x_range, columns=y_range, dtype=np.float64)
-            if isinstance(df, pd.DataFrame):
-                for x_val, y_val in itertools.product(x_range, y_range):
-                    opinions = df_multi_mask(
-                        df, {x: x_val, y: y_val, **default_kwargs}
-                    )["opinion"]
-                    if isinstance(opinions, vaex.expression.Expression):
-                        # convert to actual data from an expression, as the metric function expects
-                        opinions = opinions.to_numpy()
-                    z.loc[x_val, y_val] = distribution_modality(opinions)
-            else:
-                for start, stop, arrs in df.sort([x, y]).to_arrays(
-                    column_names=[x, y, "opinion"], chunk_size=N
-                ):
-                    _xs, _ys, opinions = arrs
-                    # key_check = all(_keys == _keys[0])
-                    x_check = all(_xs == _xs[0])
-                    y_check = all(_ys == _ys[0])
-                    print(f"{start}-{stop}", end="\r")
-                    if not (x_check and y_check):
-                        raise IndexError(
-                            f"expected all {x} and {y} values to be the same for chunk sizes of {N}."
-                            f"\n{_xs} # {_ys}"
-                        )
-                    z.loc[_xs[0], _ys[0]] = distribution_modality(opinions)
-            z.to_hdf(file_name, key="df")
-
-        comp = z.mean(axis="columns").reset_index()
-        for key, value in zip(keys, values):
-            comp.loc[:, key] = value
-        zs = pd.concat([zs, comp])
-    zs = zs.rename(columns={"index": "D", 0: "|peak distance|"})
-    sns.relplot(
-        x="D",
-        y="|peak distance|",
-        col="K",
-        row="beta",
-        hue="alpha",
-        data=zs,
-        height=2,
-        aspect=1.5,
-        facet_kws=dict(margin_titles=True),
-    )
-    return zs
