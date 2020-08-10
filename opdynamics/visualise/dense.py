@@ -456,15 +456,20 @@ def plot_surfaces(
             z[z < 0] = np.nan
             z = np.ma.masked_invalid(z)
 
+            logger.debug(f"\t interpolate")
             # 2D interpolation
             f = interpolate.interp2d(x_range, y_range, z.T, kind="cubic")
             ZZ = f(new_x, new_y)
+
+            # smoothing
             ZZ = (
                 pd.DataFrame(ZZ)
                 .rolling(100, win_type="triang", center=True)
                 .mean()
-                .interpolate("cubic", axis=0)
+                .interpolate("cubic")
             )
+
+            logger.debug(f"\t plot")
             mesh = ax.pcolormesh(XX, YY, ZZ, cmap=cmap, norm=norm, **kwargs)
             desc = variables[key]["title"] if "title" in variables[key] else key
             if i == 0:
@@ -505,10 +510,10 @@ def plot_surface_product(
 
     # up-sample x and y for smoother plotting
     new_x = np.round(
-        np.arange(x_range[0], x_range[-1] + 1e-5, (x_range[1] - x_range[0]) / 2), 5
+        np.arange(x_range[0], x_range[-1] + 1e-5, (x_range[1] - x_range[0]) / 10), 5
     )
     new_y = np.round(
-        np.arange(y_range[0], y_range[-1] + 1e-5, (y_range[1] - y_range[0]) / 2), 5
+        np.arange(y_range[0], y_range[-1] + 1e-5, (y_range[1] - y_range[0]) / 10), 5
     )
     XX, YY = np.meshgrid(new_x, new_y)
 
@@ -526,15 +531,22 @@ def plot_surface_product(
         figsize=(1, len(value_combinations)),
     )
 
+    zs = []
+
     for i, values in enumerate(value_combinations):
         z = mask_and_metric(data, keys, values, x, y, x_range, y_range, N)
+
+        zs.append(z)
+
         # remove radicals from plot
         z[z < 0] = np.nan
         z = np.ma.masked_invalid(z)
+
         logger.debug(f"\t interpolate")
         # 2D interpolation
         f = interpolate.interp2d(x_range, y_range, z.T, kind="cubic")
         ZZ = f(new_x, new_y)
+
         # smoothing
         ZZ = (
             pd.DataFrame(ZZ)
@@ -542,6 +554,7 @@ def plot_surface_product(
             .mean()
             .interpolate("cubic")
         )
+
         logger.debug(f"\t plot")
         ax = axs[i]
         mesh = ax.pcolormesh(XX, YY, ZZ, cmap=cmap, norm=norm, **kwargs)
@@ -551,4 +564,4 @@ def plot_surface_product(
         else:
             ax.set_ylabel(f"{values}", rotation=0)
     axs[-1].set_xlabel(x_label)
-    return
+    return zs

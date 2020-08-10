@@ -377,7 +377,7 @@ def run_product(
 
     # exclude parameter combinations that have already been saved
     if cache_sim and os.path.exists(file_name):
-        logger.debug("reading from existing file...")
+        logger.info("reading from existing file...")
         col_names = [*keys]
         if os.path.exists(vaex_file_name):
             df = vaex.open(vaex_file_name).groupby(col_names, agg="count")
@@ -439,12 +439,12 @@ def run_product(
         p.close()
         p.join()
 
-    logger.debug(f"running")
+    logger.info(f"running {len(ranges_to_run)} simulations")
     if parallel:
         run_async(n_processes=parallel if type(parallel) is int else None)
     else:
         run_sync()
-    logger.debug(f"done")
+    logger.info(f"done running")
 
     # load all results into a vaex DataFrame
     #   the existing file is converted to a vaex-compatible format (different hdf5 implementations)
@@ -453,7 +453,7 @@ def run_product(
     #       these are combined and exported as a singular file
     if cache_sim and os.path.exists(file_name):
         if len(ranges_to_run) or not os.path.exists(vaex_file_name):
-            logger.debug(f"changes detected to {file_name}")
+            logger.info(f"changes detected to {file_name}")
             # noinspection PyTypeChecker
             chunks: Iterable = pd.read_hdf(file_name, iterator=True, chunksize=100000)
             convert_dir = os.path.join(".temp", "convert")
@@ -464,14 +464,14 @@ def run_product(
                     "Needed to create a temporary directory for conversion but failed."
                 )
                 raise err
-            logger.debug("converting...")
+            logger.info("converting...")
             for i, chunk in enumerate(chunks):
                 vaex_df = vaex.from_pandas(chunk, copy_index=False)
                 vaex_df.export(f"batch_{i}.hdf5")
             df = vaex.open("batch*.hdf5")
-            logger.debug(f"saving new version to {vaex_file_name}...")
+            logger.info(f"saving new version to {vaex_file_name}...")
             df.export(vaex_file_name)
-            logger.debug("removing conversion directory")
+            logger.info("removing conversion directory")
             try:
                 os.removedirs(convert_dir)
             except IOError:
@@ -480,9 +480,9 @@ def run_product(
                     f"Please delete manually."
                 )
                 pass
-            logger.debug("converted")
+            logger.info("converted")
 
-        logger.debug("loading full DataFrame from storage")
+        logger.info("loading full DataFrame from storage")
         df = vaex.open(vaex_file_name)
         if number_of_combinations == len(ranges_have_run):
             # load the entire file

@@ -43,7 +43,7 @@ Target Python version: >= 3.6
 e.g.
  
 ```bash
-python -m opdynamics 1000 10 2 3 -beta 2 --activity negpowerlaw 2.1 1e-2 -r 0.5 -T 10 --plot summary --save -v
+python -m opdynamics --plot=all
 ```
 Run a simulation with noise with the ``-D <value>`` parameter.
 ```bash
@@ -88,11 +88,8 @@ Update `environment.yml` using `conda env export --from-history > environment.ym
 
 ---
 ## TODO:
-- [ ] Allow `simulation.run_product` to be run asyncronously.
-    - [x] Initial creation
-    - [ ] Convert from multiprocessing to async/await 
-    - [ ] Test 
-- [ ] Create metric for determining whether opinions are polarised or uniform. 
+- [x] Allow `simulation.run_product` to be run asyncronously.
+- [x] Create metric for determining whether opinions are polarised or uniform. 
 - [x] Add `sample_size` to `SampleChamber.__repr__` 
 - [ ] Test more efficient `get_social_interaction`
 - [ ] Test more efficient `get_connection_probabilities`
@@ -103,10 +100,9 @@ Update `environment.yml` using `conda env export --from-history > environment.ym
         * <img src="https://latex.codecogs.com/svg.latex?D(\tanh(x_i - x_k))"/>
         * <img src="https://latex.codecogs.com/svg.latex?D(x_i - \tanh(x_k))"/>
 * plot <img src="https://latex.codecogs.com/svg.latex?D"/> vs <img src="https://latex.codecogs.com/svg.latex?x"/>
-    - [ ] with different <img src="https://latex.codecogs.com/svg.latex?K"/> values
-    - [ ] with different <img src="https://latex.codecogs.com/svg.latex?r"/> values
     - [x] <img src="https://latex.codecogs.com/svg.latex?D"/> from <img src="https://latex.codecogs.com/svg.latex?t_0"/>
     - [x] <img src="https://latex.codecogs.com/svg.latex?D"/> from <img src="https://latex.codecogs.com/svg.latex?t_10"/>
+    - [x] with different <img src="https://latex.codecogs.com/svg.latex?K"/> values
     - [x] with different <img src="https://latex.codecogs.com/svg.latex?\beta"/> values
     - [x] with different <img src="https://latex.codecogs.com/svg.latex?\alpha"/> values
     - [x] with different <img src="https://latex.codecogs.com/svg.latex?dt"/> values

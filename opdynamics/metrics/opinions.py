@@ -10,6 +10,7 @@ import pandas as pd
 import vaex
 from numpy.random._generator import Generator
 
+from opdynamics.utils.constants import PEAK_DISTANCE
 
 logger = logging.getLogger("opinion metrics")
 
@@ -173,13 +174,16 @@ def calc_distribution_differences(
 
     for i, values in enumerate(value_combinations):
         z = mask_and_metric(data, keys, values, x, y, x_range, y_range, N, **kwargs)
+        # mean and variance across y range
+        comp = pd.concat(
+            [z.mean(axis="columns").reset_index(), z.var(axis="columns").reset_index()],
+            axis=1,
+        )
 
-        # mean across y range
-        comp = z.mean(axis="columns").reset_index()
         for key, value in zip(keys, values):
             comp.loc[:, key] = value
         zs = pd.concat([zs, comp])
-    zs = zs.rename(columns={"index": "D", 0: "|peak distance|"})
+    zs = zs.rename(columns={"index": "D", 0: PEAK_DISTANCE})
     return zs
 
 
@@ -194,7 +198,8 @@ def mask_and_metric(data, keys, values, x, y, x_range, y_range, N, **kwargs):
     df = df_multi_mask(data, default_kwargs)
     cache_dir = get_cache_dir(sub_path="masked_data")
     file_name = os.path.join(
-        cache_dir, f"{hash_repeat({x: x_range, y: y_range, **default_kwargs})}.h5"
+        cache_dir,
+        f"{hash_repeat({x: tuple(x_range), y: tuple(y_range), **default_kwargs})}.h5",
     )
     if os.path.exists(file_name):
         logger.debug(f"\t load")
@@ -218,7 +223,8 @@ def mask_and_metric(data, keys, values, x, y, x_range, y_range, N, **kwargs):
                         f"expected all {x} and {y} values to be the same for chunk sizes of {N}."
                         f"\n{_xs} # {_ys}"
                     )
-                z.loc[_xs[0], _ys[0]] = distribution_modality(opinions, **kwargs)
+                if _xs[0] in x_range and _ys[0] in y_range:
+                    z.loc[_xs[0], _ys[0]] = distribution_modality(opinions, **kwargs)
         z.to_hdf(file_name, key="df")
         logger.debug(f"\t saved")
     return z
