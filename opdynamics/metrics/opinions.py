@@ -1,3 +1,6 @@
+"""
+Ways to measure opinions of a network of agents, or multiple networks.
+"""
 import itertools
 import logging
 import os
@@ -7,10 +10,9 @@ import numpy as np
 import pandas as pd
 
 # noinspection PyProtectedMember
-import vaex
 from numpy.random._generator import Generator
 
-from opdynamics.utils.constants import PEAK_DISTANCE
+from opdynamics.utils.constants import PEAK_DISTANCE_MEAN, PEAK_DISTANCE_VAR
 
 logger = logging.getLogger("opinion metrics")
 
@@ -175,15 +177,14 @@ def calc_distribution_differences(
     for i, values in enumerate(value_combinations):
         z = mask_and_metric(data, keys, values, x, y, x_range, y_range, N, **kwargs)
         # mean and variance across y range
-        comp = pd.concat(
-            [z.mean(axis="columns").reset_index(), z.var(axis="columns").reset_index()],
-            axis=1,
-        )
+        comp = pd.concat([z.mean(axis="columns"), z.var(axis="columns")], axis=1)
 
         for key, value in zip(keys, values):
             comp.loc[:, key] = value
         zs = pd.concat([zs, comp])
-    zs = zs.rename(columns={"index": "D", 0: PEAK_DISTANCE})
+    zs = zs.reset_index().rename(
+        columns={"index": "D", 0: PEAK_DISTANCE_MEAN, 1: PEAK_DISTANCE_VAR}
+    )
     return zs
 
 

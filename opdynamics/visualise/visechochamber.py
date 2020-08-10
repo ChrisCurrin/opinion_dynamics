@@ -90,12 +90,16 @@ class VisEchoChamber(object):
         :return: (Figure, Axes) used.
 
         """
+        # noinspection PyProtectedMember
+        p_conn = self.ec.adj_mat._p_conn
+        if p_conn is None:
+            p_conn = self.ec.adj_mat.conn_method(self.ec.adj_mat.conn_kwargs)
         return show_matrix(
-            self.ec.p_conn,
+            p_conn,
             "$P_{ij}$",
             *args,
             # min value must be > 0 when LogNorm is used
-            vmin=np.min(self.ec.p_conn[self.ec.p_conn > 0]),
+            vmin=np.min(p_conn[p_conn > 0]),
             vmax=1,
             title=title,
             **kwargs,
@@ -203,7 +207,7 @@ class VisEchoChamber(object):
             sns.set_palette(sns.color_palette("Set1", n_colors=len(self.ec.result.y)))
             for n in self.ec.result.y[::subsample]:
                 sns.lineplot(
-                    self.ec.result.t, n, ls=ls, mec=mec, lw=lw, ax=ax,
+                    self.ec.result.t, n, ls=ls, mec=mec, lw=lw, ax=ax, **kwargs,
                 )
         ax.set_xlim(0, self.ec.result.t[-1])
         ax.set_xlabel(TIME_SYMBOL)

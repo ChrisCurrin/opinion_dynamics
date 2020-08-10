@@ -24,8 +24,7 @@ def _predictable_interaction(ec, lazy=True):
     from scipy.stats import norm
 
     ec.set_activities(norm, 1, 0)
-    ec.set_connection_probabilities(beta=0.0)
-    ec.set_social_interactions(0.0, lazy=lazy)
+    ec.set_social_interactions(0.0, 0.0, lazy=lazy)
 
 
 class TestEchoChamber(TestCase):
@@ -75,12 +74,25 @@ class TestEchoChamber(TestCase):
         self.assertAlmostEquals(np.mean(self.ec.activities), mu)
         self.assertAlmostEquals(np.std(self.ec.activities), sigma)
 
-    def test_set_connection_probabilities(self):
+    def test_set_social_interactions(self):
+        from opdynamics.networks.socialinteraction import SocialInteraction
+        from scipy.stats import norm
 
+        # this must be first (before setting activities and connection probabilities)
+        with self.assertRaises(RuntimeError):
+            self.ec.set_social_interactions(0, 0, lazy=True)
+
+        # required setup
+        # set activities to all be 1 (all agents interact at every time step)
+        self.ec.set_activities(norm, 1, 0)
+
+        # ------------------------------
+        # test connection probabilities
+        # ------------------------------
         # probabilities must sum to 1 (by definition)
         for beta in np.arange(-2, 2, 0.5):
-            self.ec.set_connection_probabilities(beta=beta)
-            p_conn_i = np.round(np.sum(self.ec.p_conn, axis=1), 4)
+            self.ec.set_social_interactions(beta, 0, lazy=True, update_conn=False)
+            p_conn_i = np.round(np.sum(self.ec.adj_mat._p_conn, axis=1), 4)
             self.assertTrue(
                 np.all(p_conn_i == 1),
                 msg=f"probabilities do not sum to 1 for beta={beta}. p_conn_i={p_conn_i}",
@@ -91,32 +103,21 @@ class TestEchoChamber(TestCase):
                 places=4,
                 msg=f"there should be {self.ec.N} probability distributions for beta={beta}",
             )
-            diag_v = np.diag(self.ec.p_conn)
+            diag_v = np.diag(self.ec.adj_mat._p_conn)
             self.assertTrue(np.all(diag_v == 0), "self-connections must be 0")
 
         # beta = 0 is the same as a uniform distribution
-        self.ec.set_connection_probabilities(beta=0)
+        self.ec.set_social_interactions(0, 0, lazy=True, update_conn=False)
         diag_mat = np.diagflat([1] * self.ec.N).astype(bool)
         self.assertTrue(
-            np.all(np.round(self.ec.p_conn[~diag_mat], 4) == (1 / self.ec.N)),
+            np.all(np.round(self.ec.adj_mat._p_conn[~diag_mat], 4) == (1 / self.ec.N)),
             "expected uniform distribution for beta=0",
         )
-
-    def test_set_social_interactions(self):
-        from opdynamics.networks.socialinteraction import SocialInteraction
-        from scipy.stats import norm
-
-        # this must be first (before setting activities and connection probabilities)
-        with self.assertRaises(RuntimeError):
-            self.ec.set_social_interactions(0, lazy=True)
-
-        # required setup
-        # set activities to all be 1 (all agents interact at every time step)
-        self.ec.set_activities(norm, 1, 0)
-        self.ec.set_connection_probabilities(beta=0)
-
+        # ------------------------------
+        # test lazy computing
+        # ------------------------------
         for lazy in [True, False]:
-            self.ec.set_social_interactions(0, lazy=lazy, t_end=0.5, dt=0.01)
+            self.ec.set_social_interactions(0, 0, lazy=lazy, t_end=0.5, dt=0.01)
             self.assertTrue(isinstance(self.ec.adj_mat, SocialInteraction))
             # get a matrix at time 0
             mat = self.ec.adj_mat[0]
@@ -134,10 +135,11 @@ class TestEchoChamber(TestCase):
                 np.all(mat == mat2),
                 "expected to use the cache to retrieve the same matrix",
             )
-
-        # check for different r's
+        # ------------------------------
+        # test different r's
+        # ------------------------------
         for r in [0, 0.2, 0.5, 0.8, 1]:
-            self.ec.set_social_interactions(r, lazy=True)
+            self.ec.set_social_interactions(0, r, lazy=True)
             mat = self.ec.adj_mat[0]
             total = np.sum(mat)
 
@@ -214,8 +216,7 @@ class TestEchoChamber(TestCase):
 
         # required setup
         self.ec.set_activities(negpowerlaw, gamma, epsilon)
-        self.ec.set_connection_probabilities(beta=beta)
-        self.ec.set_social_interactions(r=r, lazy=True)
+        self.ec.set_social_interactions(beta=beta, r=r, lazy=True)
         self.ec.set_dynamics()
 
         # run network using scipy solver (Rk45) and custom solver (Euler)
@@ -245,8 +246,7 @@ class TestEchoChamber(TestCase):
         self.assertAlmostEqual(np.mean(self.ec.opinions), 0, 2)
 
         self.ec.set_activities(negpowerlaw, gamma, epsilon)
-        self.ec.set_connection_probabilities(beta=beta)
-        self.ec.set_social_interactions(r=r, lazy=True)
+        self.ec.set_social_interactions(beta=beta, r=r, lazy=True)
         self.ec.set_dynamics()
 
         T = 0.02

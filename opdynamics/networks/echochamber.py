@@ -90,7 +90,6 @@ class EchoChamber(object):
         self.opinions: np.ndarray = None
         self.adj_mat: SocialInteraction = None
         self.activities: np.ndarray = None
-        self.p_conn: np.ndarray = None
         self.dy_dt: diffeq = None
         self.result: SolverResult = None
         self.init_opinions()
@@ -138,8 +137,20 @@ class EchoChamber(object):
         self.activities = distribution.rvs(*dist_args, size=size)
         self._dist = f"{distribution.name}{dist_args}"
 
-    def set_connection_probabilities(self, beta: float = 0.0, **kwargs):
-        """For agent `i`, the probability of connecting to agent `j` is a function of the absolute strength of
+    def set_social_interactions(
+        self,
+        beta: float = 0.0,
+        r: float = 0.5,
+        lazy=False,
+        dt: float = None,
+        t_end: float = None,
+        **kwargs,
+    ):
+        """Define the social interactions that occur at each time step.
+
+        Populates `self.adj_mat` (adjacency matrix) that is used in opinion dynamics.
+
+        For agent `i`, the probability of connecting to agent `j` is a function of the absolute strength of
         their opinions and a beta param, relative to all of the differences between an agent i and every other agent.
 
         .. math::
@@ -147,25 +158,6 @@ class EchoChamber(object):
 
         :param beta: Power law decay of connection probability. Decay when beta>0, increase when beta<0.
             When beta=0, then connection probabilities are uniform.
-
-        """
-        p_conn = np.zeros(shape=(self.N, self.N))
-        for i in range(self.N):
-            mag = np.abs(self.opinions[i] - self.opinions)
-            mag[i] = np.nan
-            p_conn[i] = np.power(mag, -beta)
-            p_conn[i, i] = 0
-            p_conn[i] /= np.sum(p_conn[i])
-        self.p_conn = p_conn
-        self._beta = beta
-
-    def set_social_interactions(
-        self, r: float = 0.5, lazy=False, dt: float = None, t_end: float = None
-    ):
-        """Define the social interactions that occur at each time step.
-
-        Populates `self.adj_mat` (adjacency matrix) that is used in opinion dynamics.
-
         :param r: Probability of a mutual interaction [0,1].
         :param lazy: Generate self.adj_mat on-demand during simulation (True) or computer all the interaction matrices
             for all time steps before (False).
@@ -173,12 +165,14 @@ class EchoChamber(object):
             even if the integration of the opinion dynamics occurs at smaller time steps (e.g. with the RK method).
         :param t_end: Last time point. Together with dt, determines the size of the social interaction array.
 
+        :keyword update_conn: Whether to update connection probabilities at every dt (default False).
+
         """
         from opdynamics.networks.socialinteraction import SocialInteraction
 
-        if self.activities is None or self.p_conn is None:
+        if self.activities is None:
             raise RuntimeError(
-                """Activities and connection probabilities need to be set. 
+                """Activities need to be set. 
                                                                                         ec = EchoChamber(...)
                                                                                         ec.set_activities(...)
                                                                                         ec.set_connection_probabilities(...)
@@ -186,7 +180,8 @@ class EchoChamber(object):
                                                                                         """
             )
 
-        self.adj_mat = SocialInteraction(self, r)
+        self.adj_mat = SocialInteraction(self, r, beta=beta, **kwargs)
+        self._beta = beta
         if not lazy:
             if t_end is None or dt is None:
                 raise RuntimeError(
@@ -460,8 +455,6 @@ class EchoChamber(object):
             df_opinions = df_opinions.iloc[-1:]
             df_opinions.name = _name
         df_opinions.index.name = _index_name
-        df_conn = pd.DataFrame(self.p_conn)
-        df_conn.name = "p_conn"
         df_act = pd.Series(self.activities)
         df_act.name = "activities"
         df_adj_mat_accum = pd.DataFrame(self.adj_mat.accumulator)
@@ -475,7 +468,6 @@ class EchoChamber(object):
             warnings.simplefilter("ignore", PerformanceWarning)
             for df in [
                 df_opinions,
-                df_conn,
                 df_act,
                 df_adj_mat_accum,
                 df_adj_mat_last,
@@ -514,7 +506,6 @@ class EchoChamber(object):
 
             cached_results = {
                 "opinions": False,
-                "p_conn": False,
                 "activities": False,
                 "adj_mat_accum": False,
                 "adj_mat_last": False,
@@ -538,13 +529,16 @@ class EchoChamber(object):
                 cached_results["opinions"] = SolverResult(
                     t_arr, y_arr.T, None, None, None, 0, 0, 0, 1, "success", True,
                 )
+                loaded_keys["opinions"] = True
                 for key in keys:
                     df: Union[pd.DataFrame, pd.Series, object] = hdf.get(key)
+                    if key.startswith("/"):
+                        key = key[1:]
                     if "-" in key:
                         # backwards compatible
                         key, p = key.split("-")
                     if "opinions" in key:
-                        pass
+                        continue
                     elif "meta" in key:
                         if df.loc["complevel"] > 0:
                             compressed = True
@@ -553,7 +547,6 @@ class EchoChamber(object):
 
                 if all(loaded_keys.values()):
                     self.result = cached_results["opinions"]
-                    self.p_conn = cached_results["p_conn"]
                     self.activities = cached_results["activities"]
                     self.adj_mat._accumulator = cached_results["adj_mat_accum"]
                     self.adj_mat._last_adj_mat = cached_results["adj_mat_last"]
@@ -570,7 +563,7 @@ class EchoChamber(object):
     def __repr__(self):
         return (
             f"{self.name}={self.__class__.__name__}(N={self.N},m={self.m},K={self.K},alpha={self.alpha},"
-            f"seed={self._seed}) {self._dist} p_conn(beta={self._beta}) adj_mat(r={self.adj_mat.p_mutual_interaction})"
+            f"seed={self._seed}) {self._dist} {self.adj_mat})"
         )
 
 
@@ -578,55 +571,8 @@ class ConnChamber(EchoChamber):
     """Network that calculates new connection probabilities at every time step, optionally specifying the probability,
      ``p_opp``, that an agent will interact with another agent holding an opposing opinion."""
 
-    def set_connection_probabilities(self, beta=0.0, p_opp=0.0, **kwargs):
-        """For agent `i`, the probability of connecting to agent `j` is a function of the absolute strength of
-            their opinions and a beta param, relative to all of the differences between an agent i and every
-            other agent.
-
-            .. math::
-                p_{ij} = \\frac{|x_i - x_j|^{-\\beta}}{\\sum_j |x_i - x_j|^{-\\beta}}
-
-            :param beta: Power law decay of connection probability. Decay when beta>0, increase when beta<0.
-                When beta=0, then connection probabilities are uniform.
-            :param p_opp: Probability of inverting the power-law from decay to gain, making it more likely to connect
-                with an agent holding an opposing opinion and less likely to connect with an agent holding a similar
-                opinion.
-
-        """
-
-        p_conn = np.zeros(shape=(self.N, self.N))
-        if p_opp > 0:
-            betas = self.rn.choice([beta, -beta], size=self.N, p=[p_opp, 1 - p_opp])
-        else:
-            betas = -beta
-        for i in range(self.N):
-            mag = np.abs(self.opinions[i] - self.opinions)
-            mag[i] = np.nan
-            p_conn[i] = np.power(mag, betas)
-            p_conn[i, i] = 0
-            p_conn[i] /= np.sum(p_conn[i])
-        self.p_conn = p_conn
-        self._beta = beta
-        self.p_opp = p_opp
-
-    def set_social_interactions(self, *args, **kwargs):
-        """Same as original, except the dynamics of re-calculating connection probabilities only works when
-        lazy=True."""
-        kwargs["lazy"] = True
-        super().set_social_interactions(*args, **kwargs)
-
-    def set_dynamics(self, *args, **kwargs):
-        """Set the dynamics of network by assigning a function to `self.dy_dt`.
-
-        `self.dy_dt` is a function to be called by the ODE solver, which expects a signature of (t, y, *args).
-        """
-
-        self.dy_dt = dynamic_conn
-
-    def _args(self, *args):
-        return super()._args(
-            *args, self.set_connection_probabilities, self._beta, self.p_opp,
-        )
+    def set_social_interactions(self, *args, p_opp=0, **kwargs):
+        super().set_social_interactions(*args, p_opp=p_opp, **kwargs)
 
 
 class NoisyEchoChamber(EchoChamber):

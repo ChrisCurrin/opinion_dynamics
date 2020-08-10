@@ -91,8 +91,7 @@ def run_params(
     logger.debug(f"additional args={sim_args}\tadditional kwargs={sim_kwargs}")
     _ec = cls(N, m, K, alpha, *sim_args, **sim_kwargs)
     _ec.set_activities(activity, gamma, epsilon, 1, dim=1, **sim_kwargs)
-    _ec.set_connection_probabilities(beta=beta, **sim_kwargs)
-    _ec.set_social_interactions(r=r, lazy=lazy, dt=dt, t_end=T)
+    _ec.set_social_interactions(beta=beta, r=r, lazy=lazy, dt=dt, t_end=T, **sim_kwargs)
     _ec.set_dynamics(*sim_args, **sim_kwargs)
     if not (cache and _ec.load(dt, T)):
         _ec.run_network(dt=dt, t_end=T, method=method)
@@ -215,8 +214,7 @@ def run_periodic_noise(
     name += f"[num={num} interval={interval}]"
     nec = cls(N, m, K, alpha, *args, **kwargs)
     nec.set_activities(activity, gamma, epsilon, 1, dim=1)
-    nec.set_connection_probabilities(beta=beta)
-    nec.set_social_interactions(r=r, lazy=lazy)
+    nec.set_social_interactions(beta=beta, r=r, lazy=lazy, **kwargs)
     nec.set_dynamics(D=0, *args, **kwargs)
 
     # try to hit the cache by creating noise history
@@ -313,7 +311,7 @@ def _comp_unit(
 
 
 def run_product(
-    parameters: Dict[str, Dict[str, Union[list, str]]],
+    range_parameters: Dict[str, Dict[str, Union[list, str]]],
     cls: Type[EC] = EchoChamber,
     cache=False,
     cache_sim=True,
@@ -341,7 +339,7 @@ def run_product(
         df = run_product(D_range, other_vars, **kwargs)
 
 
-    :param parameters: A dictionary of parameters to vary. The product of each parameter's 'range' key is taken.
+    :param range_parameters: A dictionary of parameters to vary. The product of each parameter's 'range' key is taken.
         See example for format.
     :param cls: Class of noise.
     :param cache: Whether to cache individual simulations (default ``False``).
@@ -349,24 +347,28 @@ def run_product(
     :param parallel: Run iterations serially (``False``) or in parallel (``True``). Defaults to ``False``.
         An integer can be passed to explicitly set the pool size, else it is equalt to th number of CPU cores.
         Parallel run uses ``multiprocessing`` library and is not fully tested.
-
+    :param kwargs: Keywords to pass to ``run_params`` or ``run_periodic_noise``, including parameters of the network
+        (e.g. N, m, etc.)
     :return: DataFrame of results in tidy long-form. That is, each column is a variable and each row is an
         observation. Only opinions at the last time point are stored.
     """
     from opdynamics.utils.cache import get_cache_dir
 
     plot_opinion = kwargs.pop("plot_opinion", False)
+    write_mapping = kwargs.pop("write_mapping", False)  # determined by parallel
 
-    keys = list(parameters.keys())
+    keys = list(range_parameters.keys())
 
     # # This allows a mixed-type to be passed where `range` isn't necessary.
     # verbose_other_vars = {
-    #     k: {"range": v, "title": k} for k, v in parameters.items() if type(v) is not dict
+    #     k: {"range": v, "title": k} for k, v in range_parameters.items() if type(v) is not dict
     # }
-    # parameters.update(verbose_other_vars)
+    # range_parameters.update(verbose_other_vars)
 
-    # determine combination of parameters
-    ranges_to_run = set(itertools.product(*[parameters[key]["range"] for key in keys]))
+    # determine combination of range_parameters
+    ranges_to_run = set(
+        itertools.product(*[range_parameters[key]["range"] for key in keys])
+    )
     number_of_combinations = len(ranges_to_run)
     ranges_have_run = set()
 
@@ -425,7 +427,7 @@ def run_product(
         write_file_name = os.path.join(cache_dir, "map.txt")
 
         for nec, params in p.imap(
-            partial(_comp_unit, cls, keys, cache=cache, write_mapping=False),
+            partial(_comp_unit, cls, keys, cache=cache, write_mapping=False, **kwargs),
             ranges_to_run,
         ):
             if cache and nec.save_txt is not None:
@@ -488,7 +490,7 @@ def run_product(
             # load the entire file
             return df
         # mask df to only ranges that were provided
-        for col, value in parameters.items():
+        for col, value in range_parameters.items():
             if col in df.columns:
                 df = df[df[col].isin(value["range"] if "range" in value else value)]
         return df
