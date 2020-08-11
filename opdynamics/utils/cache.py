@@ -4,7 +4,7 @@ from typing import Union
 
 import pandas as pd
 
-from opdynamics.networks.echochamber import EchoChamber
+from opdynamics.networks import EchoChamber
 from opdynamics.utils.constants import DEFAULT_COMPRESSION_LEVEL
 
 _cache_dir = None

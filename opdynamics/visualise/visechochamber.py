@@ -11,7 +11,7 @@ from matplotlib.colors import Normalize, TwoSlopeNorm
 from matplotlib.figure import Figure
 from matplotlib.ticker import MaxNLocator
 
-from opdynamics.networks.echochamber import EchoChamber
+from opdynamics.networks import EchoChamber
 from opdynamics.utils.constants import *
 from opdynamics.utils.decorators import optional_fig_ax
 from opdynamics.utils.plot_utils import use_self_args

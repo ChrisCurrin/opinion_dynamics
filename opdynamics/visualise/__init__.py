@@ -5,6 +5,8 @@ from .dense import (
     show_noise_panel,
     show_opinion_grid,
     show_jointplot,
+    plot_surface_product,
+    plot_surfaces,
 )
 from .visechochamber import VisEchoChamber
 from .vissimulation import (
@@ -24,4 +26,6 @@ __all__ = [
     "show_simulation_range",
     "show_periodic_noise",
     "show_simulation_results",
+    "plot_surface_product",
+    "plot_surfaces",
 ]

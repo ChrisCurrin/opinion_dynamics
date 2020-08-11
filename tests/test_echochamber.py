@@ -6,7 +6,7 @@ import numpy as np
 
 from unittest import TestCase
 
-from opdynamics.networks.echochamber import EchoChamber, NoisyEchoChamber
+from opdynamics.networks import EchoChamber, NoisyEchoChamber
 
 # noinspection PyUnusedName
 from opdynamics.integrate.types import OdeResult
@@ -75,7 +75,7 @@ class TestEchoChamber(TestCase):
         self.assertAlmostEquals(np.std(self.ec.activities), sigma)
 
     def test_set_social_interactions(self):
-        from opdynamics.networks.socialinteraction import SocialInteraction
+        from opdynamics.dynamics.socialinteraction import SocialInteraction
         from scipy.stats import norm
 
         # this must be first (before setting activities and connection probabilities)

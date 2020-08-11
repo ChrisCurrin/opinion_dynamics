@@ -1,14 +1,21 @@
 """Run opdynamics using the command line with `python -m opdynamics`"""
 import argparse
-
 import logging
 
+# noinspection PyProtectedMember
 from scipy.integrate._ivp.ivp import METHODS as SCIPY_METHODS
 
-from opdynamics.networks.echochamber import EchoChamber, NoisyEchoChamber
-from opdynamics.simulation import run_params
+from opdynamics.networks import (
+    ConnChamber,
+    ContrastChamber,
+    EchoChamber,
+    OpenChamber,
+    SampleChamber,
+)
+from opdynamics.simulation import run_product
 from opdynamics.integrate.solvers import ODE_INTEGRATORS, SDE_INTEGRATORS
 from opdynamics.utils.distributions import negpowerlaw
+from opdynamics.visualise import show_simulation_results
 
 
 class Formatter(argparse.HelpFormatter):
@@ -41,8 +48,15 @@ class Formatter(argparse.HelpFormatter):
 
 
 activity_distributions = {"negpowerlaw": negpowerlaw}
-
+ec_types = {
+    "EchoChamber": EchoChamber,
+    "SampleChamber": SampleChamber,
+    "ConnChamber": ConnChamber,
+    "OpenChamber": OpenChamber,
+    "ContrastChamber": ContrastChamber,
+}
 # defaults
+N = 1000
 m = 10  # number of other agents to interact with
 alpha = 2.0  # controversialness of issue (sigmoidal shape)
 K = 3.0  # social interaction strength
@@ -58,12 +72,12 @@ D = 0.01  # noise in echo chamber dynamics
 dt = 0.01
 t_end = 0.5
 
+# noinspection PyTypeChecker
 parser = argparse.ArgumentParser(
     formatter_class=Formatter, description="Run a network of agents."
 )
-# required = parser.add_argument_group("required arguments")
 parser.add_argument(
-    "N", type=int, help="Number of agents in the echo chamber.",
+    "N", type=int, default=N, help="Number of agents in the echo chamber.",
 )
 parser.add_argument(
     "m", type=int, default=m, help="Number of other agents to interact with.",
@@ -73,14 +87,30 @@ parser.add_argument(
 )
 parser.add_argument("K", type=float, default=K, help="Social interaction strength.")
 parser.add_argument(
-    "-D", "--noise", nargs="*", type=float, default=None, help="Noise in dynamics.",
+    "-D",
+    "--noise",
+    nargs="*",
+    metavar="D",
+    type=float,
+    default=[0.0],
+    help="Nudge strength.",
 )
 parser.add_argument(
-    "--noise_source",
+    "-n",
+    "--sample_size",
+    nargs="*",
+    metavar="n",
+    type=float,
+    default=[1.0],
+    help="Sample size.",
+)
+parser.add_argument(
+    "-cls",
+    "--network-type",
     type=str,
-    default="external",
-    choices=["internal", "external"],
-    help="Noise in dynamics.",
+    default="EchoChamber",
+    choices=ec_types.keys(),
+    help="Type of network dynamics.",
 )
 parser.add_argument(
     "-a",
@@ -192,11 +222,6 @@ for i in range(1, len(args.activity)):
         # overwrite defaults
         dist_args[i - 1] = arg
 
-if args.method is None:
-    method = "Euler-Maruyama" if args.noise else "RK45"
-else:
-    method = args.method
-
 kwargs = dict(
     N=args.N,
     m=args.m,
@@ -209,65 +234,63 @@ kwargs = dict(
     dt=args.dt,
     T=args.T,
     r=args.r,
-    method=method,
+    D=args.D,
+    sample_size=args.n,
+    method=args.method,
     plot_opinion=args.plot,
     cache="all",
 )
-if args.noise:
-    ec_type = NoisyEchoChamber
-    if len(args.noise) == 1:
-        kwargs["D"] = args.noise[0]
-    else:
-        kwargs["D"] = args.noise
-else:
-    ec_type = EchoChamber
+
+ec_type = ec_types[args.cls]
 
 # Run simulation
-if type(kwargs["D"]) is list:
-    D_range = kwargs.pop("D")
-    run_noise_range(D_range, **kwargs)
-else:
-    ec = run_params(ec_type, **kwargs)
+D_range = args.D
+range_parameters = {"D": {"range": D_range}, "title": "D"}
+ecs = run_product(
+    range_parameters, cls=ec_type, cache=True, cache_sim=False, parallel=True, **kwargs,
+)
 
 if args.plot:
     import matplotlib.pyplot as plt
 
-    if args.save:
-        figs = plt.get_fignums()
-        # default to pdf
-        fmt = args.save if type(args.save) is str else "pdf"
-        # get title from passed arguments (ignore None and unwanted keys)
-        args_kv = sorted(args.__dict__.items())
-        title = ",".join(
-            [
-                f"{k}={v}"
-                for k, v in args_kv
-                if v is not None and k not in ["save", "verbose", "plot"]
-            ]
-        )
-        for fig_num in figs:
-            fig: plt.Figure = plt.figure(fig_num)
-            # add title directly to figure (can be removed in vector-editing software for non-rasterized formats)
-            fig.suptitle(title, fontsize="xx-small")
-            # try find an ax title to use to name the file
-            name = "summary" if args.plot == "summary" else None
-            for ax in fig.axes:
-                if fmt == "pdf":
-                    # speed up saving and conserve space
-                    ax.set_rasterized(True)
+    for ec in ecs:
+        show_simulation_results(ec, args.plot)
+        if args.save:
+            figs = plt.get_fignums()
+            # default to pdf
+            fmt = args.save if type(args.save) is str else "pdf"
+            # get title from passed arguments (ignore None and unwanted keys)
+            args_kv = sorted(args.__dict__.items())
+            title = ",".join(
+                [
+                    f"{k}={v}"
+                    for k, v in args_kv
+                    if v is not None and k not in ["save", "verbose", "plot"]
+                ]
+            )
+            for fig_num in figs:
+                fig: plt.Figure = plt.figure(fig_num)
+                # add title directly to figure (can be removed in vector-editing software for non-rasterized formats)
+                fig.suptitle(title, fontsize="xx-small")
+                # try find an ax title to use to name the file
+                name = "summary" if args.plot == "summary" else None
+                for ax in fig.axes:
+                    if fmt == "pdf":
+                        # speed up saving and conserve space
+                        ax.set_rasterized(True)
+                    if name is None or name == "":
+                        name = ax.get_title()
                 if name is None or name == "":
-                    name = ax.get_title()
-            if name is None or name == "":
-                name = fig_num
-            else:
-                name = "_".join(name.lower().split())
+                    name = fig_num
+                else:
+                    name = "_".join(name.lower().split())
 
-            filename = f"{ec.name}_{title}_{name}.{fmt}"
-            logger.info(f"saving '{filename}'")
-            try:
-                fig.savefig(filename, dpi=600)
-            except IOError:
-                # probably file name too long, remove the long title part
-                fig.savefig(f"{ec.name}_{name}.{fmt}", dpi=600)
+                filename = f"{ec.name}_{title}_{name}.{fmt}"
+                logger.info(f"saving '{filename}'")
+                try:
+                    fig.savefig(filename, dpi=600)
+                except IOError:
+                    # probably file name too long, remove the long title part
+                    fig.savefig(f"{ec.name}_{name}.{fmt}", dpi=600)
     logger.info("showing plots")
     plt.show()

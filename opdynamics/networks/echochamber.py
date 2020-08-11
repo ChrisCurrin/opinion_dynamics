@@ -1,4 +1,6 @@
-""""""
+"""
+
+"""
 import copy
 import os
 
@@ -12,7 +14,7 @@ from numpy.random import default_rng
 from pandas.errors import PerformanceWarning
 from scipy.stats import powerlaw
 
-from opdynamics.dynamics.dy_dt import dy_dt, dynamic_conn, sample_dy_dt
+from opdynamics.dynamics.opinions import dy_dt, sample_dy_dt
 from opdynamics.metrics.opinions import (
     distribution_modality,
     nearest_neighbours,
@@ -61,7 +63,7 @@ class EchoChamber(object):
         *args,
         **kwargs,
     ):
-        from opdynamics.networks.socialinteraction import SocialInteraction
+        from opdynamics.dynamics.socialinteraction import SocialInteraction
 
         # create a random number generator for this object (to be thread-safe)
         self.rn = default_rng(seed)
@@ -168,7 +170,7 @@ class EchoChamber(object):
         :keyword update_conn: Whether to update connection probabilities at every dt (default False).
 
         """
-        from opdynamics.networks.socialinteraction import SocialInteraction
+        from opdynamics.dynamics.socialinteraction import SocialInteraction
 
         if self.activities is None:
             raise RuntimeError(

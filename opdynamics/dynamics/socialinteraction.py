@@ -1,3 +1,20 @@
+"""
+# Activity-driven (AD) dynamics
+
+------
+
+## Methods
+====
+
+* get connection probabilities from opinions and a beta factor
+* get social interaction matrix from an activity threshold, reciprocity factor, and connection probability matrix
+
+## Classes
+====
+- ``SocialInteraction``
+    Interface to calculate connection probabilities and social interaction matrix at discrete time steps
+
+"""
 from functools import lru_cache
 import logging
 
@@ -5,7 +22,7 @@ import json
 import numpy as np
 from tqdm import tqdm
 
-from opdynamics.networks.echochamber import EchoChamber
+from opdynamics.networks import EchoChamber
 from opdynamics.utils.decorators import hashable
 
 logger = logging.getLogger("social interaction")
@@ -104,7 +121,7 @@ def get_social_interaction(
         interactions are mutual).
         If 1: create symmetric matrix by not distinguishing between i->j  and j->i
         If 0: a non-symmetric matrix means an agent ignores external interactions
-    :param update_conn: whether to updated connection probabilities during this call
+    :param p_conn: connection probabilities to use
     :return: Adjacency matrix for interactions between agents.
     :rtype: np.ndarray
     """

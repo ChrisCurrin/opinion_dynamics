@@ -2,8 +2,8 @@ import numpy as np
 
 from unittest import TestCase
 
-from opdynamics.networks.echochamber import EchoChamber
-from opdynamics.networks.socialinteraction import (
+from opdynamics.networks import EchoChamber
+from opdynamics.dynamics.socialinteraction import (
     get_social_interaction,
     get_social_interaction_exp,
 )

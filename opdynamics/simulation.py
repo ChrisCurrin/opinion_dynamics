@@ -13,7 +13,7 @@ from tqdm import tqdm, trange
 from typing import Callable, Dict, Iterable, List, Type, TypeVar, Union
 
 from opdynamics.utils.cache import save_results
-from opdynamics.networks.echochamber import EchoChamber, OpenChamber
+from opdynamics.networks import EchoChamber, OpenChamber
 from opdynamics.utils.distributions import negpowerlaw
 from opdynamics.visualise import (
     show_periodic_noise,
