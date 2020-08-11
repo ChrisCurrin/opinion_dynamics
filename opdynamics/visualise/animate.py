@@ -13,13 +13,14 @@ from opdynamics.networks import EchoChamber
 from opdynamics.utils.decorators import optional_fig_ax
 from opdynamics.utils.distributions import negpowerlaw
 from opdynamics.utils.plot_utils import get_equal_limits
-from opdynamics.visualise import VisEchoChamber
 
 logger = logging.getLogger("animate")
 
 
 class Animator(object):
     def __init__(self, ec: EchoChamber, vis_kwargs=None):
+        from opdynamics.visualise import VisEchoChamber
+
         self.ec = ec
         self.vis = VisEchoChamber(ec)
         self.vis_kwargs = vis_kwargs or {}
