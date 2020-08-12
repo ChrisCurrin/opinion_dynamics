@@ -389,7 +389,7 @@ def run_product(
             # noinspection PyTypeChecker
             chunks: Iterable = pd.read_hdf(file_name, iterator=True, chunksize=50000)
             for chunk in chunks:
-                ranges_have_run.update(set(chunk.groupby(col_names).count().index))
+                ranges_have_run.update(chunk.groupby(col_names).count().index)
         ranges_to_run = {x for x in ranges_to_run if x not in ranges_have_run}
     # list to store EchoChamber objects (only if not cache_sim)
     nec_list = []

@@ -34,6 +34,6 @@ ABS_MEAN_FINAL_OPINION = math_fix(f"$|\langle {OPINION_SYMBOL}_{{f}} \\rangle|$"
 MEAN_NEAREST_NEIGHBOUR = math_fix(f"$\langle {OPINION_SYMBOL} \\rangle^{{NN}}$")
 SAMPLE_MEAN = "$\overline{X}_n$"
 MEAN = MU = "$\mu$"
-PEAK_DISTANCE = "$\Lambda$"
+PEAK_DISTANCE = math_fix(f"$\Lambda_{OPINION_SYMBOL}$")
 PEAK_DISTANCE_MEAN = math_fix(f"$\\langle {PEAK_DISTANCE} \\rangle$")
-PEAK_DISTANCE_VAR = math_fix(f"$\\sigma({PEAK_DISTANCE})$")
+PEAK_DISTANCE_VAR = math_fix(f"$\\sigma^2_{{{PEAK_DISTANCE}}}$")
