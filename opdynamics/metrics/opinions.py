@@ -51,7 +51,7 @@ def sample_means(
 
     :param opinions: Opinions to sample from. If ``None``, use ``result.y`` array.
     :param sample_size: Pick this many agents' opinions (i.e. a sample).
-    :param num_samples: Number of sample to perform.
+    :param num_samples: Number of samples to perform.
     :param rng: Random number generator to use.
 
     :return: Array of means (size equal to ``num_samples``).

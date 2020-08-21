@@ -88,6 +88,10 @@ Update `environment.yml` using `conda env export --from-history > environment.ym
 
 ---
 ## TODO:
+- [x] Equations:
+    - [x] <img src="https://latex.codecogs.com/svg.latex?D \cdot \tanh(\sqrt{n} \cdot (\bar{X_n} - \langle x \rangle))"/>
+    - [x] <img src="https://latex.codecogs.com/svg.latex?D \sqrt{n} \cdot \tanh(\bar{X_n} - \langle x \rangle)"/>
+    - [x] <img src="https://latex.codecogs.com/svg.latex?D \cdot \tanh(x_k - \bar{X_n})"/> -> 1 other agent versus sample mean of other agents
 - [x] Allow `simulation.run_product` to be run asyncronously.
 - [x] Create metric for determining whether opinions are polarised or uniform. 
 - [x] Add `sample_size` to `SampleChamber.__repr__` 

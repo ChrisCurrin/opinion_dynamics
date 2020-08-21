@@ -581,6 +581,8 @@ class NoisyEchoChamber(EchoChamber):
     def __init__(self, *args, name="noisy echochamber", **kwargs):
         super().__init__(*args, name=name, **kwargs)
         self._D_hist = []
+        self.D: float = 0
+        self.super_dy_dt: Callable = None
 
     def set_dynamics(self, D=0.01, *args, **kwargs):
         """Network with noise.
@@ -590,6 +592,7 @@ class NoisyEchoChamber(EchoChamber):
         """
         super().set_dynamics(*args, **kwargs)
         self._D_hist.append((self.current_time, D))
+        self.D = D
 
     def __repr__(self):
         d_hist = [f"D={_D:.5f} from {_t:.5f}" for _t, _D in self._D_hist]
@@ -734,26 +737,36 @@ class SampleChamber(NoisyEchoChamber):
     # noinspection PyTypeChecker
     def __init__(self, *args, name="sample chamber", **kwargs):
         super().__init__(*args, name=name, **kwargs)
-        self.sample_size: int = 0
+        self._sample_size: int = 0
         self._sample_means: float = 0.0
+        self._sample_method: (str, Callable) = None
 
-    def set_dynamics(self, D=0, sample_size=20, *args, **kwargs):
+    def set_dynamics(
+        self, D=0, sample_size=20, sample_method: str = None, *args, **kwargs
+    ):
         """Set the dynamics of network by assigning a function to `self.dy_dt`.
         """
+        from opdynamics.dynamics.opinions import clt_methods
+
         super().set_dynamics(D, *args, **kwargs)
         self.super_dy_dt = self.dy_dt
 
         # object to store sample_means value at distinct time points
         self._sample_means = 0
-        self.D = D
-        self.sample_size = sample_size
+        self._sample_size = sample_size
         self.dy_dt = sample_dy_dt
+        assert (
+            sample_method in clt_methods
+        ), f"sample_method must be one of '{clt_methods.keys()}'"
+        self._sample_method = (sample_method, clt_methods[sample_method])
 
     def _args(self, *args):
-        return super()._args(*args, self, self.sample_size, self.N)
+        return super()._args(
+            *args, self._sample_method[1], self, self._sample_size, self.N
+        )
 
     def __repr__(self):
-        return f"{super().__repr__()} n={self.sample_size}"
+        return f"{super().__repr__()} sample_method={self._sample_method[0]} n={self._sample_size}"
 
 
 def example():

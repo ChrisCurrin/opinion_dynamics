@@ -26,10 +26,10 @@ def dy_dt(t: float, y: np.ndarray, *args) -> np.ndarray:
     return -y.T + K * np.sum(At * np.tanh(alpha * y.T), axis=1)
 
 
-def _new_clt_sample(ec, y: np.ndarray, n: int, num_samples: int):
+def _basic_clt_sample(ec, y: np.ndarray, n: int, num_samples: int):
     """
     method to re-assign self._sample_means
-    :math:`\\sqrt {n}\\left({\\bar{X}}_{n}-\\mu \\right) \\rightarrow \mathcal{N}\\left(0,\\sigma ^{2}\\right)`
+    :math:`\\sqrt {n}\\left(\\bar{X}_{n}-\\mu \\right) \\rightarrow \\mathcal{N}\\left(0,\\sigma ^{2}\\right)`
 
     where :math:`X` is a random sample and :math:`\\bar{X}_{n}` is the sample mean for :math:`n` random samples.
 
@@ -44,6 +44,71 @@ def _new_clt_sample(ec, y: np.ndarray, n: int, num_samples: int):
     )
 
 
+def _outer_sigmoid_clt_sample(ec, y: np.ndarray, n: int, num_samples: int):
+    """
+    method to re-assign self._sample_means
+    :math:`\\tanh{(\\sqrt{n}\\left(\\bar{X}_{n}-\\mu \\right)})`
+
+    where :math:`X` is a random sample and :math:`\\bar{X}_{n}` is the sample mean for :math:`n` random samples.
+
+    :param ec: EchoChamber object to store sample means (and to use it's random number generator)
+    :type ec: opdynamics.networks.EchoChamber
+    :param y: opinions
+    :param n: sample size
+    :param num_samples: number of samples
+    """
+    ec._sample_means = np.tanh(
+        np.sqrt(n)
+        * (sample_means(y, n, num_samples=num_samples, rng=ec.rn) - np.mean(y))
+    )
+
+
+def _inner_sigmoid_clt_sample(ec, y: np.ndarray, n: int, num_samples: int):
+    """
+    method to re-assign self._sample_means
+    :math:`\\tanh{(\\sqrt{n}\\left(\\bar{X}_{n}-\\mu \\right)})`
+
+    where :math:`X` is a random sample and :math:`\\bar{X}_{n}` is the sample mean for :math:`n` random samples.
+
+    :param ec: EchoChamber object to store sample means (and to use it's random number generator)
+    :type ec: opdynamics.networks.EchoChamber
+    :param y: opinions
+    :param n: sample size
+    :param num_samples: number of samples
+    """
+    ec._sample_means = np.sqrt(n) * np.tanh(
+        sample_means(y, n, num_samples=num_samples, rng=ec.rn) - np.mean(y)
+    )
+
+
+def _subsample_clt_sample(ec, y: np.ndarray, n: int, num_samples: int):
+    """
+    method to re-assign self._sample_means
+    :math:`D \\cdot \\tanh(x_k - \\bar{X_n})`
+
+    where :math:`X` is a random sample and :math:`\\bar{X}_{n}` is the sample mean for :math:`n` random samples.
+
+    :param ec: EchoChamber object to store sample means (and to use it's random number generator)
+    :type ec: opdynamics.networks.EchoChamber
+    :param y: opinions
+    :param n: sample size
+    :param num_samples: number of samples
+    """
+    ec._sample_means = np.sqrt(n) * (
+        sample_means(y, 1, num_samples=num_samples, rng=ec.rn)
+        - sample_means(y, n, num_samples=num_samples, rng=ec.rn)
+    )
+
+
+clt_methods = {
+    "basic": _basic_clt_sample,
+    "outer_sigmoid": _outer_sigmoid_clt_sample,
+    "inner_sigmoid": _inner_sigmoid_clt_sample,
+    "subsample": _subsample_clt_sample,
+}
+clt_methods.setdefault(None, _basic_clt_sample)
+
+
 def sample_dy_dt(t: float, y: np.ndarray, *all_args) -> np.ndarray:
     """Opinion dynamics with random opinion samples.
 
@@ -55,11 +120,11 @@ def sample_dy_dt(t: float, y: np.ndarray, *all_args) -> np.ndarray:
     where :math:`X` is a random sample and :math:`\\bar{X}_{n}` is the sample mean for :math:`n` random samples.
 
     """
-    ec, n, num_samples, *other_args = all_args
+    clt_sample_method, ec, n, num_samples, *other_args = all_args
     if type(n) is tuple:
         # choose between low and high values (randint not implemented for default_rng)
         n = ec.rn.choice(np.arange(n[0], n[1], dtype=int))
     if np.round(t % other_args[-1], 6) == 0:
         # calculate sample means every explicit dt (other_args[-1]) - independent of solver's dt
-        _new_clt_sample(ec, y, n, num_samples)
+        clt_sample_method(ec, y, n, num_samples)
     return ec.super_dy_dt(t, y, *other_args) + ec.D * ec._sample_means

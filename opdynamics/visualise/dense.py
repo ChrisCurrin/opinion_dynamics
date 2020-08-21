@@ -21,7 +21,12 @@ from typing import Callable, Collection
 from opdynamics.metrics.opinions import distribution_modality, mask_and_metric
 from opdynamics.utils.cache import get_cache_dir
 from opdynamics.utils.decorators import hash_repeat, hashable, optional_fig_ax
-from opdynamics.utils.plot_utils import df_multi_mask, get_equal_limits, colorbar_inset
+from opdynamics.utils.plot_utils import (
+    df_multi_mask,
+    get_equal_limits,
+    colorbar_inset,
+    move_cbar_label_to_title,
+)
 from opdynamics.utils.constants import *
 
 logger = logging.getLogger("dense plots")
@@ -419,8 +424,10 @@ def plot_surfaces(
         sharex="all",
         sharey="all",
         gridspec_kw={"width_ratios": [1] * ncols + [0.1]},
+        figsize=(3, 2.5),
+        dpi=200,
     )
-    fig.subplots_adjust(wspace=0.2, hspace=0.05)
+    fig.subplots_adjust(wspace=0.2, hspace=0.2, left=0.2, bottom=0.2, right=0.8)
 
     # create a large axis for the colorbar in the last column
     cbar_axs = axs[:, -1]
@@ -430,7 +437,7 @@ def plot_surfaces(
 
     cbar_ax = fig.add_subplot(cbar_gs[:, -1])
     cmap = kwargs.pop("cmap", "Spectral_r")
-    norm = kwargs.pop("norm", LogNorm(vmin=1, vmax=10))
+    norm = kwargs.pop("norm", LogNorm(vmin=1, vmax=5))
 
     N = params.get("N", 1000)
 
@@ -464,9 +471,12 @@ def plot_surfaces(
             # smoothing
             ZZ = (
                 pd.DataFrame(ZZ)
-                .rolling(100, win_type="triang", center=True)
+                .loc[::-1, ::-1]
+                .rolling(50, win_type="triang", center=True, axis=1)
                 .mean()
-                .interpolate("cubic")
+                .rolling(50, win_type="triang", center=True, axis=0)
+                .mean()
+                .loc[::-1, ::-1]
             )
 
             logger.debug(f"\t plot")
@@ -490,6 +500,7 @@ def plot_surfaces(
     if mesh is not None:
         cbar = fig.colorbar(mesh, cax=cbar_ax, cmap=cmap, norm=norm)
         cbar.set_label(PEAK_DISTANCE)
+        move_cbar_label_to_title(cbar_ax)
 
     return zs
 
@@ -550,9 +561,12 @@ def plot_surface_product(
         # smoothing
         ZZ = (
             pd.DataFrame(ZZ)
-            .rolling(100, win_type="triang", center=True)
+            .loc[::-1, ::-1]
+            .rolling(50, win_type="triang", center=True, axis=1)
             .mean()
-            .interpolate("cubic")
+            .rolling(50, win_type="triang", center=True, axis=0)
+            .mean()
+            .loc[::-1, ::-1]
         )
 
         logger.debug(f"\t plot")
