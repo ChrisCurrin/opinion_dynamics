@@ -94,10 +94,9 @@ def _subsample_clt_sample(ec, y: np.ndarray, n: int, num_samples: int):
     :param n: sample size
     :param num_samples: number of samples
     """
-    ec._sample_means = np.sqrt(n) * (
-        sample_means(y, 1, num_samples=num_samples, rng=ec.rn)
-        - sample_means(y, n, num_samples=num_samples, rng=ec.rn)
-    )
+    ec._sample_means = sample_means(
+        y, 1, num_samples=num_samples, rng=ec.rn
+    ) - sample_means(y, n, num_samples=num_samples, rng=ec.rn)
 
 
 clt_methods = {

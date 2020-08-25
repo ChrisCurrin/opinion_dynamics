@@ -15,6 +15,7 @@
     Interface to calculate connection probabilities and social interaction matrix at discrete time steps
 
 """
+import inspect
 from functools import lru_cache
 import logging
 
@@ -23,6 +24,7 @@ import numpy as np
 from tqdm import tqdm
 
 from opdynamics.networks import EchoChamber
+from opdynamics.utils.cache import NpEncoder
 from opdynamics.utils.decorators import hashable
 
 logger = logging.getLogger("social interaction")
@@ -240,10 +242,19 @@ class SocialInteraction(object):
         self.ec = ec
         self.p_mutual_interaction = p_mutual_interaction
         self.conn_method = conn_method
+        # get (keyword) arguments for the connection probability method being used
+        required_conn_kwargs = set(inspect.getfullargspec(conn_method)[0])
+        if "ec" in required_conn_kwargs:
+            required_conn_kwargs.remove("ec")
+        # only save required (keyword) arguments
+        conn_kwargs = {
+            k: v for k, v in conn_kwargs.items() if k in required_conn_kwargs
+        }
         self.conn_kwargs = conn_kwargs
         self._p_conn: np.ndarray = self.conn_method(
             ec, **conn_kwargs
-        ) if update_conn else None
+        ) if not update_conn else None
+        self._update_conn = update_conn
         self._accumulator = np.zeros((ec.N, ec.N), dtype=int)
         self._last_adj_mat: np.ndarray = None
         self._time_mat: np.ndarray = None
@@ -260,7 +271,7 @@ class SocialInteraction(object):
         self._time_mat = np.zeros((len(t_arr), self.ec.N, self.ec.N), dtype=int)
         active_thresholds = self.ec.rn.random(size=len(t_arr))
         for t_idx, t_point in tqdm(enumerate(t_arr)):
-            if self.update_conn:
+            if self._update_conn:
                 self._p_conn = self.conn_method(self.ec, **self.conn_kwargs)
             self._time_mat[t_idx, :, :] = get_social_interaction(
                 self.ec,
@@ -293,7 +304,7 @@ class SocialInteraction(object):
 
         if item == -1:
             return self._last_adj_mat
-        if self.update_conn:
+        if self._update_conn:
             self._p_conn = self.conn_method(self.ec, **self.conn_kwargs)
         self._last_adj_mat = get_social_interaction(
             self.ec, self.ec.rn.random(), self.p_mutual_interaction, self._p_conn
@@ -304,5 +315,6 @@ class SocialInteraction(object):
     def __repr__(self):
         return (
             f"Aij[r={self.p_mutual_interaction}] "
-            f"{self.conn_method.__name__}({json.dumps(self.conn_kwargs, sort_keys=True, separators=(',', ':'))})"
+            f"{self.conn_method.__name__}("
+            f"{json.dumps(self.conn_kwargs, sort_keys=True, separators=(',', ':'), cls=NpEncoder)})"
         )

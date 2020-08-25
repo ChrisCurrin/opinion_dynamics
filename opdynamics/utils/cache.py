@@ -103,3 +103,26 @@ def save_results(file_name: str, ec: EchoChamber, **kwargs) -> None:
         df_builder.append({"i": y_idx, "opinion": opinion, **kwargs})
     with pd.HDFStore(file_name) as store:
         store.append("df", pd.DataFrame(df_builder))
+
+
+class NpEncoder(json.JSONEncoder):
+    """Numpy Json encoder
+
+    .. code-block :: python
+
+        `json.dumps(data, cls=NpEncoder)`
+
+    see also:
+    https://stackoverflow.com/a/57915246
+
+    """
+
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        else:
+            return super(NpEncoder, self).default(obj)

@@ -210,12 +210,7 @@ class EchoChamber(object):
         return 0 if not self.has_results else self.result.t[-1]
 
     def _setup_run(self, t_end: float = 0.05) -> Tuple[float, float]:
-        if (
-            self.activities is None
-            or self.p_conn is None
-            or self.adj_mat is None
-            or self.dy_dt is None
-        ):
+        if self.activities is None or self.adj_mat is None or self.dy_dt is None:
             raise ECSetupError
 
         if not self.has_results:
@@ -755,10 +750,16 @@ class SampleChamber(NoisyEchoChamber):
         self._sample_means = 0
         self._sample_size = sample_size
         self.dy_dt = sample_dy_dt
-        assert (
-            sample_method in clt_methods
-        ), f"sample_method must be one of '{clt_methods.keys()}'"
-        self._sample_method = (sample_method, clt_methods[sample_method])
+        if type(sample_method) is str:
+            assert (
+                sample_method in clt_methods
+            ), f"sample_method must be one of '{clt_methods.keys()}'"
+            self._sample_method = (sample_method, clt_methods[sample_method])
+        else:
+            try:
+                self._sample_method = (sample_method.__name__, sample_method)
+            except KeyError:
+                logger.error(f"`sample_method` must be a `str` or callable function")
 
     def _args(self, *args):
         return super()._args(
