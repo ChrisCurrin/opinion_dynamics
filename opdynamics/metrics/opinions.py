@@ -6,6 +6,8 @@ import logging
 import os
 
 import json
+from collections import Callable
+
 import numpy as np
 import pandas as pd
 
@@ -147,13 +149,15 @@ def distribution_modality(opinions: np.ndarray, bin_width: float = 0.1) -> float
 
     hist, bin_edges = np.histogram(
         pop1,
-        bins=np.round(np.arange(np.floor(np.min(pop1)), 0.01, bin_width), 1),
+        # bins=np.round(np.arange(np.floor(np.min(pop1)), 0.01, bin_width), 1),
+        bins="auto",
         range=(np.floor(np.min(pop1)), 0),
     )
     max_opinion_pop1 = bin_edges[1 + np.argmax(hist)]
     hist, bin_edges = np.histogram(
         pop2,
-        bins=np.round(np.arange(0, np.ceil(np.max(pop2)), bin_width), 1),
+        # bins=np.round(np.arange(0, np.ceil(np.max(pop2)), bin_width), 1),
+        bins="auto",
         range=(0, np.ceil(np.max(pop2))),
     )
     max_opinion_pop2 = bin_edges[1 + np.argmax(hist)]
@@ -188,7 +192,18 @@ def calc_distribution_differences(
     return zs
 
 
-def mask_and_metric(data, keys, values, x, y, x_range, y_range, N, **kwargs):
+def mask_and_metric(
+    data,
+    keys,
+    values,
+    x,
+    y,
+    x_range,
+    y_range,
+    N,
+    metric: Callable = distribution_modality,
+    **kwargs,
+):
     from opdynamics.utils.cache import get_cache_dir
     from opdynamics.utils.decorators import hash_repeat
     from opdynamics.utils.plot_utils import df_multi_mask
@@ -210,7 +225,7 @@ def mask_and_metric(data, keys, values, x, y, x_range, y_range, N, **kwargs):
         if isinstance(df, pd.DataFrame):
             for x_val, y_val in itertools.product(x_range, y_range):
                 opinions = df_multi_mask(df, {x: x_val, y: y_val})["opinion"]
-                z.loc[x_val, y_val] = distribution_modality(opinions, **kwargs)
+                z.loc[x_val, y_val] = metric(opinions, **kwargs)
         else:
             for start, stop, arrs in df.sort([x, y]).to_arrays(
                 column_names=[x, y, "opinion"], chunk_size=N
@@ -225,7 +240,7 @@ def mask_and_metric(data, keys, values, x, y, x_range, y_range, N, **kwargs):
                         f"\n{_xs} # {_ys}"
                     )
                 if _xs[0] in x_range and _ys[0] in y_range:
-                    z.loc[_xs[0], _ys[0]] = distribution_modality(opinions, **kwargs)
+                    z.loc[_xs[0], _ys[0]] = metric(opinions, **kwargs)
         z.to_hdf(file_name, key="df")
         logger.debug(f"\t saved")
     return z
