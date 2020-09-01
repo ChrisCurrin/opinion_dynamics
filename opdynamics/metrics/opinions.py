@@ -133,7 +133,7 @@ def _ashmans_d(opinions: np.ndarray) -> float:
 
 
 # noinspection NonAsciiCharacters
-def distribution_modality(opinions: np.ndarray, bin_width: float = 0.1) -> float:
+def distribution_modality(opinions: np.ndarray, bin_width: float = "auto") -> float:
     """Determine the distance between population density peaks.
     Closer to 0 indicates a unimodal distribution.
 
@@ -146,21 +146,21 @@ def distribution_modality(opinions: np.ndarray, bin_width: float = 0.1) -> float
     if pop1.size <= thresh or pop2.size <= thresh:
         # return the negative absolute mean value for the radicalised population
         return -1 * np.max([np.abs(np.mean(pop1)), np.abs(np.mean(pop2))])
-
-    hist, bin_edges = np.histogram(
-        pop1,
-        # bins=np.round(np.arange(np.floor(np.min(pop1)), 0.01, bin_width), 1),
-        bins="auto",
-        range=(np.floor(np.min(pop1)), 0),
+    bins = (
+        "auto"
+        if bin_width == "auto"
+        else np.round(np.arange(np.floor(np.min(pop1)), bin_width, bin_width), 1)
     )
+    hist, bin_edges = np.histogram(pop1, bins=bins, range=(np.floor(np.min(pop1)), 0),)
     max_opinion_pop1 = bin_edges[1 + np.argmax(hist)]
-    hist, bin_edges = np.histogram(
-        pop2,
-        # bins=np.round(np.arange(0, np.ceil(np.max(pop2)), bin_width), 1),
-        bins="auto",
-        range=(0, np.ceil(np.max(pop2))),
+
+    bins = (
+        "auto"
+        if bin_width == "auto"
+        else np.round(np.arange(0, np.ceil(np.max(pop2)), bin_width), 1)
     )
-    max_opinion_pop2 = bin_edges[1 + np.argmax(hist)]
+    hist, bin_edges = np.histogram(pop2, bins=bins, range=(0, np.ceil(np.max(pop2))),)
+    max_opinion_pop2 = bin_edges[np.argmax(hist)]
     return max_opinion_pop2 - max_opinion_pop1
 
 
@@ -213,10 +213,15 @@ def mask_and_metric(
     logger.debug(f"{desc}")
     df = df_multi_mask(data, default_kwargs)
     cache_dir = get_cache_dir(sub_path="masked_data")
-    file_name = os.path.join(
-        cache_dir,
-        f"{hash_repeat({x: tuple(x_range), y: tuple(y_range), **default_kwargs})}.h5",
+    hash_val = hash_repeat(
+        {
+            x: tuple(x_range),
+            y: tuple(y_range),
+            "metric": metric.__name__,
+            **default_kwargs,
+        }
     )
+    file_name = os.path.join(cache_dir, f"{hash_val}.h5")
     if os.path.exists(file_name):
         logger.debug(f"\t load")
         z = pd.read_hdf(file_name)

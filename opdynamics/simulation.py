@@ -357,13 +357,30 @@ def run_product(
     plot_opinion = kwargs.pop("plot_opinion", False)
     write_mapping = kwargs.pop("write_mapping", False)  # determined by parallel
 
-    keys = list(range_parameters.keys())
+    cache_dir = get_cache_dir()
+    # TODO: change name of file
+    file_name = os.path.join(cache_dir, "noise_source.h5")
+    vaex_file_name = file_name.replace(".h5", ".hdf5")
 
     # # This allows a mixed-type to be passed where `range` isn't necessary.
     # verbose_other_vars = {
     #     k: {"range": v, "title": k} for k, v in range_parameters.items() if type(v) is not dict
     # }
     # range_parameters.update(verbose_other_vars)
+
+    # allow variable range to be None to use stored values
+    if os.path.exists(vaex_file_name):
+        df = vaex.open(vaex_file_name)
+        if range_parameters is None or all(
+            [variable["range"] is None for variable in range_parameters.values()]
+        ):
+            # if every range passed is None, return the full DataFrame directly
+            return df
+        for key, variable in range_parameters.items():
+            if variable["range"] is None:
+                variable["range"] = sorted(df[key].unique())
+
+    keys = list(range_parameters.keys())
 
     # determine combination of range_parameters
     ranges_to_run = set(
@@ -372,12 +389,8 @@ def run_product(
     number_of_combinations = len(ranges_to_run)
     ranges_have_run = set()
 
-    cache_dir = get_cache_dir()
-    # TODO: change name of file
-    file_name = os.path.join(cache_dir, "noise_source.h5")
-    vaex_file_name = file_name.replace(".h5", ".hdf5")
-
     # exclude parameter combinations that have already been saved
+    #   do an aggregation (count is simplest) to ignore agents
     if cache_sim and os.path.exists(file_name):
         logger.info("reading from existing file...")
         col_names = [*keys]
