@@ -52,21 +52,22 @@ def get_cache_dir(sub_path: str = None) -> str:
     return _cache_dir
 
 
-def set_cache_dir(path: str) -> str:
+def set_cache_dir(path: str) -> Tuple[str, str]:
     """
     Customise where to store the cache by explicitly setting the location.
 
     Folders will be created if they do not exist.
     :param path: Where to save temporary files.
-    :return: Absolute path to directory.
+    :return: Previous path, new path.
     """
     global _cache_dir
+    old_dir = _cache_dir
     try:
         os.makedirs(path)
     except FileExistsError:
         pass
     _cache_dir = os.path.abspath(path)
-    return _cache_dir
+    return old_dir, _cache_dir
 
 
 def cache_ec(cache: Union[str, int, bool], ec: EchoChamber, write_mapping=True) -> None:

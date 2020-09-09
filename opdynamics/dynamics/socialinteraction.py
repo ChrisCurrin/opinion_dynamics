@@ -75,7 +75,7 @@ def get_connnection_probabilities_opp(
     if p_opp > 0:
         betas = ec.rn.choice([beta, -beta], size=ec.N, p=[p_opp, 1 - p_opp])
     else:
-        betas = -beta
+        betas = beta
     return get_connection_probabilities(ec, beta=betas, **conn_kwargs)
 
 

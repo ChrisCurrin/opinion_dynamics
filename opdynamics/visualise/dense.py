@@ -415,19 +415,20 @@ def plot_surfaces(
     XX, YY = np.meshgrid(new_x, new_y)
 
     z_vars = {k: v for k, v in variables.items() if k != x and k != y}
-    ncols = 0
+    ncols = 1
     for v in z_vars.values():
         ncols = np.max([ncols, len(v["range"]) if "range" in v else len(v)])
     fig, axs = plt.subplots(
-        nrows=len(z_vars),
+        nrows=max(len(z_vars), 1),
         ncols=ncols + 1,
+        squeeze=False,
         sharex="all",
         sharey="all",
         gridspec_kw={"width_ratios": [1] * ncols + [0.1]},
-        figsize=(3, 2.5),
+        figsize=(3, 3.5),
         dpi=200,
     )
-    fig.subplots_adjust(wspace=0.2, hspace=0.2, left=0.2, bottom=0.2, right=0.8)
+    fig.subplots_adjust(wspace=0.2, hspace=0.8, left=0.2, bottom=0.2, right=0.8)
 
     # create a large axis for the colorbar in the last column
     cbar_axs = axs[:, -1]
@@ -437,7 +438,7 @@ def plot_surfaces(
 
     cbar_ax = fig.add_subplot(cbar_gs[:, -1])
     cmap = kwargs.pop("cmap", "Spectral_r")
-    norm = kwargs.pop("norm", LogNorm(vmin=1, vmax=5))
+    norm = kwargs.pop("norm", Normalize(0, 2))
 
     N = params.get("N", 1000)
 
@@ -482,21 +483,12 @@ def plot_surfaces(
             logger.debug(f"\t plot")
             mesh = ax.pcolormesh(XX, YY, ZZ, cmap=cmap, norm=norm, **kwargs)
             desc = variables[key]["title"] if "title" in variables[key] else key
-            if i == 0:
-                ax.set_title(val)
+            ax.set_title(f"{desc} = {val:.0f}", fontsize="medium")
             if i == len(z_vars) - 1:
                 ax.set_xlabel(x_label)
 
         axs[i, 0].set_ylabel(y_label)
-        if desc is not None:
-            axs[i, 0].annotate(
-                desc,
-                xy=(-0.5, 1),
-                xycoords="axes fraction",
-                va="top",
-                ha="right",
-                fontsize="x-large",
-            )
+
     if mesh is not None:
         cbar = fig.colorbar(mesh, cax=cbar_ax, cmap=cmap, norm=norm)
         cbar.set_label(PEAK_DISTANCE)
@@ -515,7 +507,7 @@ def plot_surface_product(
     y_label = variables[y]["title"] if "title" in variables[y] else y
 
     cmap = kwargs.pop("cmap", "Spectral_r")
-    norm = kwargs.pop("norm", Normalize(vmin=0, vmax=3))
+    norm = kwargs.pop("norm", Normalize(0, 2))
 
     N = params.get("N", 1000)
 

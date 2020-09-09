@@ -93,7 +93,7 @@ class VisEchoChamber(object):
         # noinspection PyProtectedMember
         p_conn = self.ec.adj_mat._p_conn
         if p_conn is None:
-            p_conn = self.ec.adj_mat.conn_method(self.ec.adj_mat.conn_kwargs)
+            p_conn = self.ec.adj_mat.conn_method(self.ec, **self.ec.adj_mat.conn_kwargs)
         return show_matrix(
             p_conn,
             "$P_{ij}$",
@@ -182,12 +182,16 @@ class VisEchoChamber(object):
         :param fig: Figure to use for colorbar. Created if none passed.
         :param title: Include title in the figure.
 
+        :keyword cmap: Colormap to use (color_code = True or 'line')
+        :keyword vmin: minimum value to color from cmap. Lower values will be colored the same.
+        :keyword vmax: maximum value to color from cmap. Higher values will be colored the same.
+
         :return: (Figure, Axes) used.
         """
-        sm = ScalarMappable(
-            norm=TwoSlopeNorm(0, np.min(self.ec.result.y), np.max(self.ec.result.y)),
-            cmap=OPINIONS_CMAP,
-        )
+        cmap = kwargs.pop("cmap", OPINIONS_CMAP)
+        vmin = kwargs.pop("vmin", np.min(self.ec.result.y))
+        vmax = kwargs.pop("vmax", np.max(self.ec.result.y))
+        sm = ScalarMappable(norm=TwoSlopeNorm(0, vmin, vmax), cmap=OPINIONS_CMAP)
         if color_code == "line" or color_code == "lines":
             # using the colorline method allows colors to be dependent on a value, in this case, opinion,
             # but takes much longer to display
