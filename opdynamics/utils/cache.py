@@ -1,6 +1,6 @@
 import os
 
-from typing import Union
+from typing import Tuple, Union
 
 import json
 import numpy as np
