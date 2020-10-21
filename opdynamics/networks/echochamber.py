@@ -568,8 +568,19 @@ class ConnChamber(EchoChamber):
     """Network that calculates new connection probabilities at every time step, optionally specifying the probability,
      ``p_opp``, that an agent will interact with another agent holding an opposing opinion."""
 
-    def set_social_interactions(self, *args, p_opp=0, **kwargs):
-        super().set_social_interactions(*args, p_opp=p_opp, **kwargs)
+    def set_social_interactions(self, *args, p_opp=0, update_conn=True, **kwargs):
+        from opdynamics.dynamics.socialinteraction import (
+            get_connection_probabilities_opp,
+        )
+
+        conn_method = kwargs.pop("conn_method", get_connection_probabilities_opp)
+        super().set_social_interactions(
+            *args,
+            conn_method=conn_method,
+            update_conn=update_conn,
+            p_opp=p_opp,
+            **kwargs,
+        )
 
 
 class NoisyEchoChamber(EchoChamber):
@@ -737,7 +748,12 @@ class SampleChamber(NoisyEchoChamber):
         self._sample_method: (str, Callable) = None
 
     def set_dynamics(
-        self, D=0, sample_size=20, sample_method: str = None, *args, **kwargs
+        self,
+        D: float = 0,
+        sample_size: int = 20,
+        sample_method: str = "basic",
+        *args,
+        **kwargs,
     ):
         """Set the dynamics of network by assigning a function to `self.dy_dt`.
         """

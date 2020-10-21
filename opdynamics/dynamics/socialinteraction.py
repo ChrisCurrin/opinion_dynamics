@@ -56,7 +56,7 @@ def get_connection_probabilities(ec: EchoChamber, beta: float = 0.0, **conn_kwar
     return p_conn
 
 
-def get_connnection_probabilities_opp(
+def get_connection_probabilities_opp(
     ec: EchoChamber, beta: float = 0.0, p_opp: float = 0.0, **conn_kwargs
 ):
     """For agent `i`, the probability of connecting to agent `j` is a function of the absolute strength of

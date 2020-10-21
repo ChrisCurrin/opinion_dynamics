@@ -19,11 +19,11 @@ Miscellaneous distributions not included in `numpy.random` or `scipy.stats`
     counts, edges = np.histogram(vrs, bins, density=True)
     centers = (edges[1:] + edges[:-1])/2.
 
-    sns.distplot(vrs, bins=1000, kde=False, ax=axs[1])
+    sns.histplot(vrs, bins=1000, kde=False, ax=axs[1])
 
     p2 = spower.rvs(1/gamma, loc=((1-gamma)/(1-epsilon**(1-gamma))), size=N)
-    sns.distplot(p2, bins=1000, kde=False, ax=axs[1])
-    # sns.distplot(negpowerlaw.rvs(gamma, epsilon, 1, size=N), bins=1000, kde=False, ax=axs[1])
+    sns.histplot(p2, bins=1000, kde=False, ax=axs[1])
+    # sns.histplot(negpowerlaw.rvs(gamma, epsilon, 1, size=N), bins=1000, kde=False, ax=axs[1])
 
     axs[1].set_xlim(0, 1)
 

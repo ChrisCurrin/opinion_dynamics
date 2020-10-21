@@ -150,7 +150,7 @@ class VisEchoChamber(object):
         self, ax: Axes = None, fig: Figure = None, **kwargs
     ) -> (Figure, Axes):
         kwargs.setdefault("color", "Green")
-        sns.distplot(self.ec.activities, kde=False, axlabel="activity", ax=ax, **kwargs)
+        sns.histplot(self.ec.activities, kde=False, axlabel="activity", ax=ax, **kwargs)
         ax.set(
             title="Activity distribution",
             ylabel="count",
@@ -231,9 +231,9 @@ class VisEchoChamber(object):
         **kwargs,
     ) -> (Figure, Axes):
         idx = np.argmin(np.abs(t - self.ec.result.t)) if isinstance(t, float) else t
-        bins = kwargs.pop("bins", self.ec.N // 5)
+        bins = kwargs.pop("bins", "auto")
         kwargs.setdefault("color", "Purple")
-        sns.distplot(self.ec.result.y[:, idx], bins=bins, ax=ax, **kwargs)
+        sns.histplot(self.ec.result.y[:, idx], bins=bins, ax=ax, **kwargs)
 
         vertical = kwargs.get("vertical", False)
         if vertical:

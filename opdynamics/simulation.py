@@ -121,7 +121,7 @@ def run_periodic_noise(
     r: float = 0.5,
     dt: float = 0.01,
     cache: bool = True,
-    method: str = "Euler-Maruyama",
+    method: str = None,
     plot_opinion: bool = False,
     write_mapping=True,
     *args,
@@ -194,10 +194,16 @@ def run_periodic_noise(
     """
     from opdynamics.utils.cache import cache_ec
 
+    if method is None:
+        if cls is OpenChamber:
+            method = "Euler-Maruyama"
+        else:
+            method = "RK45"
+
     lazy = kwargs.pop("lazy", True)
     if not lazy:
         logger.warning(
-            "value of 'lazy' provided to run_periodic_noise is ignored (set to True)."
+            "value of 'lazy' provided to run_periodic_noise is ignored (was set to True)."
         )
         lazy = True
     logger.debug(f"letting network interact without noise until {noise_start}.")
@@ -237,19 +243,19 @@ def run_periodic_noise(
         for i in trange(
             num, desc="noise blocks", disable=logger.getEffectiveLevel() <= logging.INFO
         ):
-            nec.set_dynamics(D=D)
+            nec.set_dynamics(D=D, *args, **kwargs)
             nec.run_network(t_end=block_time)
             t.update()
             # only include a silent block of time if this wasn't the last block
             if i < num - 1:
-                nec.set_dynamics(D=0)
+                nec.set_dynamics(D=0, *args, **kwargs)
                 nec.run_network(t_end=interval)
                 t.update()
         logger.debug(
             f"removing noise and letting network settle at {noise_start + noise_length} for {recovery}."
         )
         if recovery > 0:
-            nec.set_dynamics(D=0)
+            nec.set_dynamics(D=0, *args, **kwargs)
             nec.run_network(t_end=recovery)
             t.update()
 
@@ -257,6 +263,15 @@ def run_periodic_noise(
 
     if plot_opinion:
         show_periodic_noise(nec, noise_start, noise_length, recovery, interval, num, D)
+        sample_size = kwargs.get("sample_size", None)
+        sample_method = kwargs.get("sample_method", None)
+        if sample_size or sample_method:
+            import matplotlib.pyplot as plt
+
+            fig: plt.Figure = plt.gcf()
+            title = f"{sample_size}" if sample_size else ""
+            title += f"{sample_method}" if sample_method else ""
+            fig.suptitle(title)
 
     return nec
 
@@ -305,7 +320,11 @@ def _comp_unit(
         )
     else:
         nec = run_params(
-            cls, name=name, cache=cache, write_mapping=write_mapping, **updated_kwargs,
+            cls,
+            name=name,
+            cache=cache,
+            write_mapping=write_mapping,
+            **updated_kwargs,
         )
     return nec, updated_kwargs
 
@@ -354,7 +373,6 @@ def run_product(
     """
     from opdynamics.utils.cache import get_cache_dir
 
-    plot_opinion = kwargs.pop("plot_opinion", False)
     write_mapping = kwargs.pop("write_mapping", False)  # determined by parallel
 
     cache_dir = get_cache_dir()
@@ -546,7 +564,10 @@ def example():
 
     _other_vars = {
         "D": {"range": np.round(np.arange(0.000, 0.01, 0.002), 3)},
-        "k_steps": {"range": [1, 10, 100], "title": "k",},
+        "k_steps": {
+            "range": [1, 10, 100],
+            "title": "k",
+        },
     }
     run_product(_other_vars, **kwargs)
     plt.show()
