@@ -61,7 +61,10 @@ def set_cache_dir(path: str) -> Tuple[str, str]:
     :return: Previous path, new path.
     """
     global _cache_dir
-    old_dir = _cache_dir
+    if _cache_dir:
+        old_dir = _cache_dir
+    else:
+        old_dir = get_cache_dir()
     try:
         os.makedirs(path)
     except FileExistsError:
@@ -71,7 +74,7 @@ def set_cache_dir(path: str) -> Tuple[str, str]:
 
 
 def cache_ec(cache: Union[str, int, bool], ec: EchoChamber, write_mapping=True) -> None:
-    """ Cache an echochamber object if `cache` is neither `False` nor `None`.
+    """Cache an echochamber object if `cache` is neither `False` nor `None`.
 
     :param cache: Either "all" or True (last time point) or ℤ ∈ [1, 9] for compression level (last time point).
     :param ec: EchoChamber (or subclass) object to save.
@@ -89,7 +92,7 @@ def cache_ec(cache: Union[str, int, bool], ec: EchoChamber, write_mapping=True) 
 
 
 def save_results(file_name: str, ec: EchoChamber, **kwargs) -> None:
-    """ Save ``EchoChamber`` agents' opinions to a shared HDF5 DataFrame.
+    """Save ``EchoChamber`` agents' opinions to a shared HDF5 DataFrame.
 
     :param file_name: Full path to results file (*file* - not directory - created if it does not exist).
     :param ec: EchoChamber after a `run_network` operation.

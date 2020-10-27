@@ -150,7 +150,7 @@ class VisEchoChamber(object):
         self, ax: Axes = None, fig: Figure = None, **kwargs
     ) -> (Figure, Axes):
         kwargs.setdefault("color", "Green")
-        sns.histplot(self.ec.activities, kde=False, axlabel="activity", ax=ax, **kwargs)
+        sns.histplot(self.ec.activities, axlabel="activity", ax=ax, **kwargs)
         ax.set(
             title="Activity distribution",
             ylabel="count",
@@ -211,7 +211,13 @@ class VisEchoChamber(object):
             sns.set_palette(sns.color_palette("Set1", n_colors=len(self.ec.result.y)))
             for n in self.ec.result.y[::subsample]:
                 sns.lineplot(
-                    self.ec.result.t, n, ls=ls, mec=mec, lw=lw, ax=ax, **kwargs,
+                    self.ec.result.t,
+                    n,
+                    ls=ls,
+                    mec=mec,
+                    lw=lw,
+                    ax=ax,
+                    **kwargs,
                 )
         ax.set_xlim(0, self.ec.result.t[-1])
         ax.set_xlabel(TIME_SYMBOL)
@@ -233,6 +239,7 @@ class VisEchoChamber(object):
         idx = np.argmin(np.abs(t - self.ec.result.t)) if isinstance(t, float) else t
         bins = kwargs.pop("bins", "auto")
         kwargs.setdefault("color", "Purple")
+        kwargs.setdefault("kde", True)
         sns.histplot(self.ec.result.y[:, idx], bins=bins, ax=ax, **kwargs)
 
         vertical = kwargs.get("vertical", False)
@@ -291,7 +298,13 @@ class VisEchoChamber(object):
         if sort:
             min_idx = np.argmin(np.abs(opinions))
             ax.hlines(
-                y=min_idx, xmin=v[0], xmax=v[1], ls="--", color="k", alpha=0.5, lw=1,
+                y=min_idx,
+                xmin=v[0],
+                xmax=v[1],
+                ls="--",
+                color="k",
+                alpha=0.5,
+                lw=1,
             )
             ax.annotate(
                 f"{min_idx}",

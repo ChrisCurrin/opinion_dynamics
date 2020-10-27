@@ -78,9 +78,11 @@ def show_periodic_noise(nec, noise_start, noise_length, recovery, interval, num,
 
     vis = VisEchoChamber(nec)
     # create figure and axes
-    fig = plt.figure(figsize=(8, 6))
-    gs = gridspec.GridSpec(nrows=3, ncols=3, figure=fig, wspace=0.3, hspace=0.8)
-    ax_time = fig.add_subplot(gs[0:2, :])
+    fig = plt.figure()
+    gs = gridspec.GridSpec(
+        nrows=2, ncols=3, figure=fig, wspace=0.3, hspace=0.8, height_ratios=(1, 2)
+    )
+    ax_time = fig.add_subplot(gs[0, :])
     ax_start = fig.add_subplot(gs[-1, 0])
     ax_noise = fig.add_subplot(gs[-1, 1], sharey=ax_start)
     ax_recovery = fig.add_subplot(gs[-1, 2], sharey=ax_start)
@@ -137,12 +139,19 @@ def show_periodic_noise(nec, noise_start, noise_length, recovery, interval, num,
         noise_start + block_time * (i + 1) + interval * i for i in range(num + 1)
     ]
     ax_time.hlines(
-        y=[lim[1]] * num, xmin=block_times_s, xmax=block_times_e, lw=10, color="k",
+        y=[lim[1]] * num,
+        xmin=block_times_s,
+        xmax=block_times_e,
+        lw=10,
+        color="k",
     )
     # value of noise
     ax_time.annotate(f"noise = {D}", xy=(noise_start, lim[1]), ha="left", va="bottom")
     ax_time.annotate(
-        f"noise = 0", xy=(noise_start + noise_length, lim[1]), ha="left", va="bottom",
+        f"noise = 0",
+        xy=(noise_start + noise_length, lim[1]),
+        ha="left",
+        va="bottom",
     )
     sns.despine()
     ax_noise.set_ylabel("")
