@@ -134,8 +134,8 @@ def get_social_interaction(
         # loop_i is how far through the active_agents the loop is
         # a_i is the index of the agent
         ind: np.ndarray = ec.rn.choice(
-            ec.N,  # choose indices for
-            size=ec.m,  # other distinct agents
+            ec.N,  # choose indices [0, N-1] for
+            size=ec.m,  # m other distinct agents
             replace=False,  # (which must be unique)
             p=p_conn[a_i],  # with these probabilities
         )
