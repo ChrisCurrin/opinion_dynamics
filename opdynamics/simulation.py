@@ -208,13 +208,18 @@ def run_periodic_noise(
         lazy = True
     logger.debug(f"letting network interact without noise until {noise_start}.")
     noiseless_time = interval * (num - 1)
-    block_time = (noise_length - noiseless_time) / num
+    block_time = np.round((noise_length - noiseless_time) / num, 3)
     logger.debug(
         f"noise (D={D}) will be intermittently added from {noise_start} for {noise_length} in blocks of "
         f"{block_time:.3f} with intervals of {interval}. A total of {num} perturbations will be done."
     )
-    t = trange(
-        int(noise_start > 0) + (num * 2 - 1) + int(recovery > 0), desc="periodic noise"
+    # create progress bar
+    total_progress = noise_start + num * block_time + (num - 1) * interval + recovery
+    t = tqdm(
+        iterable=None,
+        desc="periodic noise",
+        total=total_progress,
+        disable=logger.getEffectiveLevel() > logging.INFO,
     )
     name = kwargs.pop("name", "")
     name += f"[num={num} interval={interval}]"
@@ -238,26 +243,24 @@ def run_periodic_noise(
         if noise_start > 0:
             nec.set_dynamics(D=0, *args, **kwargs)
             nec.run_network(dt=dt, t_end=noise_start, method=method)
-            t.update()
+            t.update(noise_start)
         # inner loop of noise on-off in blocks
-        for i in trange(
-            num, desc="noise blocks", disable=logger.getEffectiveLevel() >= logging.INFO
-        ):
+        for i in range(num):
             nec.set_dynamics(D=D, *args, **kwargs)
             nec.run_network(t_end=block_time, method=method)
-            t.update()
+            t.update(int(block_time))
             # only include a silent block of time if this wasn't the last block
             if i < num - 1:
                 nec.set_dynamics(D=0, *args, **kwargs)
                 nec.run_network(t_end=interval, method=method)
-                t.update()
+                t.update(interval)
         logger.debug(
             f"removing noise and letting network settle at {noise_start + noise_length} for {recovery}."
         )
         if recovery > 0:
             nec.set_dynamics(D=0, *args, **kwargs)
             nec.run_network(t_end=recovery, method=method)
-            t.update()
+            t.update(recovery)
 
         cache_ec(cache, nec, write_mapping=write_mapping)
 
