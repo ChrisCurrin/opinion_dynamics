@@ -241,7 +241,7 @@ def run_periodic_noise(
             t.update()
         # inner loop of noise on-off in blocks
         for i in trange(
-            num, desc="noise blocks", disable=logger.getEffectiveLevel() <= logging.INFO
+            num, desc="noise blocks", disable=logger.getEffectiveLevel() >= logging.INFO
         ):
             nec.set_dynamics(D=D, *args, **kwargs)
             nec.run_network(t_end=block_time, method=method)
