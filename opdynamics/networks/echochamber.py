@@ -560,7 +560,7 @@ class EchoChamber(object):
     def __repr__(self):
         return (
             f"{self.name}={self.__class__.__name__}(N={self.N},m={self.m},K={self.K},alpha={self.alpha},"
-            f"seed={self._seed}) {self._dist} {self.adj_mat})"
+            f"seed={self._seed}) {self._dist} {self.adj_mat}"
         )
 
 
