@@ -335,7 +335,10 @@ class EchoChamber(object):
         return time_point, average
 
     def get_sample_means(
-        self, sample_size: int, num_samples: int = 1, t: float = -1,
+        self,
+        sample_size: int,
+        num_samples: int = 1,
+        t: float = -1,
     ) -> np.ndarray:
         """
         Calculate the sample means.
@@ -383,7 +386,7 @@ class EchoChamber(object):
         where :math:`v` is the median, :math:`\\mu`` is the mean, and :math:`\\sigma` is the standard deviation.
 
         see https://en.wikipedia.org/wiki/Unimodality
-        see https://doi.org/10.1007/s10182-008-0057-2 
+        see https://doi.org/10.1007/s10182-008-0057-2
 
         """
         t_idx = np.argmin(np.abs(t - self.result.t)) if isinstance(t, float) else t
@@ -524,7 +527,17 @@ class EchoChamber(object):
                     return False
                 compressed = False
                 cached_results["opinions"] = SolverResult(
-                    t_arr, y_arr.T, None, None, None, 0, 0, 0, 1, "success", True,
+                    t_arr,
+                    y_arr.T,
+                    None,
+                    None,
+                    None,
+                    0,
+                    0,
+                    0,
+                    1,
+                    "success",
+                    True,
                 )
                 loaded_keys["opinions"] = True
                 for key in keys:
@@ -566,7 +579,7 @@ class EchoChamber(object):
 
 class ConnChamber(EchoChamber):
     """Network that calculates new connection probabilities at every time step, optionally specifying the probability,
-     ``p_opp``, that an agent will interact with another agent holding an opposing opinion."""
+    ``p_opp``, that an agent will interact with another agent holding an opposing opinion."""
 
     def set_social_interactions(self, *args, p_opp=0, update_conn=True, **kwargs):
         from opdynamics.dynamics.socialinteraction import (
@@ -636,7 +649,10 @@ class OpenChamber(NoisyEchoChamber):
         )
 
     def run_network(
-        self, dt: float = 0.01, t_end: float = 0.05, method: str = "Euler-Maruyama",
+        self,
+        dt: float = 0.01,
+        t_end: float = 0.05,
+        method: str = "Euler-Maruyama",
     ):
         """Dynamics are no longer of an ordinary differential equation so we can't use scipy.solve_ivp anymore"""
 
@@ -755,8 +771,7 @@ class SampleChamber(NoisyEchoChamber):
         *args,
         **kwargs,
     ):
-        """Set the dynamics of network by assigning a function to `self.dy_dt`.
-        """
+        """Set the dynamics of network by assigning a function to `self.dy_dt`."""
         from opdynamics.dynamics.opinions import clt_methods
 
         super().set_dynamics(D, *args, **kwargs)
