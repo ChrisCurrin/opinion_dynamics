@@ -80,7 +80,7 @@ def get_connection_probabilities_opp(
 
 
 # TODO: Test
-def get_connection_probabilities_exp(ec: EchoChamber, beta: float = 0.0):
+def get_connection_probabilities_exp(ec: EchoChamber, beta: float = 0.0, **conn_kwargs):
     """For agent `i`, the probability of connecting to agent `j` is a function of the absolute strength of
     their opinions and a beta param, relative to all of the differences between an agent i and every other agent.
 
@@ -151,24 +151,24 @@ def get_social_interaction_exp(
     ec: EchoChamber, active_threshold: float, p_mutual_interaction: float
 ):
     """
-        Compute the social interactions to occur within an EchoChamber.
+    Compute the social interactions to occur within an EchoChamber.
 
-        ** Experimental vectorised version **
+    ** Experimental vectorised version **
 
-        https://stackoverflow.com/questions/20103779/index-2d-numpy-array-by-a-2d-array-of-indices-without-loops
+    https://stackoverflow.com/questions/20103779/index-2d-numpy-array-by-a-2d-array-of-indices-without-loops
 
-        :param ec: Echo chamber object so we know
-            1) number of agents
-            2) number of other agents to interact with
-            3) the probability of interacting with each other agent
-        :param active_threshold: Threshold for an agent to be active.
-        :param p_mutual_interaction: Probability that an interaction is mutual (matrix becomes symmetrical if all
-            interactions are mutual).
-            If 1: create symmetric matrix by not distinguishing between i->j  and j->i
-            If 0: a non-symmetric matrix means an agent ignores external interactions
-        :return: Adjacency matrix for interactions between agents.
-        :rtype: np.ndarray
-        """
+    :param ec: Echo chamber object so we know
+        1) number of agents
+        2) number of other agents to interact with
+        3) the probability of interacting with each other agent
+    :param active_threshold: Threshold for an agent to be active.
+    :param p_mutual_interaction: Probability that an interaction is mutual (matrix becomes symmetrical if all
+        interactions are mutual).
+        If 1: create symmetric matrix by not distinguishing between i->j  and j->i
+        If 0: a non-symmetric matrix means an agent ignores external interactions
+    :return: Adjacency matrix for interactions between agents.
+    :rtype: np.ndarray
+    """
     adj_mat = np.zeros((ec.N, ec.N), dtype=int)
     active_agents = np.where(ec.activities >= active_threshold)[0]
     is_mutual = ec.rn.random(size=(len(active_agents), ec.m)) < p_mutual_interaction
@@ -251,9 +251,9 @@ class SocialInteraction(object):
             k: v for k, v in conn_kwargs.items() if k in required_conn_kwargs
         }
         self.conn_kwargs = conn_kwargs
-        self._p_conn: np.ndarray = self.conn_method(
-            ec, **conn_kwargs
-        ) if not update_conn else None
+        self._p_conn: np.ndarray = (
+            self.conn_method(ec, **conn_kwargs) if not update_conn else None
+        )
         self._update_conn = update_conn
         self._accumulator = np.zeros((ec.N, ec.N), dtype=int)
         self._last_adj_mat: np.ndarray = None
@@ -317,4 +317,5 @@ class SocialInteraction(object):
             f"Aij[r={self.p_mutual_interaction}] "
             f"{self.conn_method.__name__}("
             f"{json.dumps(self.conn_kwargs, sort_keys=True, separators=(',', ':'), cls=NpEncoder)})"
+            f"{'(t)' if self._update_conn else ''}"
         )
