@@ -249,14 +249,14 @@ def run_periodic_noise(
             # only include a silent block of time if this wasn't the last block
             if i < num - 1:
                 nec.set_dynamics(D=0, *args, **kwargs)
-                nec.run_network(t_end=interval)
+                nec.run_network(t_end=interval, method=method)
                 t.update()
         logger.debug(
             f"removing noise and letting network settle at {noise_start + noise_length} for {recovery}."
         )
         if recovery > 0:
             nec.set_dynamics(D=0, *args, **kwargs)
-            nec.run_network(t_end=recovery)
+            nec.run_network(t_end=recovery, method=method)
             t.update()
 
         cache_ec(cache, nec, write_mapping=write_mapping)
