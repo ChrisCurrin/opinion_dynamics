@@ -244,7 +244,7 @@ def run_periodic_noise(
             num, desc="noise blocks", disable=logger.getEffectiveLevel() <= logging.INFO
         ):
             nec.set_dynamics(D=D, *args, **kwargs)
-            nec.run_network(t_end=block_time)
+            nec.run_network(t_end=block_time, method=method)
             t.update()
             # only include a silent block of time if this wasn't the last block
             if i < num - 1:
