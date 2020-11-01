@@ -335,8 +335,8 @@ def _comp_unit(
 def run_product(
     range_parameters: Dict[str, Dict[str, Union[list, str]]],
     cls: Type[EC] = EchoChamber,
-    cache=False,
-    cache_sim=True,
+    cache: Union[bool, str] = False,
+    cache_sim: Union[bool, str] = True,
     parallel: Union[bool, int] = False,
     **kwargs,
 ) -> Union[pd.DataFrame, List[EC]]:
@@ -366,6 +366,8 @@ def run_product(
     :param cls: Class of noise.
     :param cache: Whether to cache individual simulations (default ``False``).
     :param cache_sim: Whether to cache the ``pd.DataFrame`` used to store the simulation results (default ``True``).
+        By default, saves to "noise_source.h5". Can be specified using ``cache_sim_file_name`` or ``cache_sim``
+        itself.
     :param parallel: Run iterations serially (``False``) or in parallel (``True``). Defaults to ``False``.
         An integer can be passed to explicitly set the pool size, else it is equalt to th number of CPU cores.
         Parallel run uses ``multiprocessing`` library and is not fully tested.
@@ -379,8 +381,16 @@ def run_product(
     write_mapping = kwargs.pop("write_mapping", False)  # determined by parallel
 
     cache_dir = get_cache_dir()
-    # TODO: change name of file
-    file_name = os.path.join(cache_dir, "noise_source.h5")
+
+    if isinstance(cache_sim, str):
+        file_name = os.path.join(cache_dir, cache_sim.replace(".h5", "") + ".h5")
+    else:
+        file_name = os.path.join(
+            cache_dir,
+            kwargs.get("cache_sim_file_name", "noise_source").replace(".h5", "")
+            + ".h5",
+        )
+
     vaex_file_name = file_name.replace(".h5", ".hdf5")
 
     # # This allows a mixed-type to be passed where `range` isn't necessary.
@@ -425,6 +435,7 @@ def run_product(
             for chunk in chunks:
                 ranges_have_run.update(chunk.groupby(col_names).count().index)
         ranges_to_run = {x for x in ranges_to_run if x not in ranges_have_run}
+
     # list to store EchoChamber objects (only if not cache_sim)
     nec_list = []
 
@@ -435,7 +446,7 @@ def run_product(
             nec, params = _comp_unit(cls, keys, values, cache=cache, **kwargs)
             if cache_sim:
                 save_results(file_name, nec, **params)
-            if not (cache or cache_sim):
+            else:
                 # if not being run for caching, store results in a list
                 nec_list.append(nec)
 
@@ -469,7 +480,7 @@ def run_product(
                     write_file.write(nec.save_txt)
             if cache_sim:
                 save_results(file_name, nec, **params)
-            if not (cache or cache_sim):
+            else:
                 # if not being run for caching, store results in a list
                 nec_list.append(nec)
         p.close()

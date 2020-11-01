@@ -240,9 +240,14 @@ class VisEchoChamber(object):
         bins = kwargs.pop("bins", "auto")
         kwargs.setdefault("color", "Purple")
         kwargs.setdefault("kde", True)
-        sns.histplot(self.ec.result.y[:, idx], bins=bins, ax=ax, **kwargs)
+        vertical = kwargs.pop("vertical", False)
 
-        vertical = kwargs.get("vertical", False)
+        data = {
+            "x": self.ec.result.y[:, idx] if not vertical else None,
+            "y": self.ec.result.y[:, idx] if vertical else None,
+        }
+        sns.histplot(**data, bins=bins, ax=ax, **kwargs)
+
         if vertical:
             ax.set_ylabel(OPINION_SYMBOL)
             ax.set_xlabel(f"$P({OPINION_SYMBOL})$")

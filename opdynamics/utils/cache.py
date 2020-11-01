@@ -73,6 +73,25 @@ def set_cache_dir(path: str) -> Tuple[str, str]:
     return old_dir, _cache_dir
 
 
+class cache_dir:
+    """Context manager for changing the current cache directory"""
+
+    def __init__(self, new_path):
+        try:
+            os.makedirs(new_path)
+        except FileExistsError:
+            pass
+        self.new_path = os.path.abspath(new_path)
+
+    def __enter__(self):
+        global _cache_dir
+        self.saved_dir, _cache_dir = _cache_dir, self.new_path
+
+    def __exit__(self, etype, value, traceback):
+        global _cache_dir
+        _cache_dir = self.saved_dir
+
+
 def cache_ec(cache: Union[str, int, bool], ec: EchoChamber, write_mapping=True) -> None:
     """Cache an echochamber object if `cache` is neither `False` nor `None`.
 
