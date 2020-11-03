@@ -3,6 +3,7 @@ import logging
 import numpy as np
 
 from opdynamics.networks import EchoChamber
+from opdynamics.networks.echochamber import NoisyEchoChamber
 
 logger = logging.getLogger("vis simulation")
 
@@ -69,7 +70,9 @@ def show_simulation_range(var_range, nec_arr, fig_ax=None):
     sns.despine()
 
 
-def show_periodic_noise(nec, noise_start, noise_length, recovery, interval, num, D):
+def show_periodic_noise(
+    nec: NoisyEchoChamber, noise_start, noise_length, recovery, interval, num, D
+):
     logger.debug("plotting periodic noise")
     import matplotlib.pyplot as plt
     import seaborn as sns
@@ -90,7 +93,7 @@ def show_periodic_noise(nec, noise_start, noise_length, recovery, interval, num,
     # plot graphs
     vis.show_opinions(ax=ax_time, color_code="line", subsample=5, title=False)
     vis.show_opinions_snapshot(
-        ax=ax_start, t=noise_start, title=f"t={noise_start}", color=_colors[0]
+        ax=ax_start, t=noise_start, title=f"t = {noise_start}", color=_colors[0]
     )
     vis.show_opinions_snapshot(
         ax=ax_noise,
@@ -128,6 +131,7 @@ def show_periodic_noise(nec, noise_start, noise_length, recovery, interval, num,
         ymin=lim[0],
         ymax=lim[1],
         color=_colors,
+        clip_on=False,
     )
     # noise on/off
     noiseless_time = interval * (num - 1)
@@ -142,17 +146,20 @@ def show_periodic_noise(nec, noise_start, noise_length, recovery, interval, num,
         y=[lim[1]] * num,
         xmin=block_times_s,
         xmax=block_times_e,
-        lw=10,
+        lw=5,
         color="k",
+        clip_on=False,
     )
     # value of noise
-    ax_time.annotate(f"noise = {D}", xy=(noise_start, lim[1]), ha="left", va="bottom")
-    ax_time.annotate(
-        f"noise = 0",
-        xy=(noise_start + noise_length, lim[1]),
-        ha="left",
-        va="bottom",
-    )
+    ax_time.annotate(f"D = {D}", xy=(noise_start, lim[1]), ha="left", va="bottom")
+    # recovery annotation
+    # ax_time.annotate(
+    #     f"D = 0",
+    #     xy=(noise_start + noise_length, lim[1]),
+    #     ha="left",
+    #     va="bottom",
+    # )
     sns.despine()
     ax_noise.set_ylabel("")
     ax_recovery.set_ylabel("")
+    return fig, gs

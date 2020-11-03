@@ -5,14 +5,14 @@ channels:
 dependencies:
   - python=3.7
   - scipy==1.4.1
-  - numpy
+  - numpy==1.19.2
   - cython
   - jupyter
-  - seaborn
+  - seaborn==0.11
   - black
   - tqdm
-  - pytables
-  - vaex-hdf5
-  - vaex
+  - pytables==3.6.1
+  - vaex-hdf5==0.6.0
+  - vaex==3.0.0
 prefix: C:\Users\Chris\Anaconda3\envs\opinion_dynamics
 

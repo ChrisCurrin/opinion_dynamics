@@ -240,6 +240,7 @@ class VisEchoChamber(object):
         bins = kwargs.pop("bins", "auto")
         kwargs.setdefault("color", "Purple")
         kwargs.setdefault("kde", True)
+        kwargs.setdefault("stat", "probability")
         vertical = kwargs.pop("vertical", False)
 
         data = {
@@ -350,6 +351,8 @@ class VisEchoChamber(object):
         self, bw=0.5, t=-1, title=True, **kwargs
     ) -> sns.JointGrid:
         nn = self.ec.get_nearest_neighbours(t)
+        idx = np.argmin(np.abs(t - self.ec.result.t)) if isinstance(t, float) else t
+        opinions = self.ec.result.y[:, idx]
         kwargs.setdefault("color", "Purple")
         marginal_kws = kwargs.pop("marginal_kws", dict())
         marginal_kws.update(bw=bw)

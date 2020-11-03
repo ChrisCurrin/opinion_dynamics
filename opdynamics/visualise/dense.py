@@ -97,10 +97,20 @@ def show_activity_vs_opinion(
     cax = cbar_kws.pop("cbar_ax", None) or cbar_kws.pop("cax", None)
     if cax is None:
         # create colorbar axes without stealing from main ax
-        cbar = colorbar_inset(points, "outer right", size="5%", ax=ax, **cbar_kws,)
+        cbar = colorbar_inset(
+            points,
+            "outer right",
+            size="5%",
+            ax=ax,
+            **cbar_kws,
+        )
     elif isinstance(cax, Axes):
         # using existing cax
-        cbar = fig.colorbar(points, cax=cax, **cbar_kws,)
+        cbar = fig.colorbar(
+            points,
+            cax=cax,
+            **cbar_kws,
+        )
     elif cax:
         # steal space from ax if cax is anything else (i.e. unless None, False, or an Axes)
         cbar = fig.colorbar(points, ax=ax, **cbar_kws)
@@ -177,7 +187,12 @@ def show_matrix(
         ax = fig.ax_heatmap
     elif map == "heatmap":
         sns.heatmap(
-            agent_mat, norm=norm, cmap=cmap, ax=ax, cbar_kws=cbar_kws, **kwargs,
+            agent_mat,
+            norm=norm,
+            cmap=cmap,
+            ax=ax,
+            cbar_kws=cbar_kws,
+            **kwargs,
         )
         ax.invert_yaxis()
     elif map == "mesh":
@@ -201,7 +216,9 @@ def show_matrix(
         elif isinstance(cax, Axes):
             # using existing cax
             fig.colorbar(
-                mesh, cax=cax, **cbar_kws,
+                mesh,
+                cax=cax,
+                **cbar_kws,
             )
         elif cax:
             # steal space from ax if cax is anything else (i.e. unless None, False, or an Axes)
@@ -229,8 +246,10 @@ def show_jointplot(
     x, y, ax=(), cmap=None, joint_kws=None, marginal_kws=None, annot_kws=None, **kwargs
 ):
     """Nearest Neighbour plot for inside a bigger figure"""
-
-    ax_joint, ax_marg_x, ax_marg_y = ax
+    if np.iterable(ax):
+        ax_joint, ax_marg_x, ax_marg_y = ax
+    else:
+        ax_joint, ax_marg_x, ax_marg_y = ax, None, None
     # Set up empty default kwarg dicts
     joint_kws = {} if joint_kws is None else joint_kws.copy()
     joint_kws.update(kwargs)
@@ -240,21 +259,21 @@ def show_jointplot(
     # Make a colormap based off the plot color
     if cmap is None:
         cmap = sns.cubehelix_palette(8, reverse=True, as_cmap=True)
-        color = sns.cubehelix_palette(8, reverse=True)[3]
 
-    # Turn off tick visibility for the measure axis on the marginal plots
-    plt.setp(ax_marg_x.get_xticklabels(), visible=False)
-    plt.setp(ax_marg_y.get_yticklabels(), visible=False)
+    if ax_marg_x is not None:
+        # Turn off tick visibility for the measure axis on the marginal plots
+        plt.setp(ax_marg_x.get_xticklabels(), visible=False)
+        plt.setp(ax_marg_y.get_yticklabels(), visible=False)
 
-    # Turn off the ticks on the density axis for the marginal plots
-    plt.setp(ax_marg_x.yaxis.get_majorticklines(), visible=False)
-    plt.setp(ax_marg_x.yaxis.get_minorticklines(), visible=False)
-    plt.setp(ax_marg_y.xaxis.get_majorticklines(), visible=False)
-    plt.setp(ax_marg_y.xaxis.get_minorticklines(), visible=False)
-    plt.setp(ax_marg_x.get_yticklabels(), visible=False)
-    plt.setp(ax_marg_y.get_xticklabels(), visible=False)
-    ax_marg_x.yaxis.grid(False)
-    ax_marg_y.xaxis.grid(False)
+        # Turn off the ticks on the density axis for the marginal plots
+        plt.setp(ax_marg_x.yaxis.get_majorticklines(), visible=False)
+        plt.setp(ax_marg_x.yaxis.get_minorticklines(), visible=False)
+        plt.setp(ax_marg_y.xaxis.get_majorticklines(), visible=False)
+        plt.setp(ax_marg_y.xaxis.get_minorticklines(), visible=False)
+        plt.setp(ax_marg_x.get_yticklabels(), visible=False)
+        plt.setp(ax_marg_y.get_xticklabels(), visible=False)
+        ax_marg_x.yaxis.grid(False)
+        ax_marg_y.xaxis.grid(False)
 
     # Convert the x and y data to arrays for indexing and plotting
     x_array = np.asarray(x)
@@ -267,12 +286,13 @@ def show_jointplot(
 
     joint_kws.setdefault("shade", True)
     joint_kws.setdefault("cmap", cmap)
-    sns.kdeplot(x, y, ax=ax_joint, **joint_kws)
+    sns.kdeplot(x_array, y_array, ax=ax_joint, **joint_kws)
 
-    marginal_kws.setdefault("shade", True)
-    marginal_kws.setdefault("color", color)
-    sns.kdeplot(x, vertical=False, ax=ax_marg_x, **marginal_kws)
-    sns.kdeplot(y, vertical=True, ax=ax_marg_y, **marginal_kws)
+    if ax_marg_x is not None:
+        marginal_kws.setdefault("shade", True)
+        marginal_kws.setdefault("color", sns.cubehelix_palette(8, reverse=True)[3])
+        sns.kdeplot(x_array, vertical=False, ax=ax_marg_x, **marginal_kws)
+        sns.kdeplot(y_array, vertical=True, ax=ax_marg_y, **marginal_kws)
 
 
 def show_noise_panel(
