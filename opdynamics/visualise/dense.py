@@ -303,8 +303,8 @@ def show_noise_panel(
     kde_kwargs=None,
     palette_kwargs=None,
     fig: Figure = None,
-    ax: np.ndarray[Axes] = None,
-) -> (Figure, np.ndarray[Axes]):
+    ax: "np.ndarray[Axes]" = None,
+) -> (Figure, "np.ndarray[Axes]"):
     """Display a grid of kernel density estimates (nudge vs opinion) for different parameters."""
 
     if grid_kwargs is None:
