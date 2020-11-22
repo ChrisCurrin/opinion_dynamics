@@ -1,3 +1,5 @@
+import opdynamics.visualise.compat
+
 import itertools
 import logging
 import os

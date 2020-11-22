@@ -1,4 +1,5 @@
 """"""
+import opdynamics.visualise.compat
 import logging
 import numpy as np
 import matplotlib.pyplot as plt

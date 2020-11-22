@@ -1,3 +1,5 @@
+import opdynamics.visualise.compat
+
 import logging
 
 import numpy as np
