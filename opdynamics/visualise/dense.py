@@ -293,8 +293,8 @@ def show_jointplot(
     if ax_marg_x is not None:
         marginal_kws.setdefault("shade", True)
         marginal_kws.setdefault("color", sns.cubehelix_palette(8, reverse=True)[3])
-        sns.kdeplot(x_array, vertical=False, ax=ax_marg_x, **marginal_kws)
-        sns.kdeplot(y_array, vertical=True, ax=ax_marg_y, **marginal_kws)
+        sns.kdeplot(x=x_array, vertical=False, ax=ax_marg_x, **marginal_kws)
+        sns.kdeplot(y=y_array, vertical=True, ax=ax_marg_y, **marginal_kws)
 
 
 def show_noise_panel(
@@ -346,7 +346,9 @@ def show_noise_panel(
     ]
     for j, (col_mask, hue) in enumerate(zip(col_masks, hues)):
         data_ijk = df[not_na & col_mask]
-        sns.kdeplot(data_ijk["opinion"], data_ijk[_D], ax=ax[j], cmap=hue, **kde_kwargs)
+        sns.kdeplot(
+            x=data_ijk["opinion"], y=data_ijk[_D], ax=ax[j], cmap=hue, **kde_kwargs
+        )
     for _ax in ax[1:]:
         _ax.set_ylabel("")
     for col_name, _ax in zip(col_names, ax):
@@ -382,13 +384,13 @@ def show_opinion_grid(
 
     if "hue" not in data_kwargs:
         kde_kwargs.setdefault("cmap", sns.cubehelix_palette(reverse=True, as_cmap=True))
-    kde_kwargs.setdefault("shade", True)
-    kde_kwargs.setdefault("shade_lowest", False)
+    kde_kwargs.setdefault("fill", True)
+    kde_kwargs.setdefault("thresh", 0)
     if "D" in columns:
         cmap = kde_kwargs.pop("cmap", sns.cubehelix_palette(reverse=True, as_cmap=True))
         g.map(sns.kdeplot, "opinion", **kde_kwargs)
     else:
-        g.map(sns.kdeplot, "opinion", "D", **kde_kwargs)
+        g.map(sns.kdeplot, x="opinion", y="D", **kde_kwargs)
     return g
 
 

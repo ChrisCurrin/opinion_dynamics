@@ -1,5 +1,6 @@
 import logging
 import os
+import opdynamics.visualise.compat
 
 import numpy as np
 import pandas as pd
