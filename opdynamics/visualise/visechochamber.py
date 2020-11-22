@@ -202,7 +202,7 @@ class VisEchoChamber(object):
             # using the colorline method allows colors to be dependent on a value, in this case, opinion,
             # but takes much longer to display
             for agent_idx, agent_opinions in df_opinions.iteritems():
-                c = sm.to_rgba(agent_opinions)
+                c = sm.to_rgba(agent_opinions.values)
                 lw = kwargs.pop("lw", 0.1)
                 colorline(
                     agent_opinions.index,
@@ -214,7 +214,7 @@ class VisEchoChamber(object):
                 )
         elif color_code:
             for agent_idx, agent_opinions in df_opinions.iteritems():
-                c = sm.to_rgba(agent_opinions)
+                c = sm.to_rgba(agent_opinions.values)
                 s = kwargs.pop("s", 0.1)
                 ax.scatter(
                     agent_opinions.index, agent_opinions.values, c=c, s=s, **kwargs
