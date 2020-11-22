@@ -96,7 +96,7 @@ class Animator(object):
             )
 
     def animate_nearest_neighbour(self, **kwargs):
-        bw = kwargs.setdefault("bw", 0.5)
+        bw_adjust = kwargs.setdefault("bw_adjust", 0.5)
         g = self.vis.show_nearest_neighbour(**kwargs)
         xlim = g.ax_joint.get_xlim()
         ylim = g.ax_joint.get_ylim()
@@ -110,7 +110,7 @@ class Animator(object):
         kwargs.setdefault("cmap", cmap)
         kwargs.setdefault("shade", True)
         marginal_kws = kwargs.pop("marginal_kws", dict())
-        marginal_kws.update(bw=bw)
+        marginal_kws.update(bw_adjust=bw_adjust)
         marginal_kws.setdefault("color", color)
         marginal_kws.setdefault("shade", True)
 
@@ -145,7 +145,11 @@ class Animator(object):
             g.fig.suptitle(f"{self.ec.result.t[i]:>6.3f}", va="bottom")
 
         self.animations["nearest_neighbour"] = animation.FuncAnimation(
-            g.fig, animate, init_func=init, frames=len(self.ec.result.t), repeat=False,
+            g.fig,
+            animate,
+            init_func=init,
+            frames=len(self.ec.result.t),
+            repeat=False,
         )
 
     def run_coupled_animations(self, frames=-1, methods=None):
@@ -192,7 +196,12 @@ class Animator(object):
 
         # run animation
         animation.FuncAnimation(
-            fig, animate, init_func=init, frames=frames, repeat=False, blit=blit,
+            fig,
+            animate,
+            init_func=init,
+            frames=frames,
+            repeat=False,
+            blit=blit,
         )
 
     def save(self):

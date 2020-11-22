@@ -286,7 +286,7 @@ def show_jointplot(
 
     joint_kws.setdefault("shade", True)
     joint_kws.setdefault("cmap", cmap)
-    sns.kdeplot(x_array, y_array, ax=ax_joint, **joint_kws)
+    sns.kdeplot(x=x_array, y=y_array, ax=ax_joint, **joint_kws)
 
     if ax_marg_x is not None:
         marginal_kws.setdefault("shade", True)

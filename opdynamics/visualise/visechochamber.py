@@ -150,10 +150,11 @@ class VisEchoChamber(object):
         self, ax: Axes = None, fig: Figure = None, **kwargs
     ) -> (Figure, Axes):
         kwargs.setdefault("color", "Green")
-        sns.histplot(self.ec.activities, axlabel="activity", ax=ax, **kwargs)
+        sns.histplot(self.ec.activities, ax=ax, **kwargs)
         ax.set(
             title="Activity distribution",
             ylabel="count",
+            xlabel="activity",
             xlim=(
                 np.min(np.append(self.ec.activities, 0)),
                 np.max(np.append(self.ec.activities, 1)),
@@ -192,27 +193,42 @@ class VisEchoChamber(object):
         vmin = kwargs.pop("vmin", np.min(self.ec.result.y))
         vmax = kwargs.pop("vmax", np.max(self.ec.result.y))
         sm = ScalarMappable(norm=TwoSlopeNorm(0, vmin, vmax), cmap=OPINIONS_CMAP)
+        import pandas as pd
+
+        df_opinions: pd.DataFrame = self.ec.result_df().iloc[::subsample]
+        sim_time = df_opinions.index
+
         if color_code == "line" or color_code == "lines":
             # using the colorline method allows colors to be dependent on a value, in this case, opinion,
             # but takes much longer to display
-            for n in self.ec.result.y[::subsample]:
-                c = sm.to_rgba(n)
+            for agent_idx, agent_opinions in df_opinions.iteritems():
+                c = sm.to_rgba(agent_idx)
                 lw = kwargs.pop("lw", 0.1)
-                colorline(self.ec.result.t, n, c, lw=lw, ax=ax, **kwargs)
+                colorline(
+                    agent_opinions.index,
+                    agent_opinions.values,
+                    c,
+                    lw=lw,
+                    ax=ax,
+                    **kwargs,
+                )
         elif color_code:
-            for n in self.ec.result.y[::subsample]:
-                c = sm.to_rgba(n)
+            for agent_idx, agent_opinions in df_opinions.iteritems():
+                c = sm.to_rgba(agent_idx)
                 s = kwargs.pop("s", 0.1)
-                ax.scatter(self.ec.result.t, n, c=c, s=s, **kwargs)
+                ax.scatter(
+                    agent_opinions.index, agent_opinions.values, c=c, s=s, **kwargs
+                )
         else:
             lw = kwargs.pop("lw", 0.1)
             ls = kwargs.pop("ls", "-")
             mec = kwargs.pop("mec", "None")
             sns.set_palette(sns.color_palette("Set1", n_colors=len(self.ec.result.y)))
-            for n in self.ec.result.y[::subsample]:
+
+            for agent_idx, agent_opinions in df_opinions.itertuples():
                 sns.lineplot(
-                    self.ec.result.t,
-                    n,
+                    x=agent_opinions.index,
+                    y=agent_opinions.values,
                     ls=ls,
                     mec=mec,
                     lw=lw,
@@ -348,16 +364,21 @@ class VisEchoChamber(object):
         return -v, v
 
     def show_nearest_neighbour(
-        self, bw=0.5, t=-1, title=True, **kwargs
+        self, bw_adjust=0.5, t=-1, title=True, **kwargs
     ) -> sns.JointGrid:
         nn = self.ec.get_nearest_neighbours(t)
         idx = np.argmin(np.abs(t - self.ec.result.t)) if isinstance(t, float) else t
         opinions = self.ec.result.y[:, idx]
         kwargs.setdefault("color", "Purple")
         marginal_kws = kwargs.pop("marginal_kws", dict())
-        marginal_kws.update(bw=bw)
+        marginal_kws.update(bw_adjust=bw_adjust)
         g = sns.jointplot(
-            self.ec.opinions, nn, kind="kde", bw=bw, marginal_kws=marginal_kws, **kwargs
+            self.ec.opinions,
+            nn,
+            kind="kde",
+            bw_adjust=bw_adjust,
+            marginal_kws=marginal_kws,
+            **kwargs,
         )
         g.ax_joint.set_xlabel(OPINION_SYMBOL)
         g.ax_joint.set_ylabel(MEAN_NEAREST_NEIGHBOUR)
