@@ -286,12 +286,12 @@ def show_jointplot(
     x_array = x_array[not_na]
     y_array = y_array[not_na]
 
-    joint_kws.setdefault("shade", True)
+    joint_kws.setdefault("fill", True)
     joint_kws.setdefault("cmap", cmap)
     sns.kdeplot(x=x_array, y=y_array, ax=ax_joint, **joint_kws)
 
     if ax_marg_x is not None:
-        marginal_kws.setdefault("shade", True)
+        marginal_kws.setdefault("fill", True)
         marginal_kws.setdefault("color", sns.cubehelix_palette(8, reverse=True)[3])
         sns.kdeplot(x=x_array, vertical=False, ax=ax_marg_x, **marginal_kws)
         sns.kdeplot(y=y_array, vertical=True, ax=ax_marg_y, **marginal_kws)

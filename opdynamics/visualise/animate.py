@@ -97,6 +97,7 @@ class Animator(object):
             )
 
     def animate_nearest_neighbour(self, **kwargs):
+        # TODO: use custom jointplot
         bw_adjust = kwargs.setdefault("bw_adjust", 0.5)
         g = self.vis.show_nearest_neighbour(**kwargs)
         xlim = g.ax_joint.get_xlim()

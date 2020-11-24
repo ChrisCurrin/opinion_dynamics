@@ -197,7 +197,6 @@ class VisEchoChamber(object):
         import pandas as pd
 
         df_opinions: pd.DataFrame = self.ec.result_df().iloc[::subsample]
-        sim_time = df_opinions.index
 
         if color_code == "line" or color_code == "lines":
             # using the colorline method allows colors to be dependent on a value, in this case, opinion,
@@ -224,9 +223,9 @@ class VisEchoChamber(object):
             lw = kwargs.pop("lw", 0.1)
             ls = kwargs.pop("ls", "-")
             mec = kwargs.pop("mec", "None")
-            sns.set_palette(sns.color_palette("Set1", n_colors=len(self.ec.result.y)))
+            sns.set_palette(sns.color_palette("Set1", n_colors=df_opinions.shape[0]))
 
-            for agent_idx, agent_opinions in df_opinions.itertuples():
+            for agent_idx, agent_opinions in df_opinions.iteritems():
                 sns.lineplot(
                     x=agent_opinions.index,
                     y=agent_opinions.values,

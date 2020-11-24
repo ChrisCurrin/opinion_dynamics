@@ -14,8 +14,10 @@ from seaborn import (
     light_palette,
     dark_palette,
     blend_palette,
-    kdeplot as sns_kdeplot,
 )
+
+# import at most explicit depth for maintaining functionality
+from seaborn.distributions import kdeplot as sns_kdeplot
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from scipy import stats
@@ -165,8 +167,8 @@ def _bivariate_kdeplot(
 
 
 def kdeplot(
-    *,
     x=None,
+    *,
     y=None,
     shade=False,
     vertical=False,
@@ -177,7 +179,7 @@ def kdeplot(
     clip=None,
     legend=True,
     cumulative=False,
-    thresh=0,
+    shade_lowest=True,
     cbar=False,
     cbar_ax=None,
     cbar_kws=None,
@@ -347,13 +349,20 @@ def kdeplot(
             **kwargs,
         )
     else:
+        fill = kwargs.pop("fill", shade)
+        bw_method = kwargs.pop("bw_method", bw if isinstance(bw, str) else None)
+        bw_adjust = kwargs.pop("bw_adjust", bw if not isinstance(bw, str) else 1)
+        thresh = kwargs.pop("thresh", 1 - int(shade_lowest))
+        vertical = kwargs.pop("vertical", False)
+        if vertical:
+            y, x = x, y
         sns_kdeplot(
             x=x,
             y=y,
-            vertical=vertical,
-            fill=shade,
-            shade_lowest=shade_lowest,
-            bw_adjust=bw,
+            fill=fill,
+            thresh=thresh,
+            bw_adjust=bw_adjust,
+            bw_method=bw_method,
             gridsize=gridsize,
             cut=cut,
             clip=clip,
