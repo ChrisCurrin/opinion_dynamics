@@ -225,17 +225,16 @@ class VisEchoChamber(object):
             mec = kwargs.pop("mec", "None")
             sns.set_palette(sns.color_palette("Set1", n_colors=df_opinions.shape[0]))
 
-            for agent_idx, agent_opinions in df_opinions.iteritems():
-                sns.lineplot(
-                    x=agent_opinions.index,
-                    y=agent_opinions.values,
-                    ls=ls,
-                    mec=mec,
-                    lw=lw,
-                    ax=ax,
-                    **kwargs,
-                )
-        ax.set_xlim(0, self.ec.result.t[-1])
+            sns.lineplot(
+                x=df_opinions.index,
+                y=df_opinions.values,
+                ls=ls,
+                mec=mec,
+                lw=lw,
+                ax=ax,
+                **kwargs,
+            )
+        ax.set_xlim(0, df_opinions.index[-1])
         ax.set_xlabel(TIME_SYMBOL)
         ax.set_ylabel(OPINION_AGENT_TIME)
         ax.set_ylim(*self._get_equal_opinion_limits())

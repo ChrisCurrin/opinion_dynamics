@@ -50,32 +50,28 @@ import numpy as np
 
 
 class negpowerlaw(object):
-    """Power-law distribution with a negative exponent, provided the minimum is not 0.
+    """Power-law distribution with a **decay** exponent :math:`\\gamma \\in [\\varepsilon, 1]`
 
     This class acts like `scipy.stats` distributions (but does not inherit from `rv_continuous`).
 
     The power-law probability distribution is
 
     .. math ::
-        p(a) = (\\gamma-1)\\cdot \\epsilon^{\\gamma-1} \\cdot a^{-\\gamma}
 
-        p(a) = \\frac{\\gamma-1}{\\epsilon} (\\frac{a}{\\epsilon})^{-\\gamma}
+        F(a) = \\frac{1-\\gamma}{1-\\varepsilon^{1-\\gamma}} a^{-\\gamma}
 
     where :math:`a` is a continuous variable, :math:`\\gamma` is the power-law exponent,
-    and :math:`\\epsilon` is the lower bound.
+    and :math:`\\varepsilon` is the lower bound.
 
     .. note ::
 
-        The probability distribution can be generated a number of ways:
+        The probability distribution can be **generated** according to:
 
         .. math ::
-            \\epsilon \\cdot (1 - r)^{\\frac{-1}{\\gamma - 1}}
+            a \\sim (\\varepsilon^{1-\\gamma} + r \cdot (1-\\varepsilon^{1-\\gamma}))^{\\frac{1}{1-\\gamma}}
 
-            \\left(\\epsilon^{1 - \\gamma} +
-            ({a_{max}}^{1 - \\gamma} - \\epsilon^{1 - \\gamma}) * r\\right)^{\\frac{1}{1 - \\gamma}}
 
-        where :math:`r` is uniform random number :math:`r \\sim \\mathcal{U}(0,1)` and
-        :math:`{a_{max}}` is the upper bound
+        where :math:`r` is uniform random number :math:`r \\sim \\mathcal{U}(0,1)`
 
 
     """
@@ -84,7 +80,7 @@ class negpowerlaw(object):
 
     @staticmethod
     def rvs(gamma: float, low=0.01, high=1.0, size=1) -> np.ndarray:
-        """Sample a random variable from the distribution.
+        """Sample a random variable from the distribution proportional to :math:`a^{-\\gamma}` for :math:`low<=a<=high`
 
         see https://stackoverflow.com/questions/17882907/python-scipy-stats-powerlaw-negative-exponent
 
@@ -122,9 +118,31 @@ class negpowerlaw(object):
         return np.power(ag + (bg - ag) * r, 1.0 / -gamma)
 
     @staticmethod
-    def pdf(x, a, b, g) -> np.ndarray:
-        ag, bg = a ** g, b ** g
-        return g * x ** (g - 1) / (bg - ag)
+    def pdf(a, gamma, low=0.01, high=1.0) -> np.ndarray:
+        """
+        Probability density function of `a`
+
+        ..code-block:: python
+
+
+        :param a: value where to calculate the probability density function
+        :param gamma: the *negative* power of the exponent.
+            that is a negative value for gamma is the same as `scipy.stats.powerlaw.rvs(gamma)`.
+        :param low: lower bound of distribution values (inclusive).
+        :param high: upper bound of distribution values (inclusive).
+        :return:
+        :rtype:
+        """
+        ag, bg = low ** (1 - gamma), high ** (1 - gamma)
+        return (1 - gamma) * a ** (-gamma) / (bg - ag)
+
+    @staticmethod
+    def pdf_alt(a, gamma, low=0.01, high=1.0) -> np.ndarray:
+        """
+        see ``rvs_alt`` above
+        """
+        ag, bg = low ** -gamma, high ** -gamma
+        return -gamma * a ** (-gamma - 1) / (bg - ag)
 
     def __str__(self):
         return self.name

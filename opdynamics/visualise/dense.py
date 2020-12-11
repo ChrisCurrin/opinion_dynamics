@@ -286,7 +286,7 @@ def show_jointplot(
     x_array = x_array[not_na]
     y_array = y_array[not_na]
 
-    joint_kws.setdefault("fill", True)
+    joint_kws.setdefault("shade", True)
     joint_kws.setdefault("cmap", cmap)
     sns.kdeplot(x=x_array, y=y_array, ax=ax_joint, **joint_kws)
 
