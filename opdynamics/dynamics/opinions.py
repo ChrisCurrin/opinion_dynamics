@@ -127,3 +127,23 @@ def sample_dy_dt(t: float, y: np.ndarray, *all_args) -> np.ndarray:
         # calculate sample means every explicit dt (other_args[-1]) - independent of solver's dt
         clt_sample_method(ec, y, n, num_samples)
     return ec.super_dy_dt(t, y, *other_args) + ec.D * ec._sample_means
+
+
+def sample_dy_dt_alpha(t: float, y: np.ndarray, *all_args) -> np.ndarray:
+    """Opinion dynamics with random opinion samples.
+
+    As with meth::`sample_dy_dt`, but
+
+    """
+    clt_sample_method, ec, n, num_samples, *other_args = all_args
+    K, alpha, A, dt = other_args
+    if type(n) is tuple:
+        # choose between low and high values (randint not implemented for default_rng)
+        n = ec.rn.choice(np.arange(n[0], n[1], dtype=int))
+    if np.round(t % dt, 6) == 0:
+        # calculate sample means every explicit dt (other_args[-1]) - independent of solver's dt
+        clt_sample_method(ec, y, n, num_samples)
+
+    return ec.super_dy_dt(t, y, *other_args) + ec.D * np.sum(
+        A[int(t / dt)] * ec._sample_means, axis=1
+    )
