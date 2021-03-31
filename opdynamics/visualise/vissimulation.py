@@ -80,6 +80,15 @@ def show_periodic_noise(
     import seaborn as sns
     from matplotlib import gridspec
     from opdynamics.visualise import VisEchoChamber
+    from opdynamics.utils.plot_utils import get_time_point_idx
+
+    # calculate optimal bin edges from opinions distribution at noise start + noise_length
+    hist, bin_edges = np.histogram(
+        nec.result.y[
+            :, get_time_point_idx(nec.result.t, float(noise_start + noise_length))
+        ],
+        bins="auto",
+    )
 
     vis = VisEchoChamber(nec)
     # create figure and axes
@@ -95,19 +104,25 @@ def show_periodic_noise(
     # plot graphs
     vis.show_opinions(ax=ax_time, color_code="line", subsample=5, title=False)
     vis.show_opinions_snapshot(
-        ax=ax_start, t=noise_start, title=f"t = {noise_start}", color=_colors[0]
+        ax=ax_start,
+        t=noise_start,
+        title=f"t = {noise_start}",
+        color=_colors[0],
+        bins=bin_edges,
     )
     vis.show_opinions_snapshot(
         ax=ax_noise,
         t=noise_start + noise_length,
         title=f"t={noise_start + noise_length}",
         color=_colors[1],
+        bins=bin_edges,
     )
     vis.show_opinions_snapshot(
         ax=ax_recovery,
         t=-1,
         title=f"t={noise_start + noise_length + recovery}",
         color=_colors[2],
+        bins=bin_edges,
     )
     # adjust view limits
     from scipy import stats
@@ -138,11 +153,9 @@ def show_periodic_noise(
     # noise on/off
     noiseless_time = interval * (num - 1)
     block_time = (noise_length - noiseless_time) / num
-    block_times_s = [
-        noise_start + block_time * i + interval * i for i in range(num + 1)
-    ]
+    block_times_s = [noise_start + block_time * i + interval * i for i in range(num)]
     block_times_e = [
-        noise_start + block_time * (i + 1) + interval * i for i in range(num + 1)
+        noise_start + block_time * (i + 1) + interval * i for i in range(num)
     ]
     ax_time.hlines(
         y=[lim[1]] * num,

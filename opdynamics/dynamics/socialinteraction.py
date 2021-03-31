@@ -294,8 +294,10 @@ class SocialInteraction(object):
             )
         return self._accumulator
 
-    # create a property for t_idx=None
-    accumulator = property(accumulate)
+    # Cumulative adjacency matrix create a property for t_idx=None
+    total = property(accumulate)
+    # backwards compatibility
+    accumulator = total
 
     @lru_cache(maxsize=128)
     def __getitem__(self, item: int):

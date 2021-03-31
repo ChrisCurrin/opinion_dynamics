@@ -1,35 +1,28 @@
-import opdynamics.visualise.compat
-
 import itertools
 import logging
-import os
-from functools import reduce
+from typing import Callable, Tuple, Union
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import seaborn as sns
-import vaex
 from matplotlib.axes import Axes
 from matplotlib.cm import ScalarMappable
 from matplotlib.collections import QuadMesh
 from matplotlib.colors import LogNorm, Normalize
 from matplotlib.figure import Figure
+from opdynamics.metrics.opinions import mask_and_metric
+from opdynamics.utils.constants import *
+from opdynamics.utils.decorators import optional_fig_ax
+from opdynamics.utils.plot_utils import (
+    colorbar_inset,
+    df_multi_mask,
+    get_equal_limits,
+    move_cbar_label_to_title,
+)
 from scipy import interpolate
 from scipy.interpolate import interpn
 from seaborn.matrix import ClusterGrid
-from typing import Callable, Collection
-
-from opdynamics.metrics.opinions import distribution_modality, mask_and_metric
-from opdynamics.utils.cache import get_cache_dir
-from opdynamics.utils.decorators import hash_repeat, hashable, optional_fig_ax
-from opdynamics.utils.plot_utils import (
-    df_multi_mask,
-    get_equal_limits,
-    colorbar_inset,
-    move_cbar_label_to_title,
-)
-from opdynamics.utils.constants import *
 
 logger = logging.getLogger("dense plots")
 
@@ -53,7 +46,7 @@ def show_activity_vs_opinion(
     fig: Figure = None,
     title: str = "Density of activity and opinions",
     **kwargs,
-) -> (Figure, Axes):
+) -> Tuple[Figure, Axes]:
     """
     Density scatter plot colored by 2d histogram
 
@@ -70,7 +63,7 @@ def show_activity_vs_opinion(
 
     :keyword cbar_ax: Axes to use for plotting the colorbar (False to avoid flotting).
 
-    :return: (Figure, Axes) used.
+    :return: Tuple[Figure, Axes] used.
     """
 
     cbar_kws = {"label": P_A_X, **kwargs.pop("cbar_kws", {})}
@@ -137,7 +130,7 @@ def show_matrix(
     ax: Axes = None,
     title: str = "matrix",
     **kwargs,
-) -> (Figure or ClusterGrid, Axes):
+) -> Tuple[Union[Figure, ClusterGrid], Axes]:
     """
     Plot matrix where x and y are the indices of the matrix and z (or c) is the value.
 
@@ -157,7 +150,7 @@ def show_matrix(
 
     :keyword cbar_ax: Axes to use for plotting the colorbar.
 
-    :return: (Figure, Axes) used.
+    :return: Tuple[Figure, Axes] used.
     """
 
     N, M = mat.shape
@@ -306,7 +299,7 @@ def show_noise_panel(
     palette_kwargs=None,
     fig: Figure = None,
     ax: "np.ndarray[Axes]" = None,
-) -> (Figure, "np.ndarray[Axes]"):
+) -> Tuple[Figure, "np.ndarray[Axes]"]:
     """Display a grid of kernel density estimates (nudge vs opinion) for different parameters."""
 
     if grid_kwargs is None:

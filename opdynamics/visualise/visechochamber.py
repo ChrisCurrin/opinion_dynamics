@@ -8,14 +8,14 @@ from typing import Tuple
 
 from matplotlib.axes import Axes
 from matplotlib.cm import ScalarMappable
-from matplotlib.colors import Normalize, TwoSlopeNorm
+from matplotlib.colors import LogNorm, Normalize, TwoSlopeNorm
 from matplotlib.figure import Figure
 from matplotlib.ticker import MaxNLocator
 
 from opdynamics.networks import EchoChamber
 from opdynamics.utils.constants import *
 from opdynamics.utils.decorators import optional_fig_ax
-from opdynamics.utils.plot_utils import use_self_args
+from opdynamics.utils.plot_utils import get_time_point_idx, use_self_args
 from opdynamics.utils.plot_utils import colorbar_inset, colorline
 from opdynamics.visualise.dense import show_activity_vs_opinion, show_matrix
 
@@ -88,7 +88,7 @@ class VisEchoChamber(object):
 
         :keyword cbar_ax: Axes to use for plotting the colorbar.
 
-        :return: (Figure, Axes) used.
+        :return: Tuple[Figure, Axes] used.
 
         """
         # noinspection PyProtectedMember
@@ -131,7 +131,7 @@ class VisEchoChamber(object):
 
         :keyword cbar_ax: Axes to use for plotting the colorbar.
 
-        :return: (Figure, Axes) used.
+        :return: Tuple[Figure, Axes] used.
 
         """
         return show_matrix(
@@ -149,7 +149,7 @@ class VisEchoChamber(object):
     @optional_fig_ax
     def show_activities(
         self, ax: Axes = None, fig: Figure = None, **kwargs
-    ) -> (Figure, Axes):
+    ) -> Tuple[Figure, Axes]:
         kwargs.setdefault("color", "Green")
         sns.histplot(self.ec.activities, ax=ax, **kwargs)
         ax.set(
@@ -172,7 +172,7 @@ class VisEchoChamber(object):
         fig: Figure = None,
         title: str = "Opinion dynamics",
         **kwargs,
-    ) -> (Figure, Axes):
+    ) -> Tuple[Figure, Axes]:
         """
         Display the evolution of opinions over time.
 
@@ -188,12 +188,12 @@ class VisEchoChamber(object):
         :keyword vmin: minimum value to color from cmap. Lower values will be colored the same.
         :keyword vmax: maximum value to color from cmap. Higher values will be colored the same.
 
-        :return: (Figure, Axes) used.
+        :return: Tuple[Figure, Axes] used.
         """
         cmap = kwargs.pop("cmap", OPINIONS_CMAP)
         vmin = kwargs.pop("vmin", np.min(self.ec.result.y))
         vmax = kwargs.pop("vmax", np.max(self.ec.result.y))
-        sm = ScalarMappable(norm=TwoSlopeNorm(0, vmin, vmax), cmap=OPINIONS_CMAP)
+        sm = ScalarMappable(norm=TwoSlopeNorm(0, vmin, vmax), cmap=cmap)
         import pandas as pd
 
         df_opinions: pd.DataFrame = self.ec.result_df().iloc[::subsample]
@@ -243,6 +243,74 @@ class VisEchoChamber(object):
         return fig, ax
 
     @optional_fig_ax
+    def show_opinions_change(
+        self,
+        t: float = 0,
+        ax: Axes = None,
+        fig: Figure = None,
+        title: str = "Opinion dynamics (with change by color)",
+        **kwargs,
+    ) -> Tuple[Figure, Axes]:
+        """
+        Display the evolution of opinions over time.
+
+        :param t: The time point to consider the change of opinion from/to. Integers are treated as indices.
+            Default is 0 (the first time point).
+        :param ax: Axes to use for plot. Created if none passed.
+        :param fig: Figure to use for colorbar. Created if none passed.
+        :param title: Include title in the figure.
+
+        :keyword cmap: Colormap to use (color_code = True or 'line')
+        :keyword vmin: minimum value to color from cmap. Lower values will be colored the same.
+        :keyword vmax: maximum value to color from cmap. Higher values will be colored the same.
+
+        :return: Tuple[Figure, Axes] used.
+        """
+
+        cmap = kwargs.pop("cmap", "viridis")
+        df_opinions = self.ec.result_df()
+
+        idx = get_time_point_idx(self.ec.result.t, t)
+
+        t_val = df_opinions.index[idx]
+        df_change_from_start = np.abs(df_opinions.iloc[idx] - df_opinions)
+
+        vmin = kwargs.pop("vmin", np.max([df_change_from_start.values.min(), 1]))
+        vmax = kwargs.pop("vmax", df_change_from_start.values.max())
+
+        sm = ScalarMappable(norm=LogNorm(vmin, vmax), cmap=cmap)
+
+        # using the colorline method allows colors to be dependent on a value, in this case, opinion,
+        # but takes much longer to display
+        for (_, agent_opinion), (_, dagent_opinion) in zip(
+            df_opinions.iteritems(), df_change_from_start.iteritems()
+        ):
+            # add vmin for 0 values (for valid log(x) in LogNorm)
+            mask_zero = dagent_opinion.values == 0
+            c = sm.to_rgba(dagent_opinion.values + mask_zero * sm.norm.vmin)
+            lw = 0.1
+            colorline(
+                agent_opinion.index,
+                agent_opinion.values,
+                c,
+                lw=lw,
+                ax=ax,
+            )
+            # ax.scatter(
+            #     agent_opinion.index, agent_opinion.values, c=c, s=s,
+            # )
+
+        cbar = fig.colorbar(sm, ax=ax)
+        cbar.set_label(math_fix(f"$d{OPINION_SYMBOL}_{{i, t={t_val:.2f}}}(t)$"))
+        ax.set_xlim(0, df_opinions.index[-1])
+        ax.set_xlabel(TIME_SYMBOL)
+        ax.set_ylabel(OPINION_AGENT_TIME)
+        ax.set_ylim(*self._get_equal_opinion_limits())
+        if title:
+            ax.set_title(title)
+        return fig, ax
+
+    @optional_fig_ax
     def show_opinions_snapshot(
         self,
         t=-1,
@@ -250,8 +318,8 @@ class VisEchoChamber(object):
         fig: Figure = None,
         title: str = "Opinions distribution",
         **kwargs,
-    ) -> (Figure, Axes):
-        idx = np.argmin(np.abs(t - self.ec.result.t)) if isinstance(t, float) else t
+    ) -> Tuple[Figure, Axes]:
+        idx = get_time_point_idx(self.ec.result.t, t)
         bins = kwargs.pop("bins", "auto")
         kwargs.setdefault("color", "Purple")
         kwargs.setdefault("kde", True)
@@ -286,25 +354,33 @@ class VisEchoChamber(object):
         fig: Figure = None,
         colorbar: bool = True,
         title: str = "Agent opinions",
-    ) -> (Figure, Axes):
-        idx = np.argmin(np.abs(t - self.ec.result.t)) if isinstance(t, float) else t
+        show_middle=True,
+        **kwargs,
+    ) -> Tuple[Figure, Axes]:
+        cmap = kwargs.pop("cmap", OPINIONS_CMAP)
+
+        idx = get_time_point_idx(self.ec.result.t, t)
         opinions = self.ec.result.y[:, idx]
         agents = np.arange(self.ec.N)
         if not direction:
             # only magnitude
             opinions = np.abs(opinions)
 
-        if sort:
-            logger.warning(
-                "sorting opinions for `show_agent_opinions` means agent indices are jumbled"
-            )
-            # sort by opinion
-            ind = np.argsort(opinions)
+        if np.iterable(sort) or sort:
+
+            if isinstance(sort, np.ndarray):
+                # sort passed as indices
+                ind = sort
+            else:
+                logger.warning(
+                    "sorting opinions for `show_agent_opinions` means agent indices are jumbled"
+                )
+                # sort by opinion
+                ind = np.argsort(opinions)
             opinions = opinions[ind]
-            # agents = agents[ind]
 
         v = self._get_equal_opinion_limits()
-        sm = ScalarMappable(norm=Normalize(*v), cmap=OPINIONS_CMAP)
+        sm = ScalarMappable(norm=Normalize(*v), cmap=cmap)
         color = sm.to_rgba(opinions)
 
         ax.barh(
@@ -314,9 +390,10 @@ class VisEchoChamber(object):
             edgecolor="None",
             linewidth=0,  # remove bar borders
             height=1,  # per agent
+            **kwargs,
         )
         ax.axvline(x=0, ls="-", color="k", alpha=0.5, lw=1)
-        if sort:
+        if (np.iterable(sort) or sort) and show_middle:
             min_idx = np.argmin(np.abs(opinions))
             ax.hlines(
                 y=min_idx,
@@ -366,7 +443,7 @@ class VisEchoChamber(object):
         self, bw_adjust=0.5, t=-1, title=True, **kwargs
     ) -> sns.JointGrid:
         nn = self.ec.get_nearest_neighbours(t)
-        idx = np.argmin(np.abs(t - self.ec.result.t)) if isinstance(t, float) else t
+        idx = get_time_point_idx(self.ec.result.t, t)
         opinions = self.ec.result.y[:, idx]
         kwargs.setdefault("color", "Purple")
         marginal_kws = kwargs.pop("marginal_kws", dict())

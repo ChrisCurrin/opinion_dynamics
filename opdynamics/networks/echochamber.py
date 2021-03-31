@@ -402,7 +402,7 @@ class EchoChamber(object):
         ]
         t = self.result.t[t_indices]
         opinions = self.result.y[:, t_indices]
-        return np.diff(opinions, axis=1)
+        return t_indices, t, np.diff(opinions, axis=1)
 
     def result_df(self) -> pd.DataFrame:
         """Provide opinions as a pandas ``DataFrame``"""

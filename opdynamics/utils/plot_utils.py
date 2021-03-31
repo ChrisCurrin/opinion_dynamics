@@ -16,6 +16,18 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 logger = logging.getLogger("plot utils")
 
 
+def get_time_point_idx(time_series, time_point_or_index: Tuple[float, int]):
+    if isinstance(time_point_or_index, int) and time_point_or_index not in (0, -1):
+        logger.warn(
+            "'t' passed as an integer and will be treated as an array index. Pass as a float (e.g. 1.0) to treat as a time point."
+        )
+    return (
+        np.argmin(np.abs(time_point_or_index - time_series))
+        if isinstance(time_point_or_index, float)
+        else time_point_or_index
+    )
+
+
 def colorbar_inset(
     mappable: ScalarMappable,
     position="outer right",
