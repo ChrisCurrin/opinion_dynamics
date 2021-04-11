@@ -258,28 +258,23 @@ class SocialInteraction(object):
         self._accumulator = np.zeros((ec.N, ec.N), dtype=int)
         self._last_adj_mat: np.ndarray = None
         self._time_mat: np.ndarray = None
+        self._store_full_mat = False
 
         assert (
             0 <= p_mutual_interaction <= 1
         ), "p_mutual_interaction is a probability between 0 and 1"
         logger.debug(f"Social Interaction for {ec.name} initialised {self}.")
 
-    def eager(self, t_end: float, dt: float):
-        """Pre-compute social interactions (the adjacency matrix) for each time step until t_end."""
-        logger.info(f"eagerly computing {1 + int(t_end/dt)} adjacency matrices...")
+    def store_interactions(self, t_end: float, dt: float):
+        """Initialise the object to store social interactions (the adjacency matrix) for each time step until t_end."""
+        logger.info(f"storing {1 + int(t_end/dt)} adjacency matrices...")
         t_arr = np.arange(0, t_end + dt, dt)
         self._time_mat = np.zeros((len(t_arr), self.ec.N, self.ec.N), dtype=int)
-        active_thresholds = self.ec.rn.random(size=len(t_arr))
-        for t_idx, t_point in tqdm(enumerate(t_arr)):
-            if self._update_conn:
-                self._p_conn = self.conn_method(self.ec, **self.conn_kwargs)
-            self._time_mat[t_idx, :, :] = get_social_interaction(
-                self.ec,
-                active_thresholds[t_idx],
-                self.p_mutual_interaction,
-                self._p_conn,
-            )
+        self._store_full_mat = True
         logger.debug(f"adjacency matrix has shape = {self._time_mat.shape}")
+
+    def disable_store_interactions(self):
+        self._store_full_mat = False
 
     def accumulate(self, t_idx=None):
         """The total number of interactions between agents i and j (matrix)"""
@@ -301,17 +296,26 @@ class SocialInteraction(object):
 
     @lru_cache(maxsize=128)
     def __getitem__(self, item: int):
-        if self._time_mat is not None:
-            return self._time_mat[item]
-
         if item == -1:
             return self._last_adj_mat
+        
+        if self._time_mat is not None and np.sum(self._time_mat[item])>0:
+            # we are storing interactions and have already computed this item (not every value is 0)
+            return self._time_mat[item]
+
+        # compute interactions
+
         if self._update_conn:
             self._p_conn = self.conn_method(self.ec, **self.conn_kwargs)
+
         self._last_adj_mat = get_social_interaction(
             self.ec, self.ec.rn.random(), self.p_mutual_interaction, self._p_conn
         )
+        # update accumulator and full matrix (if applicable)
         self._accumulator += self._last_adj_mat
+        if self._store_full_mat:
+            self._time_mat[item, :, :] = self._last_adj_mat
+        
         return self._last_adj_mat
 
     def __repr__(self):

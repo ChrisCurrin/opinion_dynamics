@@ -192,7 +192,7 @@ class EchoChamber(object):
                     "`t_end` and `dt` need to be defined for pre-emptively storing adjacency matrix in "
                     "`set_social_interactions`"
                 )
-            self.adj_mat.eager(t_end, dt)
+            self.adj_mat.store_interactions(t_end, dt)
 
     def set_dynamics(self, *args, **kwargs):
         """Set the dynamics of network by assigning a function to `self.dy_dt`.
