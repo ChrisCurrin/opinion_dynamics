@@ -2,6 +2,8 @@
 
 """
 import copy
+from functools import lru_cache
+from opdynamics.utils.plot_utils import get_time_point_idx
 import os
 
 import numpy as np
@@ -187,7 +189,7 @@ class EchoChamber(object):
         if not lazy:
             if t_end is None or dt is None:
                 raise RuntimeError(
-                    "`t_end` and `dt` need to be defined for eager calculation of adjacency matrix in "
+                    "`t_end` and `dt` need to be defined for pre-emptively storing adjacency matrix in "
                     "`set_social_interactions`"
                 )
             self.adj_mat.eager(t_end, dt)
@@ -208,6 +210,11 @@ class EchoChamber(object):
     @property
     def current_time(self):
         return 0 if not self.has_results else self.result.t[-1]
+
+    @property
+    @lru_cache(maxsize=1)
+    def agent_idxs(self):
+        return list(range(self.N))
 
     def _setup_run(self, t_end: float = 0.05) -> Tuple[float, float]:
         if self.activities is None or self.adj_mat is None or self.dy_dt is None:
@@ -389,7 +396,7 @@ class EchoChamber(object):
         see https://doi.org/10.1007/s10182-008-0057-2
 
         """
-        t_idx = np.argmin(np.abs(t - self.result.t)) if isinstance(t, float) else t
+        t_idx = get_time_point_idx(t, self.result.t)
         opinions = self.result.y[:, t_idx]
         return distribution_modality(opinions)
 
@@ -403,6 +410,75 @@ class EchoChamber(object):
         t = self.result.t[t_indices]
         opinions = self.result.y[:, t_indices]
         return t_indices, t, np.diff(opinions, axis=1)
+
+    @lru_cache(maxsize=None)
+    def get_network_graph(self):
+        """Construct a graph of the network
+        
+        :return: The graph object (from ``networkx``).
+        
+        """
+        import networkx as nx
+        from itertools import product
+
+        conn_weights = self.adj_mat.accumulator
+
+        G = nx.DiGraph()
+
+        for i in self.agent_idxs:
+            G.add_node(i, x=self.opinions[i])
+
+        for i, j in product(*[range(N) for N in conn_weights.shape]):
+            G.add_edge(i, j, weight=conn_weights[i, j])
+            G.add_edge(j, i, weight=conn_weights[j, i])
+
+        return G
+
+    def get_network_agents(self):
+        """Construct a graph of the network and determine the in-degree and out-degree of each agent in the network.
+
+        The degree of an agent is the total number of connections it made with all other agents (directed if in- or out- are specified).
+
+        :return: The graph object (from ``networkx``) and a dataframe with the degree information.
+        """
+        G = self.get_network_graph()
+        # note that we explicitly provide the agent indices for an ordered result
+
+        # note that "degree" is the sum of in_degree and out_degree
+        degree = pd.Series([d for n, d in G.degree(self.agent_idxs, weight="weight")])
+        in_degree = pd.Series(
+            [d for n, d in G.in_degree(self.agent_idxs, weight="weight")]
+        )
+        out_degree = pd.Series(
+            [d for n, d in G.out_degree(self.agent_idxs, weight="weight")]
+        )
+
+        df_degree = pd.DataFrame(
+            {
+                "idx": self.agent_idxs,
+                "opinion": self.opinions,
+                "in_degree": in_degree,
+                "out_degree": out_degree,
+                "degree": degree,
+            }
+        )
+
+        return G, df_degree
+
+    def get_network_connections(self, long=True):
+        G = self.get_network_graph()
+        df_wide = pd.DataFrame(G.edges(data="weight"), columns=["A", "B", "weight"])
+        if not long:
+            return df_wide
+
+        df_long = (
+            df_wide[df_wide["weight"] != 0]
+            .melt(id_vars=["A"], value_vars=["B"])
+            .drop(columns=["variable"])
+        )
+        df_long.columns = ["A", "B"]
+
+        return G, df_long
 
     def result_df(self) -> pd.DataFrame:
         """Provide opinions as a pandas ``DataFrame``"""
@@ -437,7 +513,7 @@ class EchoChamber(object):
         :param write_mapping: Write to a file that maps the object's string representation and it's hash value.
         :param dt: Explicitly include the dt value for the index name. If not provided, it is calculated as the
             maximum time step from ``result_df``..
-        :return Saved filename.
+        :return: Saved filename.
         """
         import warnings
         from tables import NaturalNameWarning

@@ -31,7 +31,7 @@ def show_simulation_results(_ec: EchoChamber, plot_opinion: str):
             1, 2, sharey="col", gridspec_kw={"width_ratios": [1, 0.1]}
         )
         _vis.show_opinions(True, ax=axs[0])
-        _vis.show_opinions_snapshot(vertical=True, ax=axs[-1])
+        _vis.show_opinions_distribution(vertical=True, ax=axs[-1])
         axs[-1].set_ylabel("")
         axs[-1].set_yticklabels([])
         fig.subplots_adjust(hspace=0.1)
@@ -56,7 +56,7 @@ def show_simulation_range(var_range, nec_arr, fig_ax=None):
         kwargs = {"ax": _ax, "color": cs[i]}
         if i > 0:
             kwargs["title"] = False
-        vis.show_opinions_snapshot(**kwargs)
+        vis.show_opinions_distribution(**kwargs)
         if i != len(nec_arr) - 1:
             _ax.set_xlabel("")
         _ax.set_ylabel(
@@ -103,21 +103,21 @@ def show_periodic_noise(
     _colors = sns.color_palette("husl")
     # plot graphs
     vis.show_opinions(ax=ax_time, color_code="line", subsample=5, title=False)
-    vis.show_opinions_snapshot(
+    vis.show_opinions_distribution(
         ax=ax_start,
         t=noise_start,
         title=f"t = {noise_start}",
         color=_colors[0],
         bins=bin_edges,
     )
-    vis.show_opinions_snapshot(
+    vis.show_opinions_distribution(
         ax=ax_noise,
         t=noise_start + noise_length,
         title=f"t={noise_start + noise_length}",
         color=_colors[1],
         bins=bin_edges,
     )
-    vis.show_opinions_snapshot(
+    vis.show_opinions_distribution(
         ax=ax_recovery,
         t=-1,
         title=f"t={noise_start + noise_length + recovery}",

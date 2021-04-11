@@ -202,10 +202,13 @@ def run_periodic_noise(
 
     lazy = kwargs.pop("lazy", True)
     if not lazy:
+        # logger.warning(
+        #     "value of 'lazy' provided to run_periodic_noise is ignored (was set to True)."
+        # )
+        # lazy = True
         logger.warning(
-            "value of 'lazy' provided to run_periodic_noise is ignored (was set to True)."
+            "value of 'lazy' was `False`, this may lead to large amounts of RAM use! Set to `True` for more efficient simulations."
         )
-        lazy = True
     logger.debug(f"letting network interact without noise until {noise_start}.")
     noiseless_time = interval * (num - 1)
     block_time = np.round((noise_length - noiseless_time) / num, 3)

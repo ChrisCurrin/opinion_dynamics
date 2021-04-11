@@ -311,7 +311,7 @@ class VisEchoChamber(object):
         return fig, ax
 
     @optional_fig_ax
-    def show_opinions_snapshot(
+    def show_opinions_distribution(
         self,
         t=-1,
         ax: Axes = None,
@@ -462,6 +462,76 @@ class VisEchoChamber(object):
             g.fig.suptitle("Neighbour's opinions", va="bottom")
         return g
 
+    def show_graph(self, **kwargs):
+        import networkx as nx
+
+        cmap = kwargs.pop("cmap", "bwr")
+        vmin = kwargs.pop("vmin", np.min(self.ec.opinions))
+        vmax = kwargs.pop("vmax", np.max(self.ec.opinions))
+        alpha = kwargs.pop("alpha", 0.5)
+
+        G = self.ec.get_network_graph()
+
+        edge_weights = [d["weight"] for (u, v, d) in G.edges(data=True)]
+        scale_weight = 1 / np.max(edge_weights)
+
+        sm = ScalarMappable(norm=TwoSlopeNorm(0, vmin, vmax), cmap=cmap)
+        edge_sm = ScalarMappable(
+            norm=LogNorm(max(min(edge_weights), 1), np.max(edge_weights)),
+            cmap="viridis",
+        )
+        c = sm.to_rgba(self.ec.opinions)
+        edge_c = edge_sm.to_rgba(self.ec)
+        # ajdust the alpha
+        c[:, 3] = alpha
+        edge_c[:, 3] = alpha
+
+        # layout
+        logger.debug("laying out using fruchterman_reingold_layout...")
+        # use fruchterman_reingold_layout
+        # see https://networkx.org/documentation/stable/reference/generated/networkx.drawing.layout.spring_layout.html
+
+        # # Initial position of agents
+        # initial_pos = (
+        #     df_degree.sort_values(by="opinion")["opinion"]
+        #     .apply(
+        #         lambda x: (
+        #             (-5 if x < 0 else 5) + np.random.uniform(-1, 1),
+        #             np.random.uniform(-1, 1),
+        #         )
+        #     )
+        #     .to_dict()
+        # )
+        pos = nx.spring_layout(
+            G,
+            center=(0, 0),
+            iterations=int(self.ec.N * np.log10(self.ec.N)),
+            weight="weight",
+            seed=1337,
+        )
+
+        logger.debug("drawing graph...")
+
+        nx.draw_networkx(
+            G,
+            pos,
+            with_labels=False,
+            node_color=c,
+            node_size=10,
+            arrowsize=0.3,
+            linewidths=np.array(edge_weights) * scale_weight,
+            width=np.array(edge_weights) * scale_weight,
+            edge_color=edge_c,
+        )
+
+        logger.debug("done drawing graph")
+        
+        # logger.debug("*"*32+"\nsaving graph as png...")
+        # plt.savefig("output/fig_net.png", dpi=300)
+        # logger.debug("*"*32+"\nsaving graph as pdf...")
+        # plt.savefig("output/fig_net.pdf", dpi=300, rasterized=True)
+        return plt.gcf()
+
     def show_summary(self, single_fig=True, fig_kwargs=None) -> Tuple[Figure, Axes]:
         nrows = 3
         ncols = 2
@@ -487,7 +557,7 @@ class VisEchoChamber(object):
         _, ax[1, 0] = self.show_adjacency_matrix("mesh", sort=True, ax=ax[1, 0])
         _, ax[2, 0] = self.show_activities(ax=ax[2, 0])
         # second column has opinion as x-axis
-        _, ax[0, 1] = self.show_opinions_snapshot(ax=ax[0, 1])
+        _, ax[0, 1] = self.show_opinions_distribution(ax=ax[0, 1])
         _, ax[1, 1] = self.show_agent_opinions(ax=ax[1, 1], sort=True)
         _, ax[2, 1], cbar = self.show_activity_vs_opinion(ax=ax[2, 1])
         # `show_agent_opinions` already calculates optimal limits

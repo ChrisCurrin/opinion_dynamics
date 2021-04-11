@@ -378,9 +378,3 @@ def kdeplot(
         )
 
     return ax
-
-
-# re-assign
-import seaborn
-
-seaborn.kdeplot = kdeplot

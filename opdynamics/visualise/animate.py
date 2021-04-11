@@ -14,6 +14,7 @@ from opdynamics.networks import EchoChamber
 from opdynamics.utils.decorators import optional_fig_ax
 from opdynamics.utils.distributions import negpowerlaw
 from opdynamics.utils.plot_utils import get_equal_limits
+from opdynamics.visualise.compat import sns_kdeplot
 
 logger = logging.getLogger("animate")
 
@@ -30,14 +31,14 @@ class Animator(object):
     @optional_fig_ax
     def animate_opinions(self, fig=None, ax=None):
         def init():
-            self.vis.show_opinions_snapshot(ax=ax, t=0, **self.vis_kwargs)
+            self.vis.show_opinions_distribution(ax=ax, t=0, **self.vis_kwargs)
             ax.set_xlim(*get_equal_limits(self.ec.result.y))
             ax.set_ylim(0, 1)
             ax.set_title(f"{0:>6.3f}")
 
         def animate(i):
             ax.clear()
-            self.vis.show_opinions_snapshot(ax=ax, t=i, **self.vis_kwargs)
+            self.vis.show_opinions_distribution(ax=ax, t=i, **self.vis_kwargs)
             ax.set_title(f"{self.ec.result.t[i]:>6.3f}")
 
         if len(fig.axes) > 1:
@@ -132,8 +133,8 @@ class Animator(object):
             not_na = pd.notnull(x) & pd.notnull(y)
             g.x = x[not_na]
             g.y = y[not_na]
-            g.plot_joint(sns.kdeplot, **kwargs)
-            g.plot_marginals(sns.kdeplot, **marginal_kws)
+            g.plot_joint(sns_kdeplot, **kwargs)
+            g.plot_marginals(sns_kdeplot, **marginal_kws)
 
             # these are reset after .clear(); so go correct these as in joint_plot
             plt.setp(g.ax_marg_x.get_xticklabels(), visible=False)
