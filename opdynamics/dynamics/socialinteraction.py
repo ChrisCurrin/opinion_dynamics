@@ -16,16 +16,16 @@
 
 """
 import inspect
-from functools import lru_cache
-import logging
-
 import json
-import numpy as np
-from tqdm import tqdm
+import logging
+from functools import lru_cache
+from typing import Tuple
 
+import numpy as np
 from opdynamics.networks import EchoChamber
 from opdynamics.utils.cache import NpEncoder
 from opdynamics.utils.decorators import hashable
+from tqdm import tqdm
 
 logger = logging.getLogger("social interaction")
 
@@ -295,11 +295,11 @@ class SocialInteraction(object):
     accumulator = total
 
     @lru_cache(maxsize=128)
-    def __getitem__(self, item: int):
+    def _getitem__specific(self, item: int):
         if item == -1:
             return self._last_adj_mat
-        
-        if self._time_mat is not None and np.sum(self._time_mat[item])>0:
+
+        if self._time_mat is not None and np.sum(self._time_mat[item]) > 0:
             # we are storing interactions and have already computed this item (not every value is 0)
             return self._time_mat[item]
 
@@ -315,8 +315,16 @@ class SocialInteraction(object):
         self._accumulator += self._last_adj_mat
         if self._store_full_mat:
             self._time_mat[item, :, :] = self._last_adj_mat
-        
+
         return self._last_adj_mat
+
+    def _getitem__slice(self, key: slice):
+        return self._time_mat[key]
+
+    def __getitem__(self, item: Tuple[int, slice]):
+        if isinstance(item, slice):
+            return self._getitem__slice(item)
+        return self._getitem__specific(item)
 
     def __repr__(self):
         return (
