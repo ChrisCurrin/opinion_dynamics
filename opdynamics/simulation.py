@@ -210,6 +210,7 @@ def run_periodic_noise(
             "value of 'lazy' was `False`, this may lead to large amounts of RAM use! Set to `True` for more efficient simulations."
         )
     logger.debug(f"letting network interact without noise until {noise_start}.")
+    t_end = noise_start + noise_length + recovery
     noiseless_time = interval * (num - 1)
     block_time = np.round((noise_length - noiseless_time) / num, 3)
     logger.debug(
@@ -217,18 +218,17 @@ def run_periodic_noise(
         f"{block_time:.3f} with intervals of {interval}. A total of {num} perturbations will be done."
     )
     # create progress bar
-    total_progress = noise_start + num * block_time + (num - 1) * interval + recovery
     t = tqdm(
         iterable=None,
         desc="periodic noise",
-        total=total_progress,
+        total=t_end,
         disable=logger.getEffectiveLevel() > logging.INFO,
     )
     name = kwargs.pop("name", "")
     name += f"[num={num} interval={interval}]"
     nec = cls(N, m, K, alpha, *args, **kwargs)
     nec.set_activities(activity, gamma, epsilon, 1, dim=1)
-    nec.set_social_interactions(beta=beta, r=r, lazy=lazy, **kwargs)
+    nec.set_social_interactions(beta=beta, r=r, lazy=lazy, dt=dt, t_end=t_end, **kwargs)
     nec.set_dynamics(D=0, *args, **kwargs)
 
     # try to hit the cache by creating noise history
