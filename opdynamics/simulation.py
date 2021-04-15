@@ -10,10 +10,10 @@ from functools import partial
 
 import vaex
 from tqdm import tqdm, trange
-from typing import Callable, Dict, Iterable, List, Type, TypeVar, Union
+from typing import Callable, Dict, Iterable, List, Tuple, Type, TypeVar, Union
 
 from opdynamics.utils.cache import save_results
-from opdynamics.networks import EchoChamber, OpenChamber
+from opdynamics.networks import EchoChamber, NoisyEchoChamber, OpenChamber
 from opdynamics.utils.distributions import negpowerlaw
 from opdynamics.visualise import (
     show_periodic_noise,
@@ -42,7 +42,6 @@ def run_params(
     dt: float = 0.01,
     T: float = 1.0,
     method: str = None,
-    lazy: bool = True,
     cache: Union[bool, str] = True,
     plot_opinion: Union[bool, str] = False,
     write_mapping=True,
@@ -67,8 +66,6 @@ def run_params(
     :param T: Length of simulation.
 
     :param method: Solver method (custom or part of scipy).
-    :param lazy: Compute social interactions when needed (True) or before the network evolves with time (False).
-        Note that this can lead to large RAM usage.
     :param cache: Use a cache to retrieve and save results. Saves to `.cache`.
     :param plot_opinion: Display opinions (True), display summary figure ('summary') or display multiple figures (
         'all').
@@ -83,15 +80,22 @@ def run_params(
             method = "Euler-Maruyama"
         else:
             method = "RK45"
+
+    # allow explicit setting of storing interactions
+    store_all = sim_kwargs.pop("store_all", cache == "all")
+
     logger.debug(
         f"run_params for {cls.__name__} with (N={N}, m={m}, K={K}, alpha={alpha}, beta={beta}, activity "
         f"={str(activity)}(epsilon={epsilon}, gamma={gamma}), dt={dt}, T={T}, r={r}, plot_opinion="
-        f"{plot_opinion}, lazy={lazy})"
+        f"{plot_opinion})"
     )
     logger.debug(f"additional args={sim_args}\tadditional kwargs={sim_kwargs}")
+
     _ec = cls(N, m, K, alpha, *sim_args, **sim_kwargs)
     _ec.set_activities(activity, gamma, epsilon, 1, dim=1, **sim_kwargs)
-    _ec.set_social_interactions(beta=beta, r=r, lazy=lazy, dt=dt, t_end=T, **sim_kwargs)
+    _ec.set_social_interactions(
+        beta=beta, r=r, store_all=store_all, dt=dt, t_end=T, **sim_kwargs
+    )
     _ec.set_dynamics(*sim_args, **sim_kwargs)
     if not (cache and _ec.load(dt, T)):
         _ec.run_network(dt=dt, t_end=T, method=method)
@@ -200,15 +204,8 @@ def run_periodic_noise(
         else:
             method = "RK45"
 
-    lazy = kwargs.pop("lazy", True)
-    if not lazy:
-        # logger.warning(
-        #     "value of 'lazy' provided to run_periodic_noise is ignored (was set to True)."
-        # )
-        # lazy = True
-        logger.warning(
-            "value of 'lazy' was `False`, this may lead to large amounts of RAM use! Set to `True` for more efficient simulations."
-        )
+    store_all = kwargs.pop("store_all", cache == "all")
+
     logger.debug(f"letting network interact without noise until {noise_start}.")
     t_end = noise_start + noise_length + recovery
     noiseless_time = interval * (num - 1)
@@ -228,7 +225,9 @@ def run_periodic_noise(
     name += f"[num={num} interval={interval}]"
     nec = cls(N, m, K, alpha, *args, **kwargs)
     nec.set_activities(activity, gamma, epsilon, 1, dim=1)
-    nec.set_social_interactions(beta=beta, r=r, lazy=lazy, dt=dt, t_end=t_end, **kwargs)
+    nec.set_social_interactions(
+        beta=beta, r=r, store_all=store_all, dt=dt, t_end=t_end, **kwargs
+    )
     nec.set_dynamics(D=0, *args, **kwargs)
 
     # try to hit the cache by creating noise history
@@ -284,7 +283,7 @@ def run_periodic_noise(
 
 def _comp_unit(
     cls, keys, values: list, cache, write_mapping: bool = True, **kwargs
-) -> (EC, dict):
+) -> Tuple[EC, dict]:
     """Define unit of computation to be parallelizable.
 
     :param values: Values to update in kwargs according. Same order as keys.

@@ -525,7 +525,7 @@ class VisEchoChamber(object):
         )
 
         logger.debug("done drawing graph")
-        
+
         # logger.debug("*"*32+"\nsaving graph as png...")
         # plt.savefig("output/fig_net.png", dpi=300)
         # logger.debug("*"*32+"\nsaving graph as pdf...")

@@ -1,7 +1,7 @@
 import logging
 from functools import partial
 from operator import attrgetter
-from typing import Iterable, Tuple
+from typing import Iterable, Tuple, Union
 
 import numpy as np
 from collections import Callable
@@ -16,12 +16,12 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 logger = logging.getLogger("plot utils")
 
 
-def get_time_point_idx(time_series, time_point_or_index: Tuple[float, int]):
+def get_time_point_idx(time_series, time_point_or_index: Union[float, int]):
     if isinstance(time_point_or_index, int) and time_point_or_index not in (0, -1):
         logger.warn(
             "'t' passed as an integer and will be treated as an array index. Pass as a float (e.g. 1.0) to treat as a time point."
         )
-    return (
+    return int(
         np.argmin(np.abs(time_point_or_index - time_series))
         if isinstance(time_point_or_index, float)
         else time_point_or_index

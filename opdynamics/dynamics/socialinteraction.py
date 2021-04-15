@@ -15,15 +15,17 @@
     Interface to calculate connection probabilities and social interaction matrix at discrete time steps
 
 """
+import atexit
 import inspect
 import json
 import logging
+import os
 from functools import lru_cache
-from typing import Tuple
+from typing import Tuple, Union
 
 import numpy as np
 from opdynamics.networks import EchoChamber
-from opdynamics.utils.cache import NpEncoder
+from opdynamics.utils.cache import NpEncoder, get_hash_filename
 from opdynamics.utils.decorators import hashable
 from tqdm import tqdm
 
@@ -257,8 +259,7 @@ class SocialInteraction(object):
         self._update_conn = update_conn
         self._accumulator = np.zeros((ec.N, ec.N), dtype=int)
         self._last_adj_mat: np.ndarray = None
-        self._time_mat: np.ndarray = None
-        self._store_full_mat = False
+        self._time_mat: np.memmap = None
 
         assert (
             0 <= p_mutual_interaction <= 1
@@ -269,27 +270,46 @@ class SocialInteraction(object):
         """Initialise the object to store social interactions (the adjacency matrix) for each time step until t_end."""
         logger.info(f"storing {1 + int(t_end/dt)} adjacency matrices...")
         t_arr = np.arange(0, t_end + dt, dt)
-        self._time_mat = np.zeros((len(t_arr), self.ec.N, self.ec.N), dtype=int)
-        self._store_full_mat = True
+        adj_mat_memmap_file = get_hash_filename(self, "dat")
+
+        self._time_mat = np.memmap(
+            adj_mat_memmap_file,
+            dtype=int,
+            mode="r+" if os.path.exists(adj_mat_memmap_file) else "w+",
+            shape=(len(t_arr), self.ec.N, self.ec.N),
+        )
+
+        # set up hook to clean up upon system exit
+        def del_mmap(mmap_array):
+            del mmap_array
+        atexit.register(del_mmap, self._time_mat)
+
         logger.debug(f"adjacency matrix has shape = {self._time_mat.shape}")
 
-    def disable_store_interactions(self):
-        self._store_full_mat = False
+    def accumulate(self, t_idx: Union[int, slice, Tuple[int, int]] = -1):
+        """The total number of interactions between agents i and j (matrix).
 
-    def accumulate(self, t_idx=None):
-        """The total number of interactions between agents i and j (matrix)"""
-        if self._time_mat is not None:
-            if t_idx is None:
-                return np.sum(self._time_mat, axis=0)
-            return np.sum(self._time_mat[:t_idx], axis=0)
-        elif t_idx is not None and t_idx != -1:
+        If `t_idx` is provided, either the accumulation up to that index (if an int) or the accumulation
+        between 2 points (slice like 5:10) is returned.
+        Generally, `t_idx` will only work as expected if `store_interactions` was set to True.
+        The exception is `t_idx=-1`, the default value, which returns the total number of interactions regardless of the value of
+        `store_interactions`.
+        """
+        if isinstance(t_idx, int) and t_idx == -1:
+            return self._accumulator
+        elif self._time_mat is not None:
+            if isinstance(t_idx, int):
+                return np.sum(self._time_mat[:t_idx], axis=0)
+            elif np.iterable(t_idx):
+                return np.sum(self._time_mat[t_idx[0] : t_idx[1]], axis=0)
+            return np.sum(self._time_mat[t_idx], axis=0)
+        else:
             raise IndexError(
-                f"Accumulate called with t_idx={t_idx} but adj_mat is computed lazily. "
-                f"Call ``eager(<dt>, <t_end>)`` first or set `lazy=False`."
+                f"Accumulate called with t_idx={t_idx} but adj_mat is not stored. "
+                f"Call ``store_interactions(<dt>, <t_end>)`` first or set `cache='all'` for simulations."
             )
-        return self._accumulator
 
-    # Cumulative adjacency matrix create a property for t_idx=None
+    # Cumulative adjacency matrix create a property for t_idx=-1
     total = property(accumulate)
     # backwards compatibility
     accumulator = total
@@ -311,9 +331,11 @@ class SocialInteraction(object):
         self._last_adj_mat = get_social_interaction(
             self.ec, self.ec.rn.random(), self.p_mutual_interaction, self._p_conn
         )
-        # update accumulator and full matrix (if applicable)
+        # update accumulator
         self._accumulator += self._last_adj_mat
-        if self._store_full_mat:
+
+        if self._time_mat is not None:
+            # update full matrix (if applicable)
             self._time_mat[item, :, :] = self._last_adj_mat
 
         return self._last_adj_mat
@@ -321,7 +343,7 @@ class SocialInteraction(object):
     def _getitem__slice(self, key: slice):
         return self._time_mat[key]
 
-    def __getitem__(self, item: Tuple[int, slice]):
+    def __getitem__(self, item: Union[int, slice]):
         if isinstance(item, slice):
             return self._getitem__slice(item)
         return self._getitem__specific(item)

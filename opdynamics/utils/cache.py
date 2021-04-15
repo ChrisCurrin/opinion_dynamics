@@ -130,6 +130,19 @@ def save_results(file_name: str, ec: EchoChamber, **kwargs) -> None:
         store.append("df", pd.DataFrame(df_builder))
 
 
+def get_hash_filename(hashable_obj, filetype="h5", cache_kwargs=None) -> str:
+    """Get a cacheable filename for this class instance (must be decorated by `utils.decorators.hashable`)"""
+
+    cache_kwargs = cache_kwargs or {}
+
+    if filetype.startswith("."):
+        filetype = filetype[1:]
+
+    cache_dir = get_cache_dir(**cache_kwargs)
+
+    return os.path.join(cache_dir, f"{hash(hashable_obj)}.{filetype}")
+
+
 class NpEncoder(json.JSONEncoder):
     """Numpy Json encoder
 

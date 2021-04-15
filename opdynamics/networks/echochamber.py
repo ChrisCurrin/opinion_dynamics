@@ -3,6 +3,7 @@
 """
 import copy
 from functools import lru_cache
+from opdynamics.utils.cache import get_hash_filename
 from opdynamics.utils.plot_utils import get_time_point_idx
 import os
 
@@ -145,7 +146,7 @@ class EchoChamber(object):
         self,
         beta: float = 0.0,
         r: float = 0.5,
-        lazy=False,
+        store_all=False,
         dt: float = None,
         t_end: float = None,
         **kwargs,
@@ -163,8 +164,7 @@ class EchoChamber(object):
         :param beta: Power law decay of connection probability. Decay when beta>0, increase when beta<0.
             When beta=0, then connection probabilities are uniform.
         :param r: Probability of a mutual interaction [0,1].
-        :param lazy: Generate self.adj_mat on-demand during simulation (True) or computer all the interaction matrices
-            for all time steps before (False).
+        :param store_all: Store all the interaction matrice (True) or only the accumulative interactions and last interaction (False).
         :param dt: Time step being used in simulation. Specified here so interaction dynamics have a clear time step
             even if the integration of the opinion dynamics occurs at smaller time steps (e.g. with the RK method).
         :param t_end: Last time point. Together with dt, determines the size of the social interaction array.
@@ -177,16 +177,16 @@ class EchoChamber(object):
         if self.activities is None:
             raise RuntimeError(
                 """Activities need to be set. 
-                                                                                        ec = EchoChamber(...)
-                                                                                        ec.set_activities(...)
-                                                                                        ec.set_connection_probabilities(...)
-                                                                                        ec.set_social_interactions(...)
-                                                                                        """
+                ec = EchoChamber(...)
+                ec.set_activities(...)
+                ec.set_connection_probabilities(...)
+                ec.set_social_interactions(...)
+                """
             )
 
         self.adj_mat = SocialInteraction(self, r, beta=beta, **kwargs)
         self._beta = beta
-        if not lazy:
+        if not store_all:
             if t_end is None or dt is None:
                 raise RuntimeError(
                     "`t_end` and `dt` need to be defined for pre-emptively storing adjacency matrix in "
@@ -396,7 +396,7 @@ class EchoChamber(object):
         see https://doi.org/10.1007/s10182-008-0057-2
 
         """
-        t_idx = get_time_point_idx(t, self.result.t)
+        t_idx = get_time_point_idx(self.result.t, t)
         opinions = self.result.y[:, t_idx]
         return distribution_modality(opinions)
 
@@ -411,22 +411,36 @@ class EchoChamber(object):
         opinions = self.result.y[:, t_indices]
         return t_indices, t, np.diff(opinions, axis=1)
 
-    @lru_cache(maxsize=None)
-    def get_network_graph(self):
+    @lru_cache(maxsize=None, typed=True)
+    def get_network_graph(self, t: Union[Tuple[Union[int, float]], int, float] = -1):
         """Construct a graph of the network
-        
+
         :return: The graph object (from ``networkx``).
-        
+
         """
         import networkx as nx
         from itertools import product
 
-        conn_weights = self.adj_mat.accumulator
+        if np.iterable(t):
+            assert (
+                len(t) == 2
+            ), "`t` should be either a single value or 2 values in a tuple/list"
+            t_idx = (
+                get_time_point_idx(self.result.t, t[0]),
+                get_time_point_idx(self.result.t, t[1]),
+            )
+            last_t_idx = t_idx[1]
+        else:
+            last_t_idx = t_idx = get_time_point_idx(self.result.t, t)
+
+        conn_weights = self.adj_mat.accumulate(t_idx)
 
         G = nx.DiGraph()
 
+        df_opinions_at_t = self.result_df().iloc[last_t_idx]
+
         for i in self.agent_idxs:
-            G.add_node(i, x=self.opinions[i])
+            G.add_node(i, x=df_opinions_at_t[i])
 
         for i, j in product(*[range(N) for N in conn_weights.shape]):
             G.add_edge(i, j, weight=conn_weights[i, j])
@@ -434,15 +448,17 @@ class EchoChamber(object):
 
         return G
 
-    def get_network_agents(self):
+    def get_network_agents(self, t: Union[Tuple[Union[int, float]], int, float] = -1):
         """Construct a graph of the network and determine the in-degree and out-degree of each agent in the network.
 
         The degree of an agent is the total number of connections it made with all other agents (directed if in- or out- are specified).
 
         :return: The graph object (from ``networkx``) and a dataframe with the degree information.
         """
-        G = self.get_network_graph()
+        G = self.get_network_graph(t)
         # note that we explicitly provide the agent indices for an ordered result
+
+        opinion = pd.Series(dict(G.nodes(data="x"))).loc[self.agent_idxs]
 
         # note that "degree" is the sum of in_degree and out_degree
         degree = pd.Series([d for n, d in G.degree(self.agent_idxs, weight="weight")])
@@ -456,7 +472,7 @@ class EchoChamber(object):
         df_degree = pd.DataFrame(
             {
                 "idx": self.agent_idxs,
-                "opinion": self.opinions,
+                "opinion": opinion,
                 "in_degree": in_degree,
                 "out_degree": out_degree,
                 "degree": degree,
@@ -465,8 +481,10 @@ class EchoChamber(object):
 
         return G, df_degree
 
-    def get_network_connections(self, long=True):
-        G = self.get_network_graph()
+    def get_network_connections(
+        self, t: Union[Tuple[Union[int, float]], int, float] = -1, long=True
+    ):
+        G = self.get_network_graph(t)
         df_wide = pd.DataFrame(G.edges(data="weight"), columns=["A", "B", "weight"])
         if not long:
             return df_wide
@@ -492,10 +510,9 @@ class EchoChamber(object):
 
     def _get_filename(self) -> str:
         """get a cacheable filename for this instance"""
-        from opdynamics.utils.cache import get_cache_dir
+        from opdynamics.utils.cache import get_hash_filename
 
-        cache_dir = get_cache_dir()
-        return os.path.join(cache_dir, f"{hash(self)}.h5")
+        return get_hash_filename(self)
 
     def save(
         self,
@@ -550,6 +567,16 @@ class EchoChamber(object):
                 df_meta,
             ]:
                 df.to_hdf(filename, df.name, complevel=7, complib="blosc:zstd")
+        if self.adj_mat._time_mat is not None:
+            adj_mat_file_compressed = self.adj_mat._time_mat.filename.replace(
+                ".dat", ".npz"
+            )
+            # save compressed version
+            np.savez_compressed(
+                adj_mat_file_compressed, time_mat=self.adj_mat._time_mat
+            )
+            # delete temp memory-mapped file
+            del self.adj_mat._time_mat
         logger.debug(f"saved to {filename}\n{self}")
         self.save_txt = f"\n{self}\n\t{hash_txt}"
         if write_mapping:
@@ -640,6 +667,20 @@ class EchoChamber(object):
                 else:
                     # not everything loaded
                     return False
+
+            if self.adj_mat._time_mat is not None:
+                adj_mat_file_compressed = self.adj_mat._time_mat.filename.replace(
+                    ".dat", ".npz"
+                )
+
+                new_time_mat = np.load(
+                    adj_mat_file_compressed, mmap_mode="r+"
+                )["time_mat"]
+                # delete previous mmap file to explicitly clear storage
+                del self.adj_mat._time_mat
+                # 
+                self.adj_mat._time_mat = new_time_mat
+
             logger.debug(f"{self.name} loaded from {filename}")
             if not compressed:
                 self.save(only_last=self.result.y.shape[1] > 1, dt=_dt)

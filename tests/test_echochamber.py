@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("test_echochamber")
 
 
-def _predictable_interaction(ec, lazy=True):
+def _predictable_interaction(ec, store_all=False):
     """Set up consistent interactions by manipulating probabilities.
     Activities: Set every agent to 100% active (mean of 1 and SD of 0).
     Connection probability: Equal probability (beta=0 yields p=1/m).
@@ -24,7 +24,7 @@ def _predictable_interaction(ec, lazy=True):
     from scipy.stats import norm
 
     ec.set_activities(norm, 1, 0)
-    ec.set_social_interactions(0.0, 0.0, lazy=lazy)
+    ec.set_social_interactions(0.0, 0.0, store_all=store_all)
 
 
 class TestEchoChamber(TestCase):
@@ -80,7 +80,7 @@ class TestEchoChamber(TestCase):
 
         # this must be first (before setting activities and connection probabilities)
         with self.assertRaises(RuntimeError):
-            self.ec.set_social_interactions(0, 0, lazy=True)
+            self.ec.set_social_interactions(0, 0, store_all=True)
 
         # required setup
         # set activities to all be 1 (all agents interact at every time step)
@@ -91,7 +91,7 @@ class TestEchoChamber(TestCase):
         # ------------------------------
         # probabilities must sum to 1 (by definition)
         for beta in np.arange(-2, 2, 0.5):
-            self.ec.set_social_interactions(beta, 0, lazy=True, update_conn=False)
+            self.ec.set_social_interactions(beta, 0, store_all=True, update_conn=False)
             p_conn_i = np.round(np.sum(self.ec.adj_mat._p_conn, axis=1), 4)
             self.assertTrue(
                 np.all(p_conn_i == 1),
@@ -107,17 +107,17 @@ class TestEchoChamber(TestCase):
             self.assertTrue(np.all(diag_v == 0), "self-connections must be 0")
 
         # beta = 0 is the same as a uniform distribution
-        self.ec.set_social_interactions(0, 0, lazy=True, update_conn=False)
+        self.ec.set_social_interactions(0, 0, store_all=True, update_conn=False)
         diag_mat = np.diagflat([1] * self.ec.N).astype(bool)
         self.assertTrue(
             np.all(np.round(self.ec.adj_mat._p_conn[~diag_mat], 4) == (1 / self.ec.N)),
             "expected uniform distribution for beta=0",
         )
         # ------------------------------
-        # test lazy computing
+        # test store_all
         # ------------------------------
-        for lazy in [True, False]:
-            self.ec.set_social_interactions(0, 0, lazy=lazy, t_end=0.5, dt=0.01)
+        for store_all in [False, True]:
+            self.ec.set_social_interactions(0, 0, store_all=store_all, t_end=0.5, dt=0.01)
             self.assertTrue(isinstance(self.ec.adj_mat, SocialInteraction))
             # get a matrix at time 0
             mat = self.ec.adj_mat[0]
@@ -139,7 +139,7 @@ class TestEchoChamber(TestCase):
         # test different r's
         # ------------------------------
         for r in [0, 0.2, 0.5, 0.8, 1]:
-            self.ec.set_social_interactions(0, r, lazy=True)
+            self.ec.set_social_interactions(0, r, store_all=True)
             mat = self.ec.adj_mat[0]
             total = np.sum(mat)
 
@@ -171,14 +171,15 @@ class TestEchoChamber(TestCase):
 
         # eager mode requires t_end and dt
         with self.assertRaises(Exception):
-            self.ec.set_social_interactions(0, lazy=False)
+            self.ec.set_social_interactions(0, store_all=False)
 
     def test_set_dynamics(self):
         self.assertIsNone(self.ec.dy_dt)
         self.ec.set_dynamics()
         self.assertIsNotNone(self.ec.dy_dt)
         self.assertTrue(
-            hasattr(self.ec.dy_dt, "__call__"), "dy_dt must be callable",
+            hasattr(self.ec.dy_dt, "__call__"),
+            "dy_dt must be callable",
         )
 
         func = inspect.getfullargspec(self.ec.dy_dt)
@@ -216,7 +217,7 @@ class TestEchoChamber(TestCase):
 
         # required setup
         self.ec.set_activities(negpowerlaw, gamma, epsilon)
-        self.ec.set_social_interactions(beta=beta, r=r, lazy=True)
+        self.ec.set_social_interactions(beta=beta, r=r, store_all=True)
         self.ec.set_dynamics()
 
         # run network using scipy solver (Rk45) and custom solver (Euler)
@@ -246,7 +247,7 @@ class TestEchoChamber(TestCase):
         self.assertAlmostEqual(np.mean(self.ec.opinions), 0, 2)
 
         self.ec.set_activities(negpowerlaw, gamma, epsilon)
-        self.ec.set_social_interactions(beta=beta, r=r, lazy=True)
+        self.ec.set_social_interactions(beta=beta, r=r, store_all=True)
         self.ec.set_dynamics()
 
         T = 0.02

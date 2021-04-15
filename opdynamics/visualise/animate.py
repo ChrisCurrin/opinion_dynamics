@@ -239,7 +239,7 @@ if __name__ == "__main__":
     )
 
     ec = Simulation.run_params(
-        EchoChamber, plot_opinions=False, lazy=False, cache=False, **_kwargs
+        EchoChamber, plot_opinions=False, cache=False, **_kwargs
     )
     vis = VisEchoChamber(ec)
     vis.show_opinions()
