@@ -16,7 +16,17 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 logger = logging.getLogger("plot utils")
 
 
-def get_time_point_idx(time_series, time_point_or_index: Union[float, int]):
+def get_time_point_idx(time_series, time_point_or_index: Union[Tuple[Union[int, float]], int, float]):
+    if np.iterable(time_point_or_index):
+        # convert a time point range to a time index range
+        assert (
+            len(time_point_or_index) == 2
+        ), "`t` should be either a single value or 2 values in a tuple/list"
+        return (
+            get_time_point_idx(time_series, time_point_or_index[0]),
+            get_time_point_idx(time_series, time_point_or_index[1]),
+        )
+
     if isinstance(time_point_or_index, int) and time_point_or_index not in (0, -1):
         logger.warn(
             "'t' passed as an integer and will be treated as an array index. Pass as a float (e.g. 1.0) to treat as a time point."

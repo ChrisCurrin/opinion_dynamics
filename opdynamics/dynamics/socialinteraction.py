@@ -302,6 +302,7 @@ class SocialInteraction(object):
                 return np.sum(self._time_mat[:t_idx], axis=0)
             elif np.iterable(t_idx):
                 return np.sum(self._time_mat[t_idx[0] : t_idx[1]], axis=0)
+            # slice
             return np.sum(self._time_mat[t_idx], axis=0)
         else:
             raise IndexError(

@@ -154,17 +154,30 @@ def show_matrix(
     :return: Tuple[Figure, Axes] used.
     """
 
-    N, M = mat.shape
-    agent_mat = pd.DataFrame(
-        mat,
-        columns=pd.Index(np.arange(M), name="i"),
-        index=pd.Index(np.arange(N), name="j"),
-    )
+    if isinstance(mat, np.ndarray):
+        N, M = mat.shape
+        agent_mat = pd.DataFrame(
+            mat,
+            columns=pd.Index(np.arange(M), name="i"),
+            index=pd.Index(np.arange(N), name="j"),
+        )
+    elif isinstance(mat, pd.DataFrame):
+        N, M = mat.shape
+        agent_mat = mat
+    else:
+        raise ValueError(
+            f"wrong type of matrix passed to `show_matrix`. Expected `np.ndarray` or `pd.DataFrame` but got {type(mat)}"
+        )
 
     if sort:
+        if map == "mesh":
+            logger.warning(
+                "'mesh' loses agent index information when sorting adjacency matrix"
+            )
         agent_mat = agent_mat.sort_values(
             by=list(agent_mat.index), axis="index"
         ).sort_values(by=list(agent_mat.columns), axis="columns")
+        show_matrix.sorted_mat = agent_mat
 
     # default label for colorbar
     cbar_kws = {"label": label, **kwargs.pop("cbar_kws", {})}
@@ -192,10 +205,6 @@ def show_matrix(
         )
         ax.invert_yaxis()
     elif map == "mesh":
-        if sort:
-            logger.warning(
-                "'mesh' loses agent index information when sorting adjacency matrix"
-            )
         mesh = ax.pcolormesh(agent_mat, norm=norm, cmap=cmap, **kwargs)
         ax.set_xlim(0, N)
         ax.set_ylim(0, M)

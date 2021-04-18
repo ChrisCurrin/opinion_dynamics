@@ -3,7 +3,6 @@
 """
 import copy
 from functools import lru_cache
-from opdynamics.utils.cache import get_hash_filename
 from opdynamics.utils.plot_utils import get_time_point_idx
 import os
 
@@ -415,24 +414,19 @@ class EchoChamber(object):
     def get_network_graph(self, t: Union[Tuple[Union[int, float]], int, float] = -1):
         """Construct a graph of the network
 
-        :return: The graph object (from ``networkx``).
+        :param t: The time point (or range) for the network.
 
+        :return: The graph object (from ``networkx``).
         """
         import networkx as nx
         from itertools import product
 
-        if np.iterable(t):
-            assert (
-                len(t) == 2
-            ), "`t` should be either a single value or 2 values in a tuple/list"
-            t_idx = (
-                get_time_point_idx(self.result.t, t[0]),
-                get_time_point_idx(self.result.t, t[1]),
-            )
+        t_idx = get_time_point_idx(self.result.t, t)
+        if np.iterable(t_idx):
             last_t_idx = t_idx[1]
         else:
-            last_t_idx = t_idx = get_time_point_idx(self.result.t, t)
-
+            last_t_idx = t_idx
+            
         conn_weights = self.adj_mat.accumulate(t_idx)
 
         G = nx.DiGraph()
@@ -452,6 +446,8 @@ class EchoChamber(object):
         """Construct a graph of the network and determine the in-degree and out-degree of each agent in the network.
 
         The degree of an agent is the total number of connections it made with all other agents (directed if in- or out- are specified).
+
+        :param t: See `EchoChamber.get_network_graph`
 
         :return: The graph object (from ``networkx``) and a dataframe with the degree information.
         """
@@ -484,10 +480,18 @@ class EchoChamber(object):
     def get_network_connections(
         self, t: Union[Tuple[Union[int, float]], int, float] = -1, long=True
     ):
+        """Construct a graph of the network and determine the interactions (connections) in the network.
+
+        :param t: See `EchoChamber.get_network_graph`
+        :param long: Whether the returned DataFrame should be in long (True) or wide (False) format. 
+            See https://pandas.pydata.org/pandas-docs/stable/getting_started/intro_tutorials/07_reshape_table_layout.html#min-tut-07-reshape
+
+        :return: The graph object (from ``networkx``) and a dataframe (long format by default) with the connection information.
+        """
         G = self.get_network_graph(t)
         df_wide = pd.DataFrame(G.edges(data="weight"), columns=["A", "B", "weight"])
         if not long:
-            return df_wide
+            return G, df_wide
 
         df_long = (
             df_wide[df_wide["weight"] != 0]
@@ -529,7 +533,8 @@ class EchoChamber(object):
         :param complevel: Compression level (default DEFAULT_COMPRESSION_LEVEL defined in ``constants``).
         :param write_mapping: Write to a file that maps the object's string representation and it's hash value.
         :param dt: Explicitly include the dt value for the index name. If not provided, it is calculated as the
-            maximum time step from ``result_df``..
+            maximum time step from ``result_df``.
+        
         :return: Saved filename.
         """
         import warnings
@@ -571,12 +576,17 @@ class EchoChamber(object):
             adj_mat_file_compressed = self.adj_mat._time_mat.filename.replace(
                 ".dat", ".npz"
             )
+            logger.debug(f"saving full adj_mat to '{adj_mat_file_compressed}'")
             # save compressed version
             np.savez_compressed(
                 adj_mat_file_compressed, time_mat=self.adj_mat._time_mat
             )
-            # delete temp memory-mapped file
+            new_time_mat = np.load(adj_mat_file_compressed, mmap_mode="r+")["time_mat"]
+            # delete previous mmap file to explicitly clear storage
             del self.adj_mat._time_mat
+            # link to stored version
+            self.adj_mat._time_mat = new_time_mat
+            logger.debug(f"...saved full adj_mat and deleted memory map")
         logger.debug(f"saved to {filename}\n{self}")
         self.save_txt = f"\n{self}\n\t{hash_txt}"
         if write_mapping:
@@ -673,12 +683,12 @@ class EchoChamber(object):
                     ".dat", ".npz"
                 )
 
-                new_time_mat = np.load(
-                    adj_mat_file_compressed, mmap_mode="r+"
-                )["time_mat"]
+                new_time_mat = np.load(adj_mat_file_compressed, mmap_mode="r+")[
+                    "time_mat"
+                ]
                 # delete previous mmap file to explicitly clear storage
                 del self.adj_mat._time_mat
-                # 
+                #
                 self.adj_mat._time_mat = new_time_mat
 
             logger.debug(f"{self.name} loaded from {filename}")
