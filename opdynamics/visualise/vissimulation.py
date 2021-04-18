@@ -1,3 +1,4 @@
+from opdynamics.utils.constants import POST_RDN_COLOR, POST_RECOVERY_COLOR, PRE_RDN_COLOR
 import opdynamics.visualise.compat
 
 import logging
@@ -100,28 +101,29 @@ def show_periodic_noise(
     ax_start = fig.add_subplot(gs[-1, 0])
     ax_noise = fig.add_subplot(gs[-1, 1], sharey=ax_start)
     ax_recovery = fig.add_subplot(gs[-1, 2], sharey=ax_start)
-    _colors = sns.color_palette("husl")
+    
+    _colors = [PRE_RDN_COLOR, POST_RDN_COLOR, POST_RECOVERY_COLOR]
     # plot graphs
     vis.show_opinions(ax=ax_time, color_code="line", subsample=5, title=False)
     vis.show_opinions_distribution(
         ax=ax_start,
         t=noise_start,
         title=f"t = {noise_start}",
-        color=_colors[0],
+        color=PRE_RDN_COLOR,
         bins=bin_edges,
     )
     vis.show_opinions_distribution(
         ax=ax_noise,
         t=noise_start + noise_length,
         title=f"t={noise_start + noise_length}",
-        color=_colors[1],
+        color=POST_RDN_COLOR,
         bins=bin_edges,
     )
     vis.show_opinions_distribution(
         ax=ax_recovery,
         t=-1,
         title=f"t={noise_start + noise_length + recovery}",
-        color=_colors[2],
+        color=POST_RECOVERY_COLOR,
         bins=bin_edges,
     )
     # adjust view limits
