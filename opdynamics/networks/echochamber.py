@@ -186,7 +186,7 @@ class EchoChamber(object):
 
         self.adj_mat = SocialInteraction(self, r, beta=beta, **kwargs)
         self._beta = beta
-        if not store_all:
+        if store_all:
             if t_end is None or dt is None:
                 raise RuntimeError(
                     "`t_end` and `dt` need to be defined for pre-emptively storing adjacency matrix in "
