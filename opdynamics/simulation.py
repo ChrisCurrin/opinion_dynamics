@@ -13,7 +13,8 @@ from tqdm import tqdm, trange
 from typing import Callable, Dict, Iterable, List, Tuple, Type, TypeVar, Union
 
 from opdynamics.utils.cache import save_results
-from opdynamics.networks import EchoChamber, NoisyEchoChamber, OpenChamber
+from opdynamics.networks import EchoChamber, OpenChamber
+from opdynamics.networks.echochamber import NoisyEchoChamber
 from opdynamics.utils.distributions import negpowerlaw
 from opdynamics.visualise import (
     show_periodic_noise,
@@ -213,6 +214,7 @@ def run_periodic_noise(
     logger.debug(
         f"noise (D={D}) will be intermittently added from {noise_start} for {noise_length} in blocks of "
         f"{block_time:.3f} with intervals of {interval}. A total of {num} perturbations will be done."
+        f" Storing all interactions: {store_all}."
     )
     # create progress bar
     t = tqdm(
@@ -221,6 +223,7 @@ def run_periodic_noise(
         total=t_end,
         disable=logger.getEffectiveLevel() > logging.INFO,
     )
+    print()
     name = kwargs.pop("name", "")
     name += f"[num={num} interval={interval}]"
     nec = cls(N, m, K, alpha, *args, **kwargs)
