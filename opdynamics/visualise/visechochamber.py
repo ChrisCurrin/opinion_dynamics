@@ -1,10 +1,9 @@
 """"""
-import opdynamics.visualise.compat
 import logging
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from typing import Tuple
+from typing import Tuple, Union
 
 from matplotlib.axes import Axes
 from matplotlib.cm import ScalarMappable
@@ -107,7 +106,7 @@ class VisEchoChamber(object):
         )
 
     def show_adjacency_matrix(
-        self, *args, title="Cumulative adjacency matrix", **kwargs
+        self, *args, title="Cumulative adjacency matrix", t: Union[Tuple[Union[int, float]], int, float] = -1, **kwargs
     ) -> Tuple[Figure, Axes]:
         """
         Plot adjacency matrix.
@@ -134,8 +133,12 @@ class VisEchoChamber(object):
         :return: Tuple[Figure, Axes] used.
 
         """
+        t_idx = get_time_point_idx(self.ec.result.t, t)
+
+        conn_weights = self.ec.adj_mat.accumulate(t_idx)
+
         return show_matrix(
-            self.ec.adj_mat.accumulator,
+            conn_weights,
             "Number of interactions",
             *args,
             vmin=1,
