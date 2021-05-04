@@ -20,7 +20,7 @@ from opdynamics.utils.plot_utils import (
     get_equal_limits,
     move_cbar_label_to_title,
 )
-from opdynamics.visualise.compat import sns_kdeplot
+from opdynamics.visualise.compat import kdeplot
 from scipy import interpolate
 from scipy.interpolate import interpn
 from seaborn.matrix import ClusterGrid
@@ -183,9 +183,9 @@ def show_matrix(
     cbar_kws = {"label": label, **kwargs.pop("cbar_kws", {})}
 
     if "vmin" in kwargs:
-        norm.vmin = kwargs["vmin"]
+        norm.vmin = kwargs.pop("vmin")
     if "vmax" in kwargs:
-        norm.vmax = kwargs["vmax"]
+        norm.vmax = kwargs.pop("vmax")
 
     if map == "clustermap":
         if fig:
@@ -291,13 +291,13 @@ def show_jointplot(
 
     joint_kws.setdefault("shade", True)
     joint_kws.setdefault("cmap", cmap)
-    sns_kdeplot(x=x_array, y=y_array, ax=ax_joint, **joint_kws)
+    kdeplot(x=x_array, y=y_array, ax=ax_joint, **joint_kws)
 
     if ax_marg_x is not None:
         marginal_kws.setdefault("fill", True)
         marginal_kws.setdefault("color", sns.cubehelix_palette(8, reverse=True)[3])
-        sns_kdeplot(x=x_array, vertical=False, ax=ax_marg_x, **marginal_kws)
-        sns_kdeplot(y=y_array, vertical=True, ax=ax_marg_y, **marginal_kws)
+        kdeplot(x=x_array, vertical=False, ax=ax_marg_x, **marginal_kws)
+        kdeplot(y=y_array, vertical=True, ax=ax_marg_y, **marginal_kws)
 
 
 def show_noise_panel(
@@ -349,7 +349,7 @@ def show_noise_panel(
     ]
     for j, (col_mask, hue) in enumerate(zip(col_masks, hues)):
         data_ijk = df[not_na & col_mask]
-        sns_kdeplot(
+        kdeplot(
             x=data_ijk["opinion"], y=data_ijk[_D], ax=ax[j], cmap=hue, **kde_kwargs
         )
     for _ax in ax[1:]:
@@ -372,7 +372,7 @@ def show_opinion_grid(
     :param columns: The column names in df to construct the FacetGrid. The first column changes with the co'l' of
         grid, the second changes with the 'row' of the grid, and the final column changes with the 'hue' of the grid.
     :param grid_kwargs: Keyword arguments for ``sns.FacetGrid``.
-    :param kde_kwargs: Keyword arguments for ``sns_kdeplot``.
+    :param kde_kwargs: Keyword arguments for ``kdeplot``.
     :return: FaceGrid of kernel density estimates for diffrent parameter combinations.
     """
 
@@ -391,9 +391,9 @@ def show_opinion_grid(
     kde_kwargs.setdefault("thresh", 0)
     if "D" in columns:
         cmap = kde_kwargs.pop("cmap", sns.cubehelix_palette(reverse=True, as_cmap=True))
-        g.map(sns_kdeplot, "opinion", **kde_kwargs)
+        g.map(kdeplot, "opinion", **kde_kwargs)
     else:
-        g.map(sns_kdeplot, x="opinion", y="D", **kde_kwargs)
+        g.map(kdeplot, x="opinion", y="D", **kde_kwargs)
     return g
 
 

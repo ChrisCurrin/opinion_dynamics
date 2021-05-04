@@ -9,6 +9,9 @@ import numpy as np
 
 from opdynamics.metrics.opinions import sample_means
 
+##############################
+# Opinion dynamics
+##############################
 
 def dy_dt(t: float, y: np.ndarray, *args) -> np.ndarray:
     """Opinion dynamics.
@@ -25,6 +28,52 @@ def dy_dt(t: float, y: np.ndarray, *args) -> np.ndarray:
     At = A[int(t / dt)]
     return -y.T + K * np.sum(At * np.tanh(alpha * y.T), axis=1)
 
+def sample_dy_dt(t: float, y: np.ndarray, *all_args) -> np.ndarray:
+    """Opinion dynamics with random dynamical nudge.
+
+    1 - 3 from either `dy_dt` or `dynamic_conn` (specified by `ec.super_dy_dt`).
+
+    4. add a "population opinion" term that captures the Lindeberg–Lévy Central Limit Theorem -
+    :math:`\\sqrt {n}\\left({\\bar{X}}_{n}-\\mu \\right) \\rightarrow \mathcal{N}\\left(0,\\sigma ^{2}\\right)`
+    \\
+    where :math:`X` is a random sample and :math:`\\bar{X}_{n}` is the sample mean for :math:`n` random samples.
+
+    """
+    clt_sample_method, ec, n, num_samples, *other_args = all_args
+    if np.round(t % other_args[-1], 6) == 0:
+        # calculate sample means every explicit dt (other_args[-1]) - independent of solver's dt
+        if type(n) is tuple:
+            # choose between low and high values (randint not implemented for default_rng)
+            n = ec.rn.choice(np.arange(n[0], n[1], dtype=int))
+        clt_sample_method(ec, y, n, num_samples)
+    return ec.super_dy_dt(t, y, *other_args) + ec.D * ec._sample_means
+
+
+def sample_dy_dt_activity(t: float, y: np.ndarray, *all_args) -> np.ndarray:
+    """Opinion dynamics with random opinion samples.
+
+    As with :meth:`sample_dy_dt`, but the RDN is gated by the adjency matrix (determined by agent activity)
+
+    """
+    clt_sample_method, ec, n, num_samples, *other_args = all_args
+    K, alpha, A, dt = other_args
+    if np.round(t % dt, 6) == 0:
+        # calculate sample means every explicit dt (other_args[-1]) - independent of solver's dt
+        if type(n) is tuple:
+            # choose between low and high values (randint not implemented for default_rng)
+            n = ec.rn.choice(np.arange(n[0], n[1], dtype=int))
+        clt_sample_method(ec, y, n, num_samples)
+
+    return ec.super_dy_dt(t, y, *other_args) + ec.D * np.sum(
+        A[int(t / dt)] * ec._sample_means, axis=1
+    )
+
+
+##############################
+# Sampling approaches (used in SampleChamber)
+#   Note that :meth:`ec._sample_means` is used to store the result for subsequent retrieval at non `dt` time points.
+#       A more elegant solution may be possible in the future, akin perhaps to the adjency matrix implementation.
+##############################
 
 def _basic_clt_sample(ec, y: np.ndarray, n: int, num_samples: int):
     """
@@ -107,43 +156,3 @@ clt_methods = {
 }
 clt_methods.setdefault(None, _basic_clt_sample)
 
-
-def sample_dy_dt(t: float, y: np.ndarray, *all_args) -> np.ndarray:
-    """Opinion dynamics with random opinion samples.
-
-    1 - 3 from either `dy_dt` or `dynamic_conn` (specified by `ec.super_dy_dt`).
-
-    4. add a "population opinion" term that captures the Lindeberg–Lévy Central Limit Theorem -
-    :math:`\\sqrt {n}\\left({\\bar{X}}_{n}-\\mu \\right) \\rightarrow \mathcal{N}\\left(0,\\sigma ^{2}\\right)`
-    \\
-    where :math:`X` is a random sample and :math:`\\bar{X}_{n}` is the sample mean for :math:`n` random samples.
-
-    """
-    clt_sample_method, ec, n, num_samples, *other_args = all_args
-    if type(n) is tuple:
-        # choose between low and high values (randint not implemented for default_rng)
-        n = ec.rn.choice(np.arange(n[0], n[1], dtype=int))
-    if np.round(t % other_args[-1], 6) == 0:
-        # calculate sample means every explicit dt (other_args[-1]) - independent of solver's dt
-        clt_sample_method(ec, y, n, num_samples)
-    return ec.super_dy_dt(t, y, *other_args) + ec.D * ec._sample_means
-
-
-def sample_dy_dt_alpha(t: float, y: np.ndarray, *all_args) -> np.ndarray:
-    """Opinion dynamics with random opinion samples.
-
-    As with meth::`sample_dy_dt`, but
-
-    """
-    clt_sample_method, ec, n, num_samples, *other_args = all_args
-    K, alpha, A, dt = other_args
-    if type(n) is tuple:
-        # choose between low and high values (randint not implemented for default_rng)
-        n = ec.rn.choice(np.arange(n[0], n[1], dtype=int))
-    if np.round(t % dt, 6) == 0:
-        # calculate sample means every explicit dt (other_args[-1]) - independent of solver's dt
-        clt_sample_method(ec, y, n, num_samples)
-
-    return ec.super_dy_dt(t, y, *other_args) + ec.D * np.sum(
-        A[int(t / dt)] * ec._sample_means, axis=1
-    )
