@@ -6,7 +6,7 @@ import json
 import numpy as np
 import pandas as pd
 
-from opdynamics.networks import EchoChamber
+from opdynamics.socialnetworks import SocialNetwork
 from opdynamics.utils.constants import DEFAULT_COMPRESSION_LEVEL
 
 _cache_dir = None
@@ -92,11 +92,13 @@ class cache_dir:
         _cache_dir = self.saved_dir
 
 
-def cache_ec(cache: Union[str, int, bool], ec: EchoChamber, write_mapping=True) -> None:
-    """Cache an echochamber object if `cache` is neither `False` nor `None`.
+def cache_ec(
+    cache: Union[str, int, bool], sn: SocialNetwork, write_mapping=True
+) -> None:
+    """Cache an SocialNetwork object if `cache` is neither `False` nor `None`.
 
     :param cache: Either "all" or True (last time point) or ℤ ∈ [1, 9] for compression level (last time point).
-    :param ec: EchoChamber (or subclass) object to save.
+    :param sn: SocialNetwork (or subclass) object to save.
     :param write_mapping: Write to a file that maps the object's string representation and it's hash value.
 
     """
@@ -104,17 +106,17 @@ def cache_ec(cache: Union[str, int, bool], ec: EchoChamber, write_mapping=True) 
         if type(cache) is str and "all" in cache:
             cache = cache.replace("all", "")
             complevel = int(cache) if len(cache) else DEFAULT_COMPRESSION_LEVEL
-            ec.save(only_last=False, complevel=complevel, write_mapping=write_mapping)
+            sn.save(only_last=False, complevel=complevel, write_mapping=write_mapping)
         else:
             complevel = cache if cache > 1 else DEFAULT_COMPRESSION_LEVEL
-            ec.save(only_last=True, complevel=complevel, write_mapping=write_mapping)
+            sn.save(only_last=True, complevel=complevel, write_mapping=write_mapping)
 
 
-def save_results(file_name: str, ec: EchoChamber, **kwargs) -> None:
-    """Save ``EchoChamber`` agents' opinions to a shared HDF5 DataFrame.
+def save_results(file_name: str, sn: SocialNetwork, **kwargs) -> None:
+    """Save ``SocialNetwork`` agents' opinions to a shared HDF5 DataFrame.
 
     :param file_name: Full path to results file (*file* - not directory - created if it does not exist).
-    :param ec: EchoChamber after a `run_network` operation.
+    :param sn: SocialNetwork after a `run_network` operation.
     :param kwargs: Full list of keyword arguments used.
     :return:
     """
@@ -124,7 +126,7 @@ def save_results(file_name: str, ec: EchoChamber, **kwargs) -> None:
     kwargs.pop("method", None)
 
     # put data into dictionaries with keys for column names
-    for y_idx, opinion in enumerate(ec.result.y[:, -1]):
+    for y_idx, opinion in enumerate(sn.result.y[:, -1]):
         df_builder.append({"i": y_idx, "opinion": opinion, **kwargs})
     with pd.HDFStore(file_name) as store:
         store.append("df", pd.DataFrame(df_builder))

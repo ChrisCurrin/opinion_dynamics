@@ -8,7 +8,7 @@ from .dense import (
     plot_surface_product,
     plot_surfaces,
 )
-from .visechochamber import VisEchoChamber
+from .vissocialnetwork import VisSocialNetwork
 from .vissimulation import (
     show_simulation_results,
     show_simulation_range,
@@ -17,7 +17,7 @@ from .vissimulation import (
 
 __all__ = [
     "Animator",
-    "VisEchoChamber",
+    "VisSocialNetwork",
     "show_K_alpha_phase",
     "show_activity_vs_opinion",
     "show_noise_panel",

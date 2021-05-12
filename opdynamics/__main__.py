@@ -5,10 +5,10 @@ import logging
 # noinspection PyProtectedMember
 from scipy.integrate._ivp.ivp import METHODS as SCIPY_METHODS
 
-from opdynamics.networks import (
+from opdynamics.socialnetworks import (
     ConnChamber,
     ContrastChamber,
-    EchoChamber,
+    SocialNetwork,
     OpenChamber,
     SampleChamber,
 )
@@ -49,7 +49,7 @@ class Formatter(argparse.HelpFormatter):
 
 activity_distributions = {"negpowerlaw": negpowerlaw}
 ec_types = {
-    "EchoChamber": EchoChamber,
+    "SocialNetwork": SocialNetwork,
     "SampleChamber": SampleChamber,
     "ConnChamber": ConnChamber,
     "OpenChamber": OpenChamber,
@@ -67,23 +67,32 @@ dist_args_str = [str(d) for d in dist_args]
 beta = 2  # power law decay of connection probability
 r = 0.5  # probability of mutual interaction
 
-D = 0.01  # noise in echo chamber dynamics
+D = 0.01  # noise in SocialNetwork dynamics
 
 dt = 0.01
-t_end = 0.5
+t_dur = 0.5
 
 # noinspection PyTypeChecker
 parser = argparse.ArgumentParser(
     formatter_class=Formatter, description="Run a network of agents."
 )
 parser.add_argument(
-    "N", type=int, default=N, help="Number of agents in the echo chamber.",
+    "N",
+    type=int,
+    default=N,
+    help="Number of agents in the SocialNetwork.",
 )
 parser.add_argument(
-    "m", type=int, default=m, help="Number of other agents to interact with.",
+    "m",
+    type=int,
+    default=m,
+    help="Number of other agents to interact with.",
 )
 parser.add_argument(
-    "alpha", type=float, default=alpha, help="Controversialness of issue.",
+    "alpha",
+    type=float,
+    default=alpha,
+    help="Controversialness of issue.",
 )
 parser.add_argument("K", type=float, default=K, help="Social interaction strength.")
 parser.add_argument(
@@ -108,7 +117,7 @@ parser.add_argument(
     "-cls",
     "--network-type",
     type=str,
-    default="EchoChamber",
+    default="SocialNetwork",
     choices=ec_types.keys(),
     help="Type of network dynamics.",
 )
@@ -157,8 +166,8 @@ sim_params.add_argument(
     metavar="T",
     dest="T",
     type=float,
-    default=t_end,
-    help=f"Simulation length. Default: {t_end}",
+    default=t_dur,
+    help=f"Simulation length. Default: {t_dur}",
 )
 
 sim_params.add_argument(
@@ -246,15 +255,20 @@ ec_type = ec_types[args.cls]
 # Run simulation
 D_range = args.D
 range_parameters = {"D": {"range": D_range}, "title": "D"}
-ecs = run_product(
-    range_parameters, cls=ec_type, cache=True, cache_sim=False, parallel=True, **kwargs,
+_sns = run_product(
+    range_parameters,
+    cls=ec_type,
+    cache=True,
+    cache_sim=False,
+    parallel=True,
+    **kwargs,
 )
 
 if args.plot:
     import matplotlib.pyplot as plt
 
-    for ec in ecs:
-        show_simulation_results(ec, args.plot)
+    for sn in _sns:
+        show_simulation_results(sn, args.plot)
         if args.save:
             figs = plt.get_fignums()
             # default to pdf
@@ -285,12 +299,12 @@ if args.plot:
                 else:
                     name = "_".join(name.lower().split())
 
-                filename = f"{ec.name}_{title}_{name}.{fmt}"
+                filename = f"{sn.name}_{title}_{name}.{fmt}"
                 logger.info(f"saving '{filename}'")
                 try:
                     fig.savefig(filename, dpi=600)
                 except IOError:
                     # probably file name too long, remove the long title part
-                    fig.savefig(f"{ec.name}_{name}.{fmt}", dpi=600)
+                    fig.savefig(f"{sn.name}_{name}.{fmt}", dpi=600)
     logger.info("showing plots")
     plt.show()

@@ -6,8 +6,18 @@
 ## Methods
 ====
 
-* get connection probabilities from opinions and a beta factor
-* get social interaction matrix from an activity threshold, reciprocity factor, and connection probability matrix
+* ``get_connection_probabilities``
+    get connection probabilities from opinions and a beta factor
+    * ``get_connection_probabilities_opp``
+        same as above, but with an additional term ``p_opp`` making it more likely to connect
+        with an agent holding an opposing opinion and less likely to connect with an agent holding a similar
+        opinion.
+    * ``get_connection_probabilities_exp``
+        same as :meth:``get_connection_probabilities`` but optimised (experimental)
+* ``get_social_interaction``
+    get social interaction matrix from an activity threshold, reciprocity factor, and connection probability matrix
+    * ``get_social_interaction_exp``
+        same as :meth:``get_social_interaction`` but optimised (experimental)
 
 ## Classes
 ====
@@ -24,22 +34,21 @@ from functools import lru_cache
 from typing import Tuple, Union
 
 import numpy as np
-from opdynamics.networks import EchoChamber
+from opdynamics.socialnetworks import SocialNetwork
 from opdynamics.utils.cache import NpEncoder, get_hash_filename
 from opdynamics.utils.decorators import hashable
-from tqdm import tqdm
 
 logger = logging.getLogger("social interaction")
 
 
-def get_connection_probabilities(ec: EchoChamber, beta: float = 0.0, **conn_kwargs):
+def get_connection_probabilities(sn: SocialNetwork, beta: float = 0.0, **conn_kwargs):
     """For agent `i`, the probability of connecting to agent `j` is a function of the absolute strength of
     their opinions and a beta param, relative to all of the differences between an agent i and every other agent.
 
     .. math::
         p_{ij} = \\frac{|x_i - x_j|^{-\\beta}}{\sum_j |x_i - x_j|^{-\\beta}}
 
-    :param ec: Echo chamber object so we know
+    :param sn: SocialNetwork object so we know
         1) number of agents
         2) agent opinions
     :param beta: Power law decay of connection probability. Decay when beta>0, increase when beta<0.
@@ -47,10 +56,10 @@ def get_connection_probabilities(ec: EchoChamber, beta: float = 0.0, **conn_kwar
 
     """
     # create N * N matrix of opinions
-    p_conn = np.zeros(shape=(ec.N, ec.N))
-    for i in range(ec.N):
+    p_conn = np.zeros(shape=(sn.N, sn.N))
+    for i in range(sn.N):
         # compute magnitude (between agent i and every other agent)*N agents
-        mag = np.abs(ec.opinions[i] - ec.opinions)
+        mag = np.abs(sn.opinions[i] - sn.opinions)
         mag[i] = np.nan
         p_conn[i] = np.power(mag, -beta)
         p_conn[i, i] = 0
@@ -59,7 +68,7 @@ def get_connection_probabilities(ec: EchoChamber, beta: float = 0.0, **conn_kwar
 
 
 def get_connection_probabilities_opp(
-    ec: EchoChamber, beta: float = 0.0, p_opp: float = 0.0, **conn_kwargs
+    sn: SocialNetwork, beta: float = 0.0, p_opp: float = 0.0, **conn_kwargs
 ):
     """For agent `i`, the probability of connecting to agent `j` is a function of the absolute strength of
     their opinions and a beta param, relative to all of the differences between an agent i and every
@@ -75,21 +84,23 @@ def get_connection_probabilities_opp(
         opinion.
     """
     if p_opp > 0:
-        betas = ec.rn.choice([beta, -beta], size=ec.N, p=[p_opp, 1 - p_opp])
+        betas = sn.rn.choice([beta, -beta], size=sn.N, p=[p_opp, 1 - p_opp])
     else:
         betas = beta
-    return get_connection_probabilities(ec, beta=betas, **conn_kwargs)
+    return get_connection_probabilities(sn, beta=betas, **conn_kwargs)
 
 
 # TODO: Test
-def get_connection_probabilities_exp(ec: EchoChamber, beta: float = 0.0, **conn_kwargs):
+def get_connection_probabilities_exp(
+    sn: SocialNetwork, beta: float = 0.0, **conn_kwargs
+):
     """For agent `i`, the probability of connecting to agent `j` is a function of the absolute strength of
     their opinions and a beta param, relative to all of the differences between an agent i and every other agent.
 
     .. math::
         p_{ij} = \\frac{|x_i - x_j|^{-\\beta}}{\sum_j |x_i - x_j|^{-\\beta}}
 
-    :param ec: Echo chamber object so we know
+    :param sn: SocialNetwork object so we know
         1) number of agents
         2) agent opinions
     :param beta: Power law decay of connection probability. Decay when beta>0, increase when beta<0.
@@ -97,10 +108,10 @@ def get_connection_probabilities_exp(ec: EchoChamber, beta: float = 0.0, **conn_
 
     """
     # create N * N matrix of opinions
-    mat_opinions = np.tile(ec.opinions, ec.N)
+    mat_opinions = np.tile(sn.opinions, sn.N)
     # compute magnitude (between agent i and every other agent)*N agents
-    mag = np.abs(ec.opinions - mat_opinions)
-    self_mask = np.identity(ec.N)
+    mag = np.abs(sn.opinions - mat_opinions)
+    self_mask = np.identity(sn.N)
     mag[self_mask] = 0
     p_conn = np.power(mag, -beta)
     p_conn /= np.sum(p_conn, axis=1)
@@ -108,15 +119,15 @@ def get_connection_probabilities_exp(ec: EchoChamber, beta: float = 0.0, **conn_
 
 
 def get_social_interaction(
-    ec: EchoChamber,
+    sn: SocialNetwork,
     active_threshold: float,
     p_mutual_interaction: float,
     p_conn: np.ndarray,
 ):
     """
-    Compute the social interactions to occur within an EchoChamber.
+    Compute the social interactions to occur within an SocialNetwork.
 
-    :param ec: Echo chamber object so we know
+    :param sn: SocialNetwork object so we know
         1) number of agents
         2) number of other agents to interact with
         3) the probability of interacting with each other agent
@@ -129,15 +140,15 @@ def get_social_interaction(
     :return: Adjacency matrix for interactions between agents.
     :rtype: np.ndarray
     """
-    adj_mat = np.zeros((ec.N, ec.N), dtype=int)
-    active_agents = np.where(ec.activities >= active_threshold)[0]
-    is_mutual = ec.rn.random(size=(len(active_agents), ec.m)) < p_mutual_interaction
+    adj_mat = np.zeros((sn.N, sn.N), dtype=int)
+    active_agents = np.where(sn.activities >= active_threshold)[0]
+    is_mutual = sn.rn.random(size=(len(active_agents), sn.m)) < p_mutual_interaction
     for loop_i, a_i in enumerate(active_agents):
         # loop_i is how far through the active_agents the loop is
         # a_i is the index of the agent
-        ind: np.ndarray = ec.rn.choice(
-            ec.N,  # choose indices [0, N-1] for
-            size=ec.m,  # m other distinct agents
+        ind: np.ndarray = sn.rn.choice(
+            sn.N,  # choose indices [0, N-1] for
+            size=sn.m,  # m other distinct agents
             replace=False,  # (which must be unique)
             p=p_conn[a_i],  # with these probabilities
         )
@@ -150,16 +161,16 @@ def get_social_interaction(
 
 
 def get_social_interaction_exp(
-    ec: EchoChamber, active_threshold: float, p_mutual_interaction: float
+    sn: SocialNetwork, active_threshold: float, p_mutual_interaction: float
 ):
     """
-    Compute the social interactions to occur within an EchoChamber.
+    Compute the social interactions to occur within an SocialNetwork.
 
     ** Experimental vectorised version **
 
     https://stackoverflow.com/questions/20103779/index-2d-numpy-array-by-a-2d-array-of-indices-without-loops
 
-    :param ec: Echo chamber object so we know
+    :param sn: SocialNetwork object so we know
         1) number of agents
         2) number of other agents to interact with
         3) the probability of interacting with each other agent
@@ -171,15 +182,15 @@ def get_social_interaction_exp(
     :return: Adjacency matrix for interactions between agents.
     :rtype: np.ndarray
     """
-    adj_mat = np.zeros((ec.N, ec.N), dtype=int)
-    active_agents = np.where(ec.activities >= active_threshold)[0]
-    is_mutual = ec.rn.random(size=(len(active_agents), ec.m)) < p_mutual_interaction
-    p = ec.p_conn[active_agents].ravel() / np.sum(ec.p_conn[active_agents])
-    a = np.tile(np.arange(ec.N), len(active_agents)).ravel()
+    adj_mat = np.zeros((sn.N, sn.N), dtype=int)
+    active_agents = np.where(sn.activities >= active_threshold)[0]
+    is_mutual = sn.rn.random(size=(len(active_agents), sn.m)) < p_mutual_interaction
+    p = sn.p_conn[active_agents].ravel() / np.sum(sn.p_conn[active_agents])
+    a = np.tile(np.arange(sn.N), len(active_agents)).ravel()
 
-    ind: np.ndarray = ec.rn.choice(
+    ind: np.ndarray = sn.rn.choice(
         a,  # choose indices for
-        size=(len(active_agents), ec.m),  # other distinct agents
+        size=(len(active_agents), sn.m),  # other distinct agents
         replace=False,  # (which must be unique)
         p=p,  # with these probabilities
         shuffle=False,
@@ -199,7 +210,7 @@ def get_social_interaction_exp(
 @hashable
 class SocialInteraction(object):
     """
-    Compute the social interactions for the associated EchoChamber at time of request by calling
+    Compute the social interactions for the associated SocialNetwork at time of request by calling
     ``si_object[<index>]``.
 
     The matrix for ``<index>`` is cached using ``functools.lru_cache`` so repeated calls for the same index are efficient.
@@ -209,7 +220,7 @@ class SocialInteraction(object):
 
     Arguments:
     ------
-    * ``ec`` - EchoChamber to generate the social interaction from.
+    * ``sn`` - SocialNetwork to generate the social interaction from.
     * ``p_mutual_interaction`` - 'r', the probability of a mutual interaction between agents i and j.
     * ``conn_method`` - the method used to calculate connection probabilities
     * ``update_conn`` - whether to update connection probabilities at every call (every `dt`).
@@ -235,54 +246,58 @@ class SocialInteraction(object):
 
     def __init__(
         self,
-        ec: EchoChamber,
+        sn: SocialNetwork,
         p_mutual_interaction: float,
         conn_method=get_connection_probabilities,
         update_conn=False,
         **conn_kwargs,
     ):
-        self.ec = ec
+        self.sn = sn
         self.p_mutual_interaction = p_mutual_interaction
         self.conn_method = conn_method
         # get (keyword) arguments for the connection probability method being used
         required_conn_kwargs = set(inspect.getfullargspec(conn_method)[0])
-        if "ec" in required_conn_kwargs:
-            required_conn_kwargs.remove("ec")
+        if "sn" in required_conn_kwargs:
+            required_conn_kwargs.remove("sn")
         # only save required (keyword) arguments
         conn_kwargs = {
             k: v for k, v in conn_kwargs.items() if k in required_conn_kwargs
         }
         self.conn_kwargs = conn_kwargs
         self._p_conn: np.ndarray = (
-            self.conn_method(ec, **conn_kwargs) if not update_conn else None
+            self.conn_method(sn, **conn_kwargs) if not update_conn else None
         )
         self._update_conn = update_conn
-        self._accumulator = np.zeros((ec.N, ec.N), dtype=int)
+        self._accumulator = np.zeros((sn.N, sn.N), dtype=int)
         self._last_adj_mat: np.ndarray = None
         self._time_mat: np.memmap = None
 
         assert (
             0 <= p_mutual_interaction <= 1
         ), "p_mutual_interaction is a probability between 0 and 1"
-        logger.debug(f"Social Interaction for {ec.name} initialised {self}.")
+        logger.debug(f"Social Interaction for {sn.name} initialised {self}.")
 
-    def store_interactions(self, t_end: float, dt: float):
-        """Initialise the object to store social interactions (the adjacency matrix) for each time step until t_end."""
-        logger.info(f"storing {1 + int(t_end/dt)} adjacency matrices...")
-        t_arr = np.arange(0, t_end + dt, dt)
+    def store_interactions(self, dt: float, t_dur: float):
+        """Initialise the object to store social interactions (the adjacency matrix) for each time step until t_dur."""
+        logger.info(f"storing {1 + int(t_dur/dt)} adjacency matrices...")
+        t_arr = np.arange(0, t_dur + dt, dt)
         adj_mat_memmap_file = get_hash_filename(self, "dat")
+
+        is_extend_time = self._time_mat is not None
 
         self._time_mat = np.memmap(
             adj_mat_memmap_file,
             dtype=int,
             mode="r+" if os.path.exists(adj_mat_memmap_file) else "w+",
-            shape=(len(t_arr), self.ec.N, self.ec.N),
+            shape=(len(t_arr), self.sn.N, self.sn.N),
         )
 
         # set up hook to clean up upon system exit
         def del_mmap(mmap_array):
             del mmap_array
-        atexit.register(del_mmap, self._time_mat)
+
+        if not is_extend_time:
+            atexit.register(del_mmap, self._time_mat)
 
         logger.debug(f"adjacency matrix has shape = {self._time_mat.shape}")
 
@@ -307,7 +322,7 @@ class SocialInteraction(object):
         else:
             raise IndexError(
                 f"Accumulate called with t_idx={t_idx} but adj_mat is not stored. "
-                f"Call ``store_interactions(<dt>, <t_end>)`` first or set `cache='all'` for simulations."
+                f"Call ``store_interactions(<dt>, <t_dur>)`` first or set `cache='all'` for simulations."
             )
 
     # Cumulative adjacency matrix create a property for t_idx=-1
@@ -327,10 +342,10 @@ class SocialInteraction(object):
         # compute interactions
 
         if self._update_conn:
-            self._p_conn = self.conn_method(self.ec, **self.conn_kwargs)
+            self._p_conn = self.conn_method(self.sn, **self.conn_kwargs)
 
         self._last_adj_mat = get_social_interaction(
-            self.ec, self.ec.rn.random(), self.p_mutual_interaction, self._p_conn
+            self.sn, self.sn.rn.random(), self.p_mutual_interaction, self._p_conn
         )
         # update accumulator
         self._accumulator += self._last_adj_mat

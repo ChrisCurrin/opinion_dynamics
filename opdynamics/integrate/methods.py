@@ -53,7 +53,7 @@ class SDEIntegrator(metaclass=ABCMeta):
 
     * dy_dt - function body is expected to be in the form `y_dot = -y + ...` and have signature `(t, y, *args)`.
     * diffusion - function is amount of noise in the system.
-    * wiener_process - function for generating noise. Should be defined in terms of EchoChamber's properties:
+    * wiener_process - function for generating noise. Should be defined in terms of SocialNetwork's properties:
         e.g. `self.rn.normal(0, 1, size=self.N)`
     * y0 - starting value of y (a copy if made so the original reference is not mutated).
     * args - additional arguments to be passed to `dy_dt` and `diffusion`.

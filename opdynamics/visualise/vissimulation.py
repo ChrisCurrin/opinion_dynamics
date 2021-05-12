@@ -1,23 +1,26 @@
-from opdynamics.utils.constants import POST_RDN_COLOR, POST_RECOVERY_COLOR, PRE_RDN_COLOR
+from opdynamics.utils.constants import (
+    POST_RDN_COLOR,
+    POST_RECOVERY_COLOR,
+    PRE_RDN_COLOR,
+)
 import opdynamics.visualise.compat
 
 import logging
 
 import numpy as np
 
-from opdynamics.networks import EchoChamber
-from opdynamics.networks.echochamber import NoisyEchoChamber
+from opdynamics.socialnetworks import SocialNetwork, NoisySocialNetwork
 
 logger = logging.getLogger("vis simulation")
 
 
-def show_simulation_results(_ec: EchoChamber, plot_opinion: str):
+def show_simulation_results(_ec: SocialNetwork, plot_opinion: str):
     logging.getLogger("matplotlib").setLevel(logging.WARNING)
-    from opdynamics.visualise.visechochamber import VisEchoChamber
+    from opdynamics.visualise.vissocialnetwork import VisSocialNetwork
     import seaborn as sns
 
     logger.debug("plotting")
-    _vis = VisEchoChamber(_ec)
+    _vis = VisSocialNetwork(_ec)
     if plot_opinion == "summary":
         fig, ax = _vis.show_summary(single_fig=True)
         fig.subplots_adjust(wspace=0.5, hspace=0.3, top=0.95, right=0.9)
@@ -39,7 +42,7 @@ def show_simulation_results(_ec: EchoChamber, plot_opinion: str):
 
 
 def show_simulation_range(var_range, nec_arr, fig_ax=None):
-    from opdynamics.visualise.visechochamber import VisEchoChamber
+    from opdynamics.visualise.vissocialnetwork import VisSocialNetwork
     import matplotlib.pyplot as plt
     import seaborn as sns
 
@@ -51,8 +54,8 @@ def show_simulation_range(var_range, nec_arr, fig_ax=None):
             nrows=len(var_range), ncols=1, sharex="all", sharey="col", figsize=(8, 11)
         )
     logger.debug(f"ax.shape = {ax.shape}")
-    for i, (nec, _ax) in enumerate(zip(nec_arr, ax)):
-        vis = VisEchoChamber(nec)
+    for i, (nsn, _ax) in enumerate(zip(nec_arr, ax)):
+        vis = VisSocialNetwork(nsn)
         # 0 is first column, 1 is 2nd column
         kwargs = {"ax": _ax, "color": cs[i]}
         if i > 0:
@@ -61,7 +64,7 @@ def show_simulation_range(var_range, nec_arr, fig_ax=None):
         if i != len(nec_arr) - 1:
             _ax.set_xlabel("")
         _ax.set_ylabel(
-            vis.ec.name,
+            vis.sn.name,
             color=cs[i],
             fontsize="x-large",
             rotation=0,
@@ -74,24 +77,24 @@ def show_simulation_range(var_range, nec_arr, fig_ax=None):
 
 
 def show_periodic_noise(
-    nec: NoisyEchoChamber, noise_start, noise_length, recovery, interval, num, D
+    nsn: NoisySocialNetwork, noise_start, noise_length, recovery, interval, num, D
 ):
     logger.debug("plotting periodic noise")
     import matplotlib.pyplot as plt
     import seaborn as sns
     from matplotlib import gridspec
-    from opdynamics.visualise import VisEchoChamber
+    from opdynamics.visualise import VisSocialNetwork
     from opdynamics.utils.plot_utils import get_time_point_idx
 
     # calculate optimal bin edges from opinions distribution at noise start + noise_length
     hist, bin_edges = np.histogram(
-        nec.result.y[
-            :, get_time_point_idx(nec.result.t, float(noise_start + noise_length))
+        nsn.result.y[
+            :, get_time_point_idx(nsn.result.t, float(noise_start + noise_length))
         ],
         bins="auto",
     )
 
-    vis = VisEchoChamber(nec)
+    vis = VisSocialNetwork(nsn)
     # create figure and axes
     fig = plt.figure()
     gs = gridspec.GridSpec(
@@ -101,7 +104,7 @@ def show_periodic_noise(
     ax_start = fig.add_subplot(gs[-1, 0])
     ax_noise = fig.add_subplot(gs[-1, 1], sharey=ax_start)
     ax_recovery = fig.add_subplot(gs[-1, 2], sharey=ax_start)
-    
+
     _colors = [PRE_RDN_COLOR, POST_RDN_COLOR, POST_RECOVERY_COLOR]
     # plot graphs
     vis.show_opinions(ax=ax_time, color_code="line", subsample=5, title=False)
@@ -129,7 +132,7 @@ def show_periodic_noise(
     # adjust view limits
     from scipy import stats
 
-    x_data, y_data = nec.result.t, nec.result.y
+    x_data, y_data = nsn.result.t, nsn.result.y
     s = stats.describe(y_data)
     lower_bound, upper_bound = s.mean - s.variance, s.mean + s.variance
     mask = np.logical_and(lower_bound < y_data, y_data < upper_bound)

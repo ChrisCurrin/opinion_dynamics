@@ -13,8 +13,8 @@ from tqdm import tqdm, trange
 from typing import Callable, Dict, Iterable, List, Tuple, Type, TypeVar, Union
 
 from opdynamics.utils.cache import save_results
-from opdynamics.networks import EchoChamber, OpenChamber
-from opdynamics.networks.echochamber import NoisyEchoChamber
+from opdynamics.socialnetworks import SocialNetwork, OpenChamber
+from opdynamics.socialnetworks import NoisySocialNetwork
 from opdynamics.utils.distributions import negpowerlaw
 from opdynamics.visualise import (
     show_periodic_noise,
@@ -25,12 +25,12 @@ logging.basicConfig(level=logging.INFO)
 
 logger = logging.getLogger("simulation")
 
-EC = TypeVar("EC", bound="EchoChamber")
-NEC = TypeVar("NEC", bound="NoisyEchoChamber")
+SN = TypeVar("SN", bound="SocialNetwork")
+NSN = TypeVar("NSN", bound="NoisySocialNetwork")
 
 
 def run_params(
-    cls: Type[EC] = EchoChamber,
+    cls: Type[SN] = SocialNetwork,
     N: int = 1000,
     m: int = 10,
     K: float = 3,
@@ -48,12 +48,12 @@ def run_params(
     write_mapping=True,
     *sim_args,
     **sim_kwargs,
-) -> EC:
+) -> SN:
     """
     Quickly and conveniently run a simulation where the parameters differ, but the structure
             is the same (activity distribution, dynamics, etc.)
 
-    :param cls: The type of EchoChamber class to use. E.g. OpenChamber.
+    :param cls: The type of SocialNetwork class to use. E.g. OpenChamber.
     :param N: initial value: Number of agents.
     :param m: Number of other agents to interact with.
     :param K: Social interaction strength.
@@ -72,7 +72,7 @@ def run_params(
         'all').
     :param write_mapping: Write to a file that maps the object's string representation and it's hash value.
 
-    :return: Instance of EchoChamber (or a subclass)
+    :return: Instance of SocialNetwork (or a subclass)
     """
     from opdynamics.utils.cache import cache_ec
 
@@ -95,11 +95,11 @@ def run_params(
     _ec = cls(N, m, K, alpha, *sim_args, **sim_kwargs)
     _ec.set_activities(activity, gamma, epsilon, 1, dim=1, **sim_kwargs)
     _ec.set_social_interactions(
-        beta=beta, r=r, store_all=store_all, dt=dt, t_end=T, **sim_kwargs
+        beta=beta, r=r, store_all=store_all, dt=dt, t_dur=T, **sim_kwargs
     )
     _ec.set_dynamics(*sim_args, **sim_kwargs)
     if not (cache and _ec.load(dt, T)):
-        _ec.run_network(dt=dt, t_end=T, method=method)
+        _ec.run_network(dt=dt, t_dur=T, method=method)
         cache_ec(cache, _ec, write_mapping=write_mapping)
 
     if plot_opinion:
@@ -113,7 +113,7 @@ def run_periodic_noise(
     recovery: float,
     interval: float = 0.0,
     num: int = 1,
-    cls: Type[NEC] = OpenChamber,
+    cls: Type[NSN] = OpenChamber,
     D: float = 0.01,
     N: int = 1000,
     m: int = 10,
@@ -131,7 +131,7 @@ def run_periodic_noise(
     write_mapping=True,
     *args,
     **kwargs,
-) -> NEC:
+) -> NSN:
     """
     Run a simulation with no noise, then bursts/periods of noise, then a recovery period.
 
@@ -195,7 +195,7 @@ def run_periodic_noise(
     :param plot_opinion: Whether to display results (default False).
     :param write_mapping: Write to a file that maps the object's string representation and it's hash value.
 
-    :return: NoisyEchoChamber created for the simulation.
+    :return: NoisySocialNetwork created for the simulation.
     """
     from opdynamics.utils.cache import cache_ec
 
@@ -208,7 +208,7 @@ def run_periodic_noise(
     store_all = kwargs.pop("store_all", cache == "all")
 
     logger.debug(f"letting network interact without noise until {noise_start}.")
-    t_end = noise_start + noise_length + recovery
+    t_dur = noise_start + noise_length + recovery
     noiseless_time = interval * (num - 1)
     block_time = np.round((noise_length - noiseless_time) / num, 3)
     logger.debug(
@@ -220,57 +220,57 @@ def run_periodic_noise(
     t = tqdm(
         iterable=None,
         desc="periodic noise",
-        total=t_end,
+        total=t_dur,
         disable=logger.getEffectiveLevel() > logging.INFO,
     )
     print()
     name = kwargs.pop("name", "")
     name += f"[num={num} interval={interval}]"
-    nec = cls(N, m, K, alpha, *args, **kwargs)
-    nec.set_activities(activity, gamma, epsilon, 1, dim=1)
-    nec.set_social_interactions(
-        beta=beta, r=r, store_all=store_all, dt=dt, t_end=t_end, **kwargs
+    nsn = cls(N, m, K, alpha, *args, **kwargs)
+    nsn.set_activities(activity, gamma, epsilon, 1, dim=1)
+    nsn.set_social_interactions(
+        beta=beta, r=r, store_all=store_all, dt=dt, t_dur=t_dur, **kwargs
     )
-    nec.set_dynamics(D=0, *args, **kwargs)
+    nsn.set_dynamics(D=0, *args, **kwargs)
 
     # try to hit the cache by creating noise history
     total_time = 0.0
-    nec._D_hist = [(total_time, 0.0)]
+    nsn._D_hist = [(total_time, 0.0)]
     for i in range(num):
         total_time += block_time
-        nec._D_hist.append((total_time, D))
+        nsn._D_hist.append((total_time, D))
         total_time += block_time
-        nec._D_hist.append((total_time, 0.0))
+        nsn._D_hist.append((total_time, 0.0))
 
-    if not cache or (cache and not nec.load(dt, noise_start + noise_length + recovery)):
+    if not cache or (cache and not nsn.load(dt, noise_start + noise_length + recovery)):
         # reset history
-        nec._D_hist = []
+        nsn._D_hist = []
         if noise_start > 0:
-            nec.set_dynamics(D=0, *args, **kwargs)
-            nec.run_network(dt=dt, t_end=noise_start, method=method)
+            nsn.set_dynamics(D=0, *args, **kwargs)
+            nsn.run_network(dt=dt, t_dur=noise_start, method=method)
             t.update(noise_start)
         # inner loop of noise on-off in blocks
         for i in range(num):
-            nec.set_dynamics(D=D, *args, **kwargs)
-            nec.run_network(t_end=block_time, method=method)
+            nsn.set_dynamics(D=D, *args, **kwargs)
+            nsn.run_network(t_dur=block_time, method=method)
             t.update(int(block_time))
             # only include a silent block of time if this wasn't the last block
             if i < num - 1:
-                nec.set_dynamics(D=0, *args, **kwargs)
-                nec.run_network(t_end=interval, method=method)
+                nsn.set_dynamics(D=0, *args, **kwargs)
+                nsn.run_network(t_dur=interval, method=method)
                 t.update(interval)
         logger.debug(
             f"removing noise and letting network settle at {noise_start + noise_length} for {recovery}."
         )
         if recovery > 0:
-            nec.set_dynamics(D=0, *args, **kwargs)
-            nec.run_network(t_end=recovery, method=method)
+            nsn.set_dynamics(D=0, *args, **kwargs)
+            nsn.run_network(t_dur=recovery, method=method)
             t.update(recovery)
 
-        cache_ec(cache, nec, write_mapping=write_mapping)
+        cache_ec(cache, nsn, write_mapping=write_mapping)
 
     if plot_opinion:
-        show_periodic_noise(nec, noise_start, noise_length, recovery, interval, num, D)
+        show_periodic_noise(nsn, noise_start, noise_length, recovery, interval, num, D)
         sample_size = kwargs.get("sample_size", None)
         sample_method = kwargs.get("sample_method", None)
         if sample_size or sample_method:
@@ -281,17 +281,17 @@ def run_periodic_noise(
             title += f"{sample_method}" if sample_method else ""
             fig.suptitle(title)
 
-    return nec
+    return nsn
 
 
 def _comp_unit(
     cls, keys, values: list, cache, write_mapping: bool = True, **kwargs
-) -> Tuple[EC, dict]:
+) -> Tuple[SN, dict]:
     """Define unit of computation to be parallelizable.
 
     :param values: Values to update in kwargs according. Same order as keys.
     :param write_mapping: Whether to write to a file. Defaults to `True`.
-    :return: Pair of EchoChamber object, parameters used.
+    :return: Pair of SocialNetwork object, parameters used.
     """
 
     # create copy of kwargs
@@ -316,7 +316,7 @@ def _comp_unit(
 
     # run according to noise_start
     if noise_start > 0:
-        nec = run_periodic_noise(
+        nsn = run_periodic_noise(
             noise_start,
             noise_length,
             recovery,
@@ -327,24 +327,24 @@ def _comp_unit(
             **updated_kwargs,
         )
     else:
-        nec = run_params(
+        nsn = run_params(
             cls,
             name=name,
             cache=cache,
             write_mapping=write_mapping,
             **updated_kwargs,
         )
-    return nec, updated_kwargs
+    return nsn, updated_kwargs
 
 
 def run_product(
     range_parameters: Dict[str, Dict[str, Union[list, str]]],
-    cls: Type[EC] = EchoChamber,
+    cls: Type[SN] = SocialNetwork,
     cache: Union[bool, str] = False,
     cache_sim: Union[bool, str] = True,
     parallel: Union[bool, int] = False,
     **kwargs,
-) -> Union[pd.DataFrame, List[EC]]:
+) -> Union[pd.DataFrame, List[SN]]:
     """Run a combination of variables, varying noise for each combination.
 
     Examples
@@ -441,19 +441,19 @@ def run_product(
                 ranges_have_run.update(chunk.groupby(col_names).count().index)
         ranges_to_run = {x for x in ranges_to_run if x not in ranges_have_run}
 
-    # list to store EchoChamber objects (only if not cache_sim)
+    # list to store SocialNetwork objects (only if not cache_sim)
     nec_list = []
 
     # create helper functions for running synchronously or asynchronously
     def run_sync():
         """Normal ``for`` loop over range."""
         for values in tqdm(ranges_to_run, desc="full range"):
-            nec, params = _comp_unit(cls, keys, values, cache=cache, **kwargs)
+            nsn, params = _comp_unit(cls, keys, values, cache=cache, **kwargs)
             if cache_sim:
-                save_results(file_name, nec, **params)
+                save_results(file_name, nsn, **params)
             else:
                 # if not being run for caching, store results in a list
-                nec_list.append(nec)
+                nec_list.append(nsn)
 
     def run_async(n_processes=None):
         """Create a pool of size ``n_processes`` for running multiple networks simultaneously.
@@ -476,18 +476,18 @@ def run_product(
         kwargs.pop("write_mapping", False)
         write_file_name = os.path.join(cache_dir, "map.txt")
 
-        for nec, params in p.imap(
+        for nsn, params in p.imap(
             partial(_comp_unit, cls, keys, cache=cache, write_mapping=False, **kwargs),
             ranges_to_run,
         ):
-            if cache and nec.save_txt is not None:
+            if cache and nsn.save_txt is not None:
                 with open(write_file_name, "a+") as write_file:
-                    write_file.write(nec.save_txt)
+                    write_file.write(nsn.save_txt)
             if cache_sim:
-                save_results(file_name, nec, **params)
+                save_results(file_name, nsn, **params)
             else:
                 # if not being run for caching, store results in a list
-                nec_list.append(nec)
+                nec_list.append(nsn)
         p.close()
         p.join()
 
@@ -561,11 +561,11 @@ def example():
         activity_distribution=negpowerlaw,
         r=0.5,
         dt=0.01,
-        t_end=0.5,
+        t_dur=0.5,
     )
 
     # run_params(
-    #     EchoChamber, **_kwargs, plot_opinion="summary",
+    #     SocialNetwork, **_kwargs, plot_opinion="summary",
     # )
     kwargs = dict(
         N=1000,

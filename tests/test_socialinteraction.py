@@ -2,8 +2,8 @@ import numpy as np
 
 from unittest import TestCase
 
-from opdynamics.networks import EchoChamber
-from opdynamics.dynamics.socialinteraction import (
+from opdynamics.socialnetworks import SocialNetwork
+from opdynamics.dynamics.socialinteractions import (
     get_social_interaction,
     get_social_interaction_exp,
 )
@@ -12,31 +12,31 @@ from opdynamics.dynamics.socialinteraction import (
 class TestSocialInteraction(TestCase):
     def setUp(self) -> None:
 
-        self.ec = EchoChamber(1000, m=10, K=3.0, alpha=3.0)
+        self.sn = SocialNetwork(1000, m=10, K=3.0, alpha=3.0)
 
     def test_get_social_interaction(self):
         from scipy.stats import norm
 
         # required setup
         # set activities to all be 1 (all agents interact at every time step)
-        self.ec.set_activities(norm, 1, 0)
-        self.ec.set_connection_probabilities(beta=0)
+        self.sn.set_activities(norm, 1, 0)
+        self.sn.set_connection_probabilities(beta=0)
 
         # no mutual interactions
         r = 0
         # all active
         active_threshold = 0
 
-        self.ec.rn = np.random.default_rng(42)
-        adj_mat = get_social_interaction(self.ec, active_threshold, r)
-        self.assertTrue(np.all(np.sum(adj_mat, axis=0) == self.ec.m))
+        self.sn.rn = np.random.default_rng(42)
+        adj_mat = get_social_interaction(self.sn, active_threshold, r)
+        self.assertTrue(np.all(np.sum(adj_mat, axis=0) == self.sn.m))
         self.assertTrue(
             np.all(adj_mat.diagonal() == 0), "expected no interactions with self"
         )
-        self.ec.rn = np.random.default_rng(self.ec.rn)
-        adj_mat_exp = get_social_interaction_exp(self.ec, active_threshold, r)
+        self.sn.rn = np.random.default_rng(self.sn.rn)
+        adj_mat_exp = get_social_interaction_exp(self.sn, active_threshold, r)
         self.assertTrue(
-            np.all(np.sum(adj_mat_exp, axis=0) == self.ec.m),
+            np.all(np.sum(adj_mat_exp, axis=0) == self.sn.m),
             "every agent must interact with 10 other agents (normal distribution, no threshold)",
         )
         self.assertTrue(

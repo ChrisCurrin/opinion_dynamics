@@ -11,7 +11,7 @@ from matplotlib.colors import LogNorm, Normalize, TwoSlopeNorm
 from matplotlib.figure import Figure
 from matplotlib.ticker import MaxNLocator
 
-from opdynamics.networks import EchoChamber
+from opdynamics.socialnetworks import SocialNetwork
 from opdynamics.utils.constants import *
 from opdynamics.utils.decorators import optional_fig_ax
 from opdynamics.utils.plot_utils import get_time_point_idx, use_self_args
@@ -22,8 +22,8 @@ logger = logging.getLogger("visualise")
 logging.getLogger("matplotlib").setLevel(logging.WARNING)
 
 
-class VisEchoChamber(object):
-    """Class used to visualise attached EchoChamber object.
+class VisSocialNetwork(object):
+    """Class used to visualise attached SocialNetwork object.
 
     Visualisations
     =====
@@ -48,7 +48,7 @@ class VisEchoChamber(object):
 
     .. code-block :: python
 
-        vis = VisEchoChamber(ec)
+        vis = VisSocialNetwork(sn)
         vis.show_opinions()
 
     One-time use
@@ -56,15 +56,15 @@ class VisEchoChamber(object):
 
     .. code-block :: python
 
-        VisEchoChamber(ec).show_opinions()
+        VisSocialNetwork(sn).show_opinions()
 
     """
 
-    def __init__(self, echochamber: EchoChamber):
-        self.ec = echochamber
+    def __init__(self, SocialNetwork: SocialNetwork):
+        self.sn = SocialNetwork
 
     show_activity_vs_opinion = use_self_args(
-        show_activity_vs_opinion, ["ec.opinions", "ec.activities"]
+        show_activity_vs_opinion, ["sn.opinions", "sn.activities"]
     )
 
     def show_connection_probabilities(
@@ -91,9 +91,9 @@ class VisEchoChamber(object):
 
         """
         # noinspection PyProtectedMember
-        p_conn = self.ec.adj_mat._p_conn
+        p_conn = self.sn.adj_mat._p_conn
         if p_conn is None:
-            p_conn = self.ec.adj_mat.conn_method(self.ec, **self.ec.adj_mat.conn_kwargs)
+            p_conn = self.sn.adj_mat.conn_method(self.sn, **self.sn.adj_mat.conn_kwargs)
         return show_matrix(
             p_conn,
             "$P_{ij}$",
@@ -106,12 +106,16 @@ class VisEchoChamber(object):
         )
 
     def show_adjacency_matrix(
-        self, *args, title="Cumulative adjacency matrix", t: Union[Tuple[Union[int, float]], int, float] = -1, **kwargs
+        self,
+        *args,
+        title="Cumulative adjacency matrix",
+        t: Union[Tuple[Union[int, float]], int, float] = -1,
+        **kwargs,
     ) -> Tuple[Figure, Axes]:
         """
         Plot adjacency matrix.
 
-        If matrix `ec.adj_mat` is 3D (first dimension is time), the sum of the interactions is computed over time.
+        If matrix `sn.adj_mat` is 3D (first dimension is time), the sum of the interactions is computed over time.
         The total adjacency matrix
 
         > Note adj_mat is indexed ji but represents Aij (if there is input from agent j to agent i)
@@ -133,9 +137,9 @@ class VisEchoChamber(object):
         :return: Tuple[Figure, Axes] used.
 
         """
-        t_idx = get_time_point_idx(self.ec.result.t, t)
+        t_idx = get_time_point_idx(self.sn.result.t, t)
 
-        conn_weights = self.ec.adj_mat.accumulate(t_idx)
+        conn_weights = self.sn.adj_mat.accumulate(t_idx)
 
         return show_matrix(
             conn_weights,
@@ -154,14 +158,14 @@ class VisEchoChamber(object):
         self, ax: Axes = None, fig: Figure = None, **kwargs
     ) -> Tuple[Figure, Axes]:
         kwargs.setdefault("color", "Green")
-        sns.histplot(self.ec.activities, ax=ax, **kwargs)
+        sns.histplot(self.sn.activities, ax=ax, **kwargs)
         ax.set(
             title="Activity distribution",
             ylabel="count",
             xlabel="activity",
             xlim=(
-                np.min(np.append(self.ec.activities, 0)),
-                np.max(np.append(self.ec.activities, 1)),
+                np.min(np.append(self.sn.activities, 0)),
+                np.max(np.append(self.sn.activities, 1)),
             ),
         )
         return fig, ax
@@ -194,19 +198,19 @@ class VisEchoChamber(object):
         :return: Tuple[Figure, Axes] used.
         """
         cmap = kwargs.pop("cmap", OPINIONS_CMAP)
-        vmin = kwargs.pop("vmin", np.min(self.ec.result.y))
-        vmax = kwargs.pop("vmax", np.max(self.ec.result.y))
+        vmin = kwargs.pop("vmin", np.min(self.sn.result.y))
+        vmax = kwargs.pop("vmax", np.max(self.sn.result.y))
+        lw = kwargs.pop("lw", 0.1)
         sm = ScalarMappable(norm=TwoSlopeNorm(0, vmin, vmax), cmap=cmap)
         import pandas as pd
 
-        df_opinions: pd.DataFrame = self.ec.result_df().iloc[::subsample]
+        df_opinions: pd.DataFrame = self.sn.result_df().iloc[::subsample]
 
         if color_code == "line" or color_code == "lines":
             # using the colorline method allows colors to be dependent on a value, in this case, opinion,
             # but takes much longer to display
             for agent_idx, agent_opinions in df_opinions.iteritems():
                 c = sm.to_rgba(agent_opinions.values)
-                lw = kwargs.pop("lw", 0.1)
                 colorline(
                     agent_opinions.index,
                     agent_opinions.values,
@@ -223,20 +227,16 @@ class VisEchoChamber(object):
                     agent_opinions.index, agent_opinions.values, c=c, s=s, **kwargs
                 )
         else:
-            lw = kwargs.pop("lw", 0.1)
             ls = kwargs.pop("ls", "-")
             mec = kwargs.pop("mec", "None")
-            sns.set_palette(sns.color_palette("Set1", n_colors=df_opinions.shape[0]))
-
-            sns.lineplot(
-                x=df_opinions.index,
-                y=df_opinions.values,
-                ls=ls,
-                mec=mec,
-                lw=lw,
-                ax=ax,
-                **kwargs,
-            )
+            with sns.color_palette("Set1", n_colors=df_opinions.shape[0]):
+                ax.plot(
+                    df_opinions,
+                    ls=ls,
+                    mec=mec,
+                    lw=lw,
+                    **kwargs,
+                )
         ax.set_xlim(0, df_opinions.index[-1])
         ax.set_xlabel(TIME_SYMBOL)
         ax.set_ylabel(OPINION_AGENT_TIME)
@@ -271,9 +271,9 @@ class VisEchoChamber(object):
         """
 
         cmap = kwargs.pop("cmap", "viridis")
-        df_opinions = self.ec.result_df()
+        df_opinions = self.sn.result_df()
 
-        idx = get_time_point_idx(self.ec.result.t, t)
+        idx = get_time_point_idx(self.sn.result.t, t)
 
         t_val = df_opinions.index[idx]
         df_change_from_start = np.abs(df_opinions.iloc[idx] - df_opinions)
@@ -322,7 +322,7 @@ class VisEchoChamber(object):
         title: str = "Opinions distribution",
         **kwargs,
     ) -> Tuple[Figure, Axes]:
-        idx = get_time_point_idx(self.ec.result.t, t)
+        idx = get_time_point_idx(self.sn.result.t, t)
         bins = kwargs.pop("bins", "auto")
         kwargs.setdefault("color", "Purple")
         kwargs.setdefault("kde", True)
@@ -330,8 +330,8 @@ class VisEchoChamber(object):
         vertical = kwargs.pop("vertical", False)
 
         data = {
-            "x": self.ec.result.y[:, idx] if not vertical else None,
-            "y": self.ec.result.y[:, idx] if vertical else None,
+            "x": self.sn.result.y[:, idx] if not vertical else None,
+            "y": self.sn.result.y[:, idx] if vertical else None,
         }
         sns.histplot(**data, bins=bins, ax=ax, **kwargs)
 
@@ -362,9 +362,9 @@ class VisEchoChamber(object):
     ) -> Tuple[Figure, Axes]:
         cmap = kwargs.pop("cmap", OPINIONS_CMAP)
 
-        idx = get_time_point_idx(self.ec.result.t, t)
-        opinions = self.ec.result.y[:, idx]
-        agents = np.arange(self.ec.N)
+        idx = get_time_point_idx(self.sn.result.t, t)
+        opinions = self.sn.result.y[:, idx]
+        agents = np.arange(self.sn.N)
         if not direction:
             # only magnitude
             opinions = np.abs(opinions)
@@ -423,7 +423,7 @@ class VisEchoChamber(object):
             ax.tick_params(axis="x", bottom=False, labelbottom=False)
             cbar.set_label(OPINION_SYMBOL)
 
-        ax.set_ylim(0, self.ec.N)
+        ax.set_ylim(0, self.sn.N)
         ax.set_xlim(*v)
         if not colorbar:
             # xlabel not part of colorbar
@@ -435,24 +435,24 @@ class VisEchoChamber(object):
         return fig, ax
 
     def _get_equal_opinion_limits(self):
-        if self.ec.result is None:
-            opinions = self.ec.opinions
+        if self.sn.result is None:
+            opinions = self.sn.opinions
         else:
-            opinions = self.ec.result.y
+            opinions = self.sn.result.y
         v = np.max(np.abs(opinions))
         return -v, v
 
     def show_nearest_neighbour(
         self, bw_adjust=0.5, t=-1, title=True, **kwargs
     ) -> sns.JointGrid:
-        nn = self.ec.get_nearest_neighbours(t)
-        idx = get_time_point_idx(self.ec.result.t, t)
-        opinions = self.ec.result.y[:, idx]
+        nn = self.sn.get_nearest_neighbours(t)
+        idx = get_time_point_idx(self.sn.result.t, t)
+        opinions = self.sn.result.y[:, idx]
         kwargs.setdefault("color", "Purple")
         marginal_kws = kwargs.pop("marginal_kws", dict())
         marginal_kws.update(bw_adjust=bw_adjust)
         g = sns.jointplot(
-            self.ec.opinions,
+            self.sn.opinions,
             nn,
             kind="kde",
             bw_adjust=bw_adjust,
@@ -469,11 +469,11 @@ class VisEchoChamber(object):
         import networkx as nx
 
         cmap = kwargs.pop("cmap", "bwr")
-        vmin = kwargs.pop("vmin", np.min(self.ec.opinions))
-        vmax = kwargs.pop("vmax", np.max(self.ec.opinions))
+        vmin = kwargs.pop("vmin", np.min(self.sn.opinions))
+        vmax = kwargs.pop("vmax", np.max(self.sn.opinions))
         alpha = kwargs.pop("alpha", 0.5)
 
-        G = self.ec.get_network_graph()
+        G = self.sn.get_network_graph()
 
         edge_weights = [d["weight"] for (u, v, d) in G.edges(data=True)]
         scale_weight = 1 / np.max(edge_weights)
@@ -483,8 +483,8 @@ class VisEchoChamber(object):
             norm=LogNorm(max(min(edge_weights), 1), np.max(edge_weights)),
             cmap="viridis",
         )
-        c = sm.to_rgba(self.ec.opinions)
-        edge_c = edge_sm.to_rgba(self.ec)
+        c = sm.to_rgba(self.sn.opinions)
+        edge_c = edge_sm.to_rgba(self.sn)
         # ajdust the alpha
         c[:, 3] = alpha
         edge_c[:, 3] = alpha
@@ -508,7 +508,7 @@ class VisEchoChamber(object):
         pos = nx.spring_layout(
             G,
             center=(0, 0),
-            iterations=int(self.ec.N * np.log10(self.ec.N)),
+            iterations=int(self.sn.N * np.log10(self.sn.N)),
             weight="weight",
             seed=1337,
         )

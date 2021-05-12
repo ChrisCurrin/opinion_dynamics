@@ -1,4 +1,5 @@
 """
+# Networks of agents that give rise to echo chambers. 
 
 """
 import copy
@@ -29,11 +30,11 @@ from opdynamics.utils.distributions import negpowerlaw
 from opdynamics.integrate.types import SolverResult, diffeq
 from opdynamics.utils.errors import ECSetupError
 
-logger = logging.getLogger("echo chamber")
+logger = logging.getLogger("SocialNetwork")
 
 
 @hashable
-class EchoChamber(object):
+class SocialNetwork(object):
     """
     A network of agents interacting with each other.
 
@@ -60,12 +61,12 @@ class EchoChamber(object):
         m: int,
         K: float,
         alpha: float,
-        name="echochamber",
+        name="SocialNetwork",
         seed=1337,
         *args,
         **kwargs,
     ):
-        from opdynamics.dynamics.socialinteraction import SocialInteraction
+        from opdynamics.dynamics.socialinteractions import SocialInteraction
 
         # create a random number generator for this object (to be thread-safe)
         self.rn = default_rng(seed)
@@ -83,6 +84,7 @@ class EchoChamber(object):
         # private attributes
         self._dist: str = None
         self._beta: float = None
+        self._store_interactions = False
 
         # quick checks
         assert N > 0 and type(N) is int
@@ -146,8 +148,6 @@ class EchoChamber(object):
         beta: float = 0.0,
         r: float = 0.5,
         store_all=False,
-        dt: float = None,
-        t_end: float = None,
         **kwargs,
     ):
         """Define the social interactions that occur at each time step.
@@ -164,34 +164,25 @@ class EchoChamber(object):
             When beta=0, then connection probabilities are uniform.
         :param r: Probability of a mutual interaction [0,1].
         :param store_all: Store all the interaction matrice (True) or only the accumulative interactions and last interaction (False).
-        :param dt: Time step being used in simulation. Specified here so interaction dynamics have a clear time step
-            even if the integration of the opinion dynamics occurs at smaller time steps (e.g. with the RK method).
-        :param t_end: Last time point. Together with dt, determines the size of the social interaction array.
 
         :keyword update_conn: Whether to update connection probabilities at every dt (default False).
 
         """
-        from opdynamics.dynamics.socialinteraction import SocialInteraction
+        from opdynamics.dynamics.socialinteractions import SocialInteraction
 
         if self.activities is None:
             raise RuntimeError(
                 """Activities need to be set. 
-                ec = EchoChamber(...)
-                ec.set_activities(...)
-                ec.set_connection_probabilities(...)
-                ec.set_social_interactions(...)
+                sn = SocialNetwork(...)
+                sn.set_activities(...)
+                sn.set_connection_probabilities(...)
+                sn.set_social_interactions(...)
                 """
             )
 
         self.adj_mat = SocialInteraction(self, r, beta=beta, **kwargs)
         self._beta = beta
-        if store_all:
-            if t_end is None or dt is None:
-                raise RuntimeError(
-                    "`t_end` and `dt` need to be defined for pre-emptively storing adjacency matrix in "
-                    "`set_social_interactions`"
-                )
-            self.adj_mat.store_interactions(t_end, dt)
+        self._store_interactions = store_all
 
     def set_dynamics(self, *args, **kwargs):
         """Set the dynamics of network by assigning a function to `self.dy_dt`.
@@ -215,9 +206,11 @@ class EchoChamber(object):
     def agent_idxs(self):
         return list(range(self.N))
 
-    def _setup_run(self, t_end: float = 0.05) -> Tuple[float, float]:
+    def _setup_run(self, dt: float, t_dur: float) -> Tuple[float, float]:
         if self.activities is None or self.adj_mat is None or self.dy_dt is None:
             raise ECSetupError
+
+        t_end = t_dur
 
         if not self.has_results:
             t_start = 0
@@ -227,10 +220,12 @@ class EchoChamber(object):
             t_end += t_start
             # noinspection PyTypeChecker
             self.prev_result: SolverResult = copy.deepcopy(self.result)
-            logger.info(
+            logger.debug(
                 f"continuing dynamics from {t_start:.6f} until {t_end:.6f}. Opinions can be reset using "
-                f"ec.init_opinions()."
+                f"sn.init_opinions()."
             )
+        if self._store_interactions:
+            self.adj_mat.store_interactions(dt, t_end)
         return np.round(t_start, 6), np.round(t_end, 6)
 
     def _args(self, *args):
@@ -261,17 +256,17 @@ class EchoChamber(object):
         logger.info(f"done running {self.name}")
 
     def run_network(
-        self, dt: float = 0.01, t_end: float = 0.05, method: str = "Euler"
+        self, dt: float = 0.01, t_dur: float = 0.05, method: str = "Euler"
     ) -> None:
-        """Run a simulation for the echo chamber until `t_end` with a time step of `dt`.
+        """Run a simulation for the SocialNetwork until `t_dur` with a time step of `dt`.
 
-        Because the echo chamber has ODE dynamics, an appropriate method should be chosen from
+        Because the SocialNetwork has ODE dynamics, an appropriate method should be chosen from
         `scipy.integrate.solver_ivp` or `opdynamics.integrate.solvers`
 
         :param dt: (Max) Time step for integrator. Smaller values will yield more accurate results but the simulation
             will take longer. Large `dt` for unstable methods (like "Euler") can cause numerical instability where
             results show **increasingly large** oscillations in opinions (nonsensical).
-        :param t_end: Time for simulation to span. Number of iterations will be at least t_end/dt.
+        :param t_dur: Time for simulation to span. Number of iterations will be at least t_dur/dt.
         :param method: Integration method to use. Must be one specified by `scipy.integrate.solver_ivp` or
             `opdynamics.integrate.solvers`
 
@@ -279,7 +274,7 @@ class EchoChamber(object):
         from scipy.integrate import solve_ivp
         from opdynamics.integrate.solvers import ODE_INTEGRATORS, solve_ode
 
-        t_span = self._setup_run(t_end)
+        t_span = self._setup_run(dt, t_dur)
         # always have dt last
         args = (*self._args(), dt)
 
@@ -426,7 +421,7 @@ class EchoChamber(object):
             last_t_idx = t_idx[1]
         else:
             last_t_idx = t_idx
-            
+
         conn_weights = self.adj_mat.accumulate(t_idx)
 
         G = nx.DiGraph()
@@ -447,7 +442,7 @@ class EchoChamber(object):
 
         The degree of an agent is the total number of connections it made with all other agents (directed if in- or out- are specified).
 
-        :param t: See `EchoChamber.get_network_graph`
+        :param t: See `SocialNetwork.get_network_graph`
 
         :return: The graph object (from ``networkx``) and a dataframe with the degree information.
         """
@@ -482,8 +477,8 @@ class EchoChamber(object):
     ):
         """Construct a graph of the network and determine the interactions (connections) in the network.
 
-        :param t: See `EchoChamber.get_network_graph`
-        :param long: Whether the returned DataFrame should be in long (True) or wide (False) format. 
+        :param t: See `SocialNetwork.get_network_graph`
+        :param long: Whether the returned DataFrame should be in long (True) or wide (False) format.
             See https://pandas.pydata.org/pandas-docs/stable/getting_started/intro_tutorials/07_reshape_table_layout.html#min-tut-07-reshape
 
         :return: The graph object (from ``networkx``) and a dataframe (long format by default) with the connection information.
@@ -525,7 +520,7 @@ class EchoChamber(object):
         write_mapping=True,
         dt=None,
     ) -> str:
-        """Save the echochamber to the cache using the HDF file format.
+        """Save the SocialNetwork to the cache using the HDF file format.
 
         File name and format specified in ``_get_filename()``
 
@@ -534,7 +529,7 @@ class EchoChamber(object):
         :param write_mapping: Write to a file that maps the object's string representation and it's hash value.
         :param dt: Explicitly include the dt value for the index name. If not provided, it is calculated as the
             maximum time step from ``result_df``.
-        
+
         :return: Saved filename.
         """
         import warnings
@@ -607,7 +602,7 @@ class EchoChamber(object):
             Due to the way adj_mat is cached (only last adj_mat), only full simulations can be loaded.
             That is, asking for T=0.5 for a simulation that has run for T=1.0 will not load because the adjacency
             matrix at T=0.5 cannot be determined. A workaround is do short simulations and change the name of
-            echochamber object between `run_network` calls.
+            SocialNetwork object between `run_network` calls.
         :return: True if loaded, False otherwise.
         """
 
@@ -704,12 +699,21 @@ class EchoChamber(object):
         )
 
 
-class ConnChamber(EchoChamber):
+class ConnChamber(SocialNetwork):
     """Network that calculates new connection probabilities at every time step, optionally specifying the probability,
-    ``p_opp``, that an agent will interact with another agent holding an opposing opinion."""
+    ``p_opp``, that an agent will interact with another agent holding an opposing opinion.
+
+    Note that this can be trivially used with NoisySocialNetworks (below) by passing ``conn_method``, ``p_opp``, and ``update_conn`` to the
+    :meth:`set_social_interactions` method.
+
+    This class demonstrates a default implementation of continuous connection updates. Updating the connections at every time step doesn't
+    seem to change the results but does incur additional computational costs.
+
+    Just in case, the delayed internal noise figure is run by default with ``update_conn=True``.
+    """
 
     def set_social_interactions(self, *args, p_opp=0, update_conn=True, **kwargs):
-        from opdynamics.dynamics.socialinteraction import (
+        from opdynamics.dynamics.socialinteractions import (
             get_connection_probabilities_opp,
         )
 
@@ -723,8 +727,10 @@ class ConnChamber(EchoChamber):
         )
 
 
-class NoisyEchoChamber(EchoChamber):
-    def __init__(self, *args, name="noisy echochamber", **kwargs):
+class NoisySocialNetwork(SocialNetwork):
+    """Parent class for adding a noise term ``D`` to the dynamics of a network."""
+
+    def __init__(self, *args, name="noisy SocialNetwork", **kwargs):
         super().__init__(*args, name=name, **kwargs)
         self._D_hist = []
         self.D: float = 0
@@ -745,16 +751,18 @@ class NoisyEchoChamber(EchoChamber):
         return f"{super().__repr__()} D_hist={d_hist}"
 
 
-class OpenChamber(NoisyEchoChamber):
+class OpenChamber(NoisySocialNetwork):
+    """Network with *external* noise."""
+
     # noinspection PyTypeChecker
-    def __init__(self, *args, name="open echochamber", **kwargs):
+    def __init__(self, *args, name="open SocialNetwork", **kwargs):
         super().__init__(*args, name=name, **kwargs)
         self.diffusion: diffeq = None
         self.wiener_process: Callable = None
         self.diff_args = ()
 
     def set_dynamics(self, D=0.01, *args, **kwargs):
-        """Network with noise.
+        """Network with *external* noise.
 
         External noise:
         -----
@@ -778,14 +786,14 @@ class OpenChamber(NoisyEchoChamber):
     def run_network(
         self,
         dt: float = 0.01,
-        t_end: float = 0.05,
+        t_dur: float = 0.05,
         method: str = "Euler-Maruyama",
     ):
         """Dynamics are no longer of an ordinary differential equation so we can't use scipy.solve_ivp anymore"""
 
         from opdynamics.integrate.solvers import SDE_INTEGRATORS, solve_sde
 
-        t_span = self._setup_run(t_end)
+        t_span = self._setup_run(dt, t_dur)
         args = (*self._args(), dt)
         diff_args = (dt, *self.diff_args)
         if method in SDE_INTEGRATORS:
@@ -810,9 +818,11 @@ class OpenChamber(NoisyEchoChamber):
         return f"{super().__repr__()} diff_args={self.diff_args}"
 
 
-class ContrastChamber(NoisyEchoChamber):
+class ContrastChamber(NoisySocialNetwork):
+    """Network with noise by contrasting the opinions of a select group of agents to every other agent."""
+
     # noinspection PyTypeChecker
-    def __init__(self, *args, name="contrast echochamber", **kwargs):
+    def __init__(self, *args, name="contrast SocialNetwork", **kwargs):
         super().__init__(*args, name=name, **kwargs)
         self.k_steps: int = None
         self.alpha_2: float = None
@@ -876,7 +886,7 @@ class ContrastChamber(NoisyEchoChamber):
         return super()._args(*args, self.k_steps, self.alpha_2)
 
 
-class SampleChamber(NoisyEchoChamber):
+class SampleChamber(NoisySocialNetwork):
     """
     Provide a mean sample of opinions to each agent.
 
@@ -930,7 +940,7 @@ class SampleChamber(NoisyEchoChamber):
 
 def example():
     """Simple example to show how to run a simulation and display some results."""
-    from opdynamics.visualise.visechochamber import VisEchoChamber
+    from opdynamics.visualise.vissocialnetwork import VisSocialNetwork
 
     logging.basicConfig(level=logging.DEBUG)
 
@@ -944,20 +954,20 @@ def example():
     activity_distribution = negpowerlaw
     r = 0.5
     dt = 0.01
-    t_end = 0.5
+    t_dur = 0.5
 
-    ec = SampleChamber(num_agents, m, K, alpha, seed=1337)
-    vis = VisEchoChamber(ec)
+    sn = SampleChamber(num_agents, m, K, alpha, seed=1337)
+    vis = VisSocialNetwork(sn)
 
-    ec.set_activities(activity_distribution, gamma, epsilon, 1)
+    sn.set_activities(activity_distribution, gamma, epsilon, 1)
     vis.show_activities()
     vis.show_activity_vs_opinion()
 
-    ec.set_connection_probabilities(beta=beta)
-    ec.set_social_interactions(r=r, dt=dt, t_end=t_end)
-    ec.set_dynamics()
+    sn.set_connection_probabilities(beta=beta)
+    sn.set_social_interactions(r=r, dt=dt, t_dur=t_dur)
+    sn.set_dynamics()
 
-    ec.run_network(dt=dt, t_end=t_end)
+    sn.run_network(dt=dt, t_dur=t_dur)
     vis.show_opinions(color_code=False)
 
 

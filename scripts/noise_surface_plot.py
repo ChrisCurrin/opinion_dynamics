@@ -9,7 +9,7 @@ if __name__ == "__main__":
     import pandas as pd
     import matplotlib.pyplot as plt
 
-    from opdynamics.networks import SampleChamber
+    from opdynamics.socialnetworks import SampleChamber
     from opdynamics.simulation import run_product
     from opdynamics.visualise.dense import plot_surfaces
 

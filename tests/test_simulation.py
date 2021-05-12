@@ -7,7 +7,7 @@ import numpy as np
 from scipy.stats import powerlaw
 
 from opdynamics.simulation import run_periodic_noise
-from opdynamics.visualise import VisEchoChamber
+from opdynamics.visualise import VisSocialNetwork
 from opdynamics.utils.distributions import negpowerlaw
 
 logging.getLogger().setLevel(logging.DEBUG)
@@ -32,5 +32,5 @@ class TestSimulation(TestCase):
         noise_start = 0.3
         noise_length = 0.5
         recovery = 0.2
-        nec = run_periodic_noise(noise_start, noise_length, recovery, D=D, **kwargs)
-        vis = VisEchoChamber(nec)
+        nsn = run_periodic_noise(noise_start, noise_length, recovery, D=D, **kwargs)
+        vis = VisSocialNetwork(nsn)
