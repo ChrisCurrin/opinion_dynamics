@@ -3,32 +3,27 @@
 
 """
 import copy
-from functools import lru_cache
-from opdynamics.utils.plot_utils import get_time_point_idx
+import logging
 import os
+from functools import lru_cache
+from typing import Callable, Tuple, Union
 
 import numpy as np
 import pandas as pd
-import logging
-
-from typing import Callable, Tuple, Union
-
 from numpy.random import default_rng
 from pandas.errors import PerformanceWarning
 from scipy.stats import powerlaw
 
 from opdynamics.dynamics.opinions import dy_dt, sample_dy_dt
-from opdynamics.metrics.opinions import (
-    distribution_modality,
-    nearest_neighbours,
-    sample_means,
-)
+from opdynamics.integrate.types import SolverResult, diffeq
+from opdynamics.metrics.opinions import (distribution_modality,
+                                         nearest_neighbours, sample_means)
 from opdynamics.utils.accuracy import precision_and_scale
 from opdynamics.utils.constants import DEFAULT_COMPRESSION_LEVEL
 from opdynamics.utils.decorators import hashable
 from opdynamics.utils.distributions import negpowerlaw
-from opdynamics.integrate.types import SolverResult, diffeq
 from opdynamics.utils.errors import ECSetupError
+from opdynamics.utils.plot_utils import get_time_point_idx
 
 logger = logging.getLogger("SocialNetwork")
 
@@ -272,6 +267,7 @@ class SocialNetwork(object):
 
         """
         from scipy.integrate import solve_ivp
+
         from opdynamics.integrate.solvers import ODE_INTEGRATORS, solve_ode
 
         t_span = self._setup_run(dt, t_dur)
@@ -413,8 +409,9 @@ class SocialNetwork(object):
 
         :return: The graph object (from ``networkx``).
         """
-        import networkx as nx
         from itertools import product
+
+        import networkx as nx
 
         t_idx = get_time_point_idx(self.result.t, t)
         if np.iterable(t_idx):
@@ -533,6 +530,7 @@ class SocialNetwork(object):
         :return: Saved filename.
         """
         import warnings
+
         from tables import NaturalNameWarning
 
         filename = self._get_filename()
@@ -713,9 +711,8 @@ class ConnChamber(SocialNetwork):
     """
 
     def set_social_interactions(self, *args, p_opp=0, update_conn=True, **kwargs):
-        from opdynamics.dynamics.socialinteractions import (
-            get_connection_probabilities_opp,
-        )
+        from opdynamics.dynamics.socialinteractions import \
+            get_connection_probabilities_opp
 
         conn_method = kwargs.pop("conn_method", get_connection_probabilities_opp)
         super().set_social_interactions(
@@ -898,7 +895,7 @@ class SampleChamber(NoisySocialNetwork):
         super().__init__(*args, name=name, **kwargs)
         self._sample_size: int = 0
         self._sample_means: float = 0.0
-        self._sample_method: (str, Callable) = None
+        self._sample_method: Union[str, Callable] = None
 
     def set_dynamics(
         self,
