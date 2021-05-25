@@ -107,7 +107,7 @@ def hashable(cls):
 
     def hash_extra(self, extra=""):
         full_str = str(self) + extra
-        return hashlib.md5(full_str.encode("utf-8")).hexdigest()
+        return int(hashlib.sha256(full_str.encode("utf-8")).hexdigest(), 16)
 
     cls.__hash__ = __hash__
     cls.hash_extra = hash_extra

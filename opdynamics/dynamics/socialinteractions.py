@@ -281,7 +281,7 @@ class SocialInteraction(object):
         """Initialise the object to store social interactions (the adjacency matrix) for each time step until t_dur."""
         logger.info(f"storing {1 + int(t_dur/dt)} adjacency matrices...")
         t_arr = np.arange(0, t_dur + dt, dt)
-        adj_mat_memmap_file = get_hash_filename(self, "dat")
+        adj_mat_memmap_file = get_hash_filename(self, "dat", extra=f"{self.sn._seed}")
 
         is_extend_time = self._time_mat is not None
 
