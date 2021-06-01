@@ -16,7 +16,20 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 logger = logging.getLogger("plot utils")
 
 
-def get_time_point_idx(time_series, time_point_or_index: Union[Tuple[Union[int, float]], int, float]):
+def get_time_point_idx(
+    time_series, time_point_or_index: Union[Tuple[Union[int, float]], int, float]
+):
+    """
+    `t` can be an array of numbers if it is a numpy ndarray.
+
+    If `t` is -1, the last time point is used.
+
+    If `t` is None, all time points are retrieved
+    """
+    if time_point_or_index is None:
+        # return all time indices
+        return np.arange(len(time_series))
+
     if np.iterable(time_point_or_index):
         # convert a time point range to a time index range
         assert (

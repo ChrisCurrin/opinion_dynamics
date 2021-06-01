@@ -90,6 +90,7 @@ class VisSocialNetwork(object):
         :return: Tuple[Figure, Axes] used.
 
         """
+        cmap = kwargs.pop("cmap", CONNECTIONS_CMAP)
         # noinspection PyProtectedMember
         p_conn = self.sn.adj_mat._p_conn
         if p_conn is None:
@@ -101,6 +102,7 @@ class VisSocialNetwork(object):
             # min value must be > 0 when LogNorm is used
             vmin=np.min(p_conn[p_conn > 0]),
             vmax=1,
+            cmap=cmap,
             title=title,
             **kwargs,
         )
@@ -137,6 +139,8 @@ class VisSocialNetwork(object):
         :return: Tuple[Figure, Axes] used.
 
         """
+        cmap = kwargs.pop("cmap", INTERACTIONS_CMAP)
+
         t_idx = get_time_point_idx(self.sn.result.t, t)
 
         conn_weights = self.sn.adj_mat.accumulate(t_idx)
@@ -146,6 +150,7 @@ class VisSocialNetwork(object):
             "Number of interactions",
             *args,
             vmin=1,
+            cmap=cmap,
             title=title,
             **kwargs,
         )
@@ -436,7 +441,7 @@ class VisSocialNetwork(object):
 
     def _get_equal_opinion_limits(self):
         if self.sn.result is None:
-            opinions = self.sn.opinions
+            opinions = self.sn._opinions
         else:
             opinions = self.sn.result.y
         v = np.max(np.abs(opinions))
@@ -452,7 +457,7 @@ class VisSocialNetwork(object):
         marginal_kws = kwargs.pop("marginal_kws", dict())
         marginal_kws.update(bw_adjust=bw_adjust)
         g = sns.jointplot(
-            self.sn.opinions,
+            self.sn._opinions,
             nn,
             kind="kde",
             bw_adjust=bw_adjust,
@@ -469,8 +474,8 @@ class VisSocialNetwork(object):
         import networkx as nx
 
         cmap = kwargs.pop("cmap", "bwr")
-        vmin = kwargs.pop("vmin", np.min(self.sn.opinions))
-        vmax = kwargs.pop("vmax", np.max(self.sn.opinions))
+        vmin = kwargs.pop("vmin", np.min(self.sn._opinions))
+        vmax = kwargs.pop("vmax", np.max(self.sn._opinions))
         alpha = kwargs.pop("alpha", 0.5)
 
         G = self.sn.get_network_graph()
@@ -483,7 +488,7 @@ class VisSocialNetwork(object):
             norm=LogNorm(max(min(edge_weights), 1), np.max(edge_weights)),
             cmap="viridis",
         )
-        c = sm.to_rgba(self.sn.opinions)
+        c = sm.to_rgba(self.sn._opinions)
         edge_c = edge_sm.to_rgba(self.sn)
         # ajdust the alpha
         c[:, 3] = alpha

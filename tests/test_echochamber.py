@@ -32,15 +32,15 @@ class TestSocialNetwork(TestCase):
         self.sn = SocialNetwork(1000, m=10, K=3.0, alpha=3.0)
 
     def test_init_opinions(self):
-        self.sn.opinions = np.zeros(shape=self.sn.N)
-        self.assertTrue(np.all(self.sn.opinions == 0))
+        self.sn._opinions = np.zeros(shape=self.sn.N)
+        self.assertTrue(np.all(self.sn._opinions == 0))
         min_val = -1
         max_val = 1
         self.sn.init_opinions(min_val, max_val)
-        self.assertGreaterEqual(np.min(self.sn.opinions), min_val)
-        self.assertLessEqual(np.max(self.sn.opinions), max_val)
+        self.assertGreaterEqual(np.min(self.sn._opinions), min_val)
+        self.assertLessEqual(np.max(self.sn._opinions), max_val)
         self.assertTrue(
-            self.sn.opinions.shape[0] == self.sn.N,
+            self.sn._opinions.shape[0] == self.sn.N,
             "each agent in the SocialNetwork must have an opinion",
         )
 
@@ -219,7 +219,7 @@ class TestSocialNetwork(TestCase):
 
         self.sn.N = 10000
         self.sn.init_opinions(-1, 1)
-        self.assertAlmostEqual(np.mean(self.sn.opinions), 0, 2)
+        self.assertAlmostEqual(np.mean(self.sn._opinions), 0, 2)
 
         self.sn.set_activities(negpowerlaw, gamma, epsilon)
         self.sn.set_social_interactions(beta=beta, r=r, store_all=True)

@@ -59,7 +59,7 @@ def get_connection_probabilities(sn: SocialNetwork, beta: float = 0.0, **conn_kw
     p_conn = np.zeros(shape=(sn.N, sn.N))
     for i in range(sn.N):
         # compute magnitude (between agent i and every other agent)*N agents
-        mag = np.abs(sn.opinions[i] - sn.opinions)
+        mag = np.abs(sn._opinions[i] - sn._opinions)
         mag[i] = np.nan
         p_conn[i] = np.power(mag, -beta)
         p_conn[i, i] = 0
@@ -108,9 +108,9 @@ def get_connection_probabilities_exp(
 
     """
     # create N * N matrix of opinions
-    mat_opinions = np.tile(sn.opinions, sn.N)
+    mat_opinions = np.tile(sn._opinions, sn.N)
     # compute magnitude (between agent i and every other agent)*N agents
-    mag = np.abs(sn.opinions - mat_opinions)
+    mag = np.abs(sn._opinions - mat_opinions)
     self_mask = np.identity(sn.N)
     mag[self_mask] = 0
     p_conn = np.power(mag, -beta)
@@ -277,6 +277,25 @@ class SocialInteraction(object):
         ), "p_mutual_interaction is a probability between 0 and 1"
         logger.debug(f"Social Interaction for {sn.name} initialised {self}.")
 
+    def compress(self, overwrite=True):
+        if self._time_mat is not None:
+            adj_mat_file_compressed = self._time_mat.filename.replace(".dat", ".npz")
+            if overwrite or not os.path.exists(adj_mat_file_compressed):
+                logger.debug(f"saving full adj_mat to '{adj_mat_file_compressed}'")
+                # save compressed version
+                np.savez_compressed(adj_mat_file_compressed, time_mat=self._time_mat)
+                new_time_mat = np.load(adj_mat_file_compressed, mmap_mode="r+")["time_mat"]
+                fname = self._time_mat.filename
+                # delete previous mmap file to explicitly clear storage
+                self.clear()
+                # link to stored version
+                self._time_mat = new_time_mat
+                logger.debug(f"...saved full adj_mat and deleted memory map")
+
+    def clear(self):
+        del self._time_mat
+        self._time_mat = None
+
     def store_interactions(self, dt: float, t_dur: float):
         """Initialise the object to store social interactions (the adjacency matrix) for each time step until t_dur."""
         logger.info(f"storing {1 + int(t_dur/dt)} adjacency matrices...")
@@ -293,11 +312,8 @@ class SocialInteraction(object):
         )
 
         # set up hook to clean up upon system exit
-        def del_mmap(mmap_array):
-            del mmap_array
-
         if not is_extend_time:
-            atexit.register(del_mmap, self._time_mat)
+            atexit.register(self.clear)
 
         logger.debug(f"adjacency matrix has shape = {self._time_mat.shape}")
 

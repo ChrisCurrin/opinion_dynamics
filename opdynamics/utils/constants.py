@@ -19,7 +19,8 @@ DEFAULT_COMPRESSION_LEVEL = 7
 # ----------
 # has less contrast than seismic and the middle is more grey
 OPINIONS_CMAP = "coolwarm_r"
-INTERACTIONS_CMAP = "magma_r"
+INTERACTIONS_CMAP = "Purples"
+CONNECTIONS_CMAP = "YlGn"
 LIGHT_BLUE = "#1ACAD9"
 LIGHT_RED = "#D9258E"
 LIGHT_GREEN = "#0FD977"

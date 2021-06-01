@@ -126,7 +126,7 @@ def show_matrix(
     map: str = "clustermap",
     sort: bool = False,
     norm: Normalize = LogNorm(),
-    cmap: str = INTERACTIONS_CMAP,
+    cmap: str = "Greys",
     fig: Figure = None,
     ax: Axes = None,
     title: str = "matrix",
@@ -349,9 +349,7 @@ def show_noise_panel(
     ]
     for j, (col_mask, hue) in enumerate(zip(col_masks, hues)):
         data_ijk = df[not_na & col_mask]
-        kdeplot(
-            x=data_ijk["opinion"], y=data_ijk[_D], ax=ax[j], cmap=hue, **kde_kwargs
-        )
+        kdeplot(x=data_ijk["opinion"], y=data_ijk[_D], ax=ax[j], cmap=hue, **kde_kwargs)
     for _ax in ax[1:]:
         _ax.set_ylabel("")
     for col_name, _ax in zip(col_names, ax):

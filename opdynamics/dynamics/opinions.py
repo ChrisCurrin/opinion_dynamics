@@ -89,7 +89,7 @@ def _basic_clt_sample(sn, y: np.ndarray, n: int, num_samples: int):
     :type sn: opdynamics.socialnetworks.SocialNetwork
     :param y: opinions
     :param n: sample size
-    :param num_samples: number of samples
+    :param num_samples: number of samples (N)
     """
     sn._sample_means = np.sqrt(n) * (
         sample_means(y, n, num_samples=num_samples, rng=sn.rn) - np.mean(y)
@@ -107,7 +107,7 @@ def _outer_sigmoid_clt_sample(sn, y: np.ndarray, n: int, num_samples: int):
     :type sn: opdynamics.socialnetworks.SocialNetwork
     :param y: opinions
     :param n: sample size
-    :param num_samples: number of samples
+    :param num_samples: number of samples (N)
     """
     sn._sample_means = np.tanh(
         np.sqrt(n)
@@ -118,7 +118,7 @@ def _outer_sigmoid_clt_sample(sn, y: np.ndarray, n: int, num_samples: int):
 def _inner_sigmoid_clt_sample(sn, y: np.ndarray, n: int, num_samples: int):
     """
     method to re-assign self._sample_means
-    :math:`\\tanh{(\\sqrt{n}\\left(\\bar{X}_{n}-\\mu \\right)})`
+    :math:`\\sqrt{n}\\tanh{\\left(\\bar{X}_{n}-\\mu \\right)}`
 
     where :math:`X` is a random sample and :math:`\\bar{X}_{n}` is the sample mean for :math:`n` random samples.
 
@@ -126,7 +126,7 @@ def _inner_sigmoid_clt_sample(sn, y: np.ndarray, n: int, num_samples: int):
     :type sn: opdynamics.socialnetworks.SocialNetwork
     :param y: opinions
     :param n: sample size
-    :param num_samples: number of samples
+    :param num_samples: number of samples (N)
     """
     sn._sample_means = np.sqrt(n) * np.tanh(
         sample_means(y, n, num_samples=num_samples, rng=sn.rn) - np.mean(y)
@@ -136,7 +136,7 @@ def _inner_sigmoid_clt_sample(sn, y: np.ndarray, n: int, num_samples: int):
 def _subsample_clt_sample(sn, y: np.ndarray, n: int, num_samples: int):
     """
     method to re-assign self._sample_means
-    :math:`D \\cdot \\tanh(x_k - \\bar{X_n})`
+    :math:`(X_1 - \\bar{X_n})`
 
     where :math:`X` is a random sample and :math:`\\bar{X}_{n}` is the sample mean for :math:`n` random samples.
 
@@ -144,7 +144,7 @@ def _subsample_clt_sample(sn, y: np.ndarray, n: int, num_samples: int):
     :type sn: opdynamics.socialnetworks.SocialNetwork
     :param y: opinions
     :param n: sample size
-    :param num_samples: number of samples
+    :param num_samples: number of samples (N)
     """
     sn._sample_means = sample_means(
         y, 1, num_samples=num_samples, rng=sn.rn

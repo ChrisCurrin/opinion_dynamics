@@ -16,8 +16,11 @@ from scipy.stats import powerlaw
 
 from opdynamics.dynamics.opinions import dy_dt, sample_dy_dt
 from opdynamics.integrate.types import SolverResult, diffeq
-from opdynamics.metrics.opinions import (distribution_modality,
-                                         nearest_neighbours, sample_means)
+from opdynamics.metrics.opinions import (
+    distribution_modality,
+    nearest_neighbours,
+    sample_means,
+)
 from opdynamics.utils.accuracy import precision_and_scale
 from opdynamics.utils.constants import DEFAULT_COMPRESSION_LEVEL
 from opdynamics.utils.decorators import hashable
@@ -88,7 +91,7 @@ class SocialNetwork(object):
         assert K >= 0
 
         # create array variables
-        self.opinions: np.ndarray = None
+        self._opinions: np.ndarray = None
         self.adj_mat: SocialInteraction = None
         self.activities: np.ndarray = None
         self.dy_dt: diffeq = None
@@ -104,7 +107,7 @@ class SocialNetwork(object):
         :param min_val: lowest value (inclusive)
         :param max_val: highest value (inclusive)
         """
-        self.opinions = self.rn.uniform(min_val, max_val, size=self.N)
+        self._opinions = self.rn.uniform(min_val, max_val, size=self.N)
         self.result = None
 
     def set_activities(
@@ -187,6 +190,18 @@ class SocialNetwork(object):
 
         self.dy_dt = dy_dt
 
+    def opinions_at_t(self, t: Union[int, float] = -1):
+        t_idx = get_time_point_idx(self.result.t, t)
+        return self.result.y[:, t_idx]
+
+    @property
+    def opinions(self):
+        return self.opinions_at_t(-1)
+
+    @property
+    def all_opinions(self):
+        return self.result.y
+
     @property
     def has_results(self):
         """Check if this object has a results property with simulation data."""
@@ -215,7 +230,7 @@ class SocialNetwork(object):
             t_end += t_start
             # noinspection PyTypeChecker
             self.prev_result: SolverResult = copy.deepcopy(self.result)
-            logger.debug(
+            logger.info(
                 f"continuing dynamics from {t_start:.6f} until {t_end:.6f}. Opinions can be reset using "
                 f"sn.init_opinions()."
             )
@@ -245,7 +260,7 @@ class SocialNetwork(object):
 
     def _post_run(self):
         # reassign opinions to last time point
-        self.opinions = self.result.y[:, -1]
+        self._opinions = self.result.y[:, -1]
         if len(self.result.t) > 2 and self.result.t[0] > 0:
             self.result = self.prev_result + self.result
         logger.info(f"done running {self.name}")
@@ -279,7 +294,7 @@ class SocialNetwork(object):
             self.result: SolverResult = solve_ode(
                 self.dy_dt,
                 t_span=t_span,
-                y0=self.opinions,
+                y0=self._opinions,
                 method=method,
                 dt=dt,
                 args=args,
@@ -295,7 +310,7 @@ class SocialNetwork(object):
                 solve_ivp(
                     self.dy_dt,
                     t_span=t_span,
-                    y0=self.opinions,
+                    y0=self._opinions,
                     method=method,
                     vectorized=True,
                     args=args,
@@ -368,7 +383,7 @@ class SocialNetwork(object):
         and :math:`\\sum_j a_{ij}` is the degree of node `i`.
 
         """
-        idx = np.argmin(np.abs(t - self.result.t)) if isinstance(t, float) else t
+        idx = get_time_point_idx(self.result.t, t)
         snapshot_adj_mat = self.adj_mat.accumulate(idx)
         opinions = self.result.y[:, idx]
         return nearest_neighbours(opinions, snapshot_adj_mat)
@@ -565,28 +580,16 @@ class SocialNetwork(object):
                 df_meta,
             ]:
                 df.to_hdf(filename, df.name, complevel=7, complib="blosc:zstd")
-        if self.adj_mat._time_mat is not None:
-            adj_mat_file_compressed = self.adj_mat._time_mat.filename.replace(
-                ".dat", ".npz"
-            )
-            logger.debug(f"saving full adj_mat to '{adj_mat_file_compressed}'")
-            # save compressed version
-            np.savez_compressed(
-                adj_mat_file_compressed, time_mat=self.adj_mat._time_mat
-            )
-            new_time_mat = np.load(adj_mat_file_compressed, mmap_mode="r+")["time_mat"]
-            # delete previous mmap file to explicitly clear storage
-            del self.adj_mat._time_mat
-            # link to stored version
-            self.adj_mat._time_mat = new_time_mat
-            logger.debug(f"...saved full adj_mat and deleted memory map")
-        logger.debug(f"saved to {filename}\n{self}")
+
+        self.adj_mat.compress()
+
+        logger.info("saved")
+        logger.debug(f"{self}\n-> {filename}")
         self.save_txt = f"\n{self}\n\t{hash_txt}"
         if write_mapping:
-            print("write to file")
-            with open(
-                os.path.join(os.path.split(filename)[0], "map.txt"), "a+"
-            ) as f_map:
+            map_file_name = os.path.join(os.path.split(filename)[0], "map.txt")
+            logger.debug(f"write to '{map_file_name}'")
+            with open(map_file_name, "a+") as f_map:
                 f_map.write(self.save_txt)
 
         return filename
@@ -711,8 +714,9 @@ class ConnChamber(SocialNetwork):
     """
 
     def set_social_interactions(self, *args, p_opp=0, update_conn=True, **kwargs):
-        from opdynamics.dynamics.socialinteractions import \
-            get_connection_probabilities_opp
+        from opdynamics.dynamics.socialinteractions import (
+            get_connection_probabilities_opp,
+        )
 
         conn_method = kwargs.pop("conn_method", get_connection_probabilities_opp)
         super().set_social_interactions(
@@ -800,7 +804,7 @@ class OpenChamber(NoisySocialNetwork):
                 self.diffusion,
                 self.wiener_process,
                 t_span=t_span,
-                y0=self.opinions,
+                y0=self._opinions,
                 method=method,
                 dt=dt,
                 args=args,
