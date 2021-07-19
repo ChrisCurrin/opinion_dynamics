@@ -1,6 +1,6 @@
 # Depolarisation of opinions
 
-[Link to paper]()
+[Link to paper](https://arxiv.org/abs/2101.04079)
 
 Authors: 
 - [Christopher Currin](https://chriscurrin.com)
