@@ -10,9 +10,9 @@ dependencies:
   - jupyter
   - seaborn==0.11
   - black
+  - flake8
   - tqdm
   - pytables==3.6.1
   - vaex-hdf5==0.6.0
   - vaex==3.0.0
 prefix: C:\Users\Chris\Anaconda3\envs\opinion_dynamics
-
