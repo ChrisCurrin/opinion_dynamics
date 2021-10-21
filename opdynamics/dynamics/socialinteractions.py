@@ -57,11 +57,12 @@ def get_connection_probabilities(sn: SocialNetwork, beta: float = 0.0, **conn_kw
     """
     # create N * N matrix of opinions
     p_conn = np.zeros(shape=(sn.N, sn.N))
+    betas = beta if np.iterable(beta) else np.full(sn.N, beta)
     for i in range(sn.N):
         # compute magnitude (between agent i and every other agent)*N agents
         mag = np.abs(sn._opinions[i] - sn._opinions)
         mag[i] = np.nan
-        p_conn[i] = np.power(mag, -beta)
+        p_conn[i] = np.power(mag, -betas[i])
         p_conn[i, i] = 0
         p_conn[i] /= np.sum(p_conn[i])
     return p_conn
@@ -284,12 +285,13 @@ class SocialInteraction(object):
                 logger.debug(f"saving full adj_mat to '{adj_mat_file_compressed}'")
                 # save compressed version
                 np.savez_compressed(adj_mat_file_compressed, time_mat=self._time_mat)
-                new_time_mat = np.load(adj_mat_file_compressed, mmap_mode="r+")["time_mat"]
                 fname = self._time_mat.filename
                 # delete previous mmap file to explicitly clear storage
                 self.clear()
                 # link to stored version
-                self._time_mat = new_time_mat
+                self._time_mat = np.load(adj_mat_file_compressed, mmap_mode="r+")[
+                    "time_mat"
+                ]
                 logger.debug(f"...saved full adj_mat and deleted memory map")
 
     def clear(self):
