@@ -122,9 +122,6 @@ class negpowerlaw(object):
         """
         Probability density function of `a`
 
-        ..code-block:: python
-
-
         :param a: value where to calculate the probability density function
         :param gamma: the *negative* power of the exponent.
             that is a negative value for gamma is the same as `scipy.stats.powerlaw.rvs(gamma)`.

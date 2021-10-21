@@ -108,7 +108,21 @@ class SocialNetwork(object):
         :param max_val: highest value (inclusive)
         """
         self._opinions = self.rn.uniform(min_val, max_val, size=self.N)
-        self.result = None
+        if self.result is None:
+            # create a dummy result in case `opinions` property is requested, which requires `result`
+            self.result = SolverResult(
+                np.array([0]),
+                np.expand_dims(self._opinions, 1),
+                None,
+                None,
+                None,
+                0,
+                0,
+                0,
+                1,
+                "init",
+                True,
+            )
 
     def set_activities(
         self, distribution=negpowerlaw, *dist_args, dim: int = 1, **kwargs
@@ -390,15 +404,25 @@ class SocialNetwork(object):
 
     # noinspection NonAsciiCharacters
     def get_distribution_modality(self, t: Union[int, float] = -1) -> float:
-        """Calculate Test of unimodality for normal distribution(s)
+        """Calculate distance of peaks
 
         .. math::
-                \\frac{v - \\mu}{\\sigma} \\leq \\sqrt{\\frac{3}{5}}
+               \\Lambda_x = \\argmax_{x>0} \\frac{f}{w} - \\argmax_{x<0} \\frac{f}{w}
 
-        where :math:`v` is the median, :math:`\\mu`` is the mean, and :math:`\\sigma` is the standard deviation.
+        Where :math:`f` is the frequency of opinions in a bin width of :math:`w.
 
-        see https://en.wikipedia.org/wiki/Unimodality
-        see https://doi.org/10.1007/s10182-008-0057-2
+        :math:`w` was determined from the minimum of the Sturges and Freedman-Diaconis bin estimation methods:
+
+        .. math::
+                w = \\min ( \\frac{\\max x_R - \\min x_R}{\\log_{2}N + 1}, 2 \\frac{\\rm{IQR}}{N^\\frac{1}{3}} )
+
+        where :math:`x_R` is an opinion subset (:math:`x>0` or :math:`x<0`) and :math:`\\rm{IQR}` is the :math:`x_R` interquartile range.
+
+        The peak distance :math:`\Lambda_x` can be intuitively understood as the degree of polarization of echo chambers.
+
+        For :math:`\Lambda_x` close to 0, the distribution of opinions is normal and depolarized, and for larger :math:`\Lambda_x`,
+         the opinions of agents are polarized.
+
 
         """
         t_idx = get_time_point_idx(self.result.t, t)
@@ -587,7 +611,10 @@ class SocialNetwork(object):
         logger.debug(f"{self}\n-> {filename}")
         self.save_txt = f"\n{self}\n\t{hash_txt}"
         if write_mapping:
-            map_file_name = os.path.join(os.path.split(filename)[0], "map.txt")
+            if isinstance(write_mapping, str):
+                map_file_name = write_mapping
+            else:
+                map_file_name = os.path.join(os.path.split(filename)[0], "map.txt")
             logger.debug(f"write to '{map_file_name}'")
             with open(map_file_name, "a+") as f_map:
                 f_map.write(self.save_txt)

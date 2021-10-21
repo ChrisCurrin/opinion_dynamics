@@ -24,10 +24,15 @@ def dy_dt(t: float, y: np.ndarray, *args) -> np.ndarray:
     interacting with each other (A), multiplied by social interaction strength (K).
 
     """
-    K, alpha, A, dt = args
+    K, alpha, adj, dt = args
     # get activity matrix for this time point
-    At = A[int(t / dt)]
+    At = adj[int(t / dt)]
     return -y.T + K * np.sum(At * np.tanh(alpha * y.T), axis=1)
+
+
+# create local *named* functions as they need to be pickled but also have attached variables
+def partial_diffusion(rn, D, N, t, y, *diff_args):
+    return rn.normal(loc=0, scale=D, size=N)
 
 
 def sample_dy_dt(t: float, y: np.ndarray, *all_args) -> np.ndarray:
