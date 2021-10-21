@@ -1,4 +1,6 @@
 {
-    "python.pythonPath": "C:\\Users\\ccurrin\\Anaconda3\\envs\\opinion_dynamics\\python.exe",
-    "python.formatting.provider": "black"
+  "python.pythonPath": "C:\\Users\\ccurrin\\Anaconda3\\envs\\opinion_dynamics\\python.exe",
+  "python.formatting.provider": "black",
+  "python.linting.flake8Enabled": true,
+  "python.linting.enabled": true
 }
