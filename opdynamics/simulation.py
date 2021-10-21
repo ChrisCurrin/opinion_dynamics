@@ -3,23 +3,19 @@ import copy
 import itertools
 import logging
 import os
+from functools import partial
+from typing import Callable, Dict, Iterable, List, Tuple, Type, TypeVar, Union
 
 import numpy as np
 import pandas as pd
-from functools import partial
-
 import vaex
 from tqdm import tqdm, trange
-from typing import Callable, Dict, Iterable, List, Tuple, Type, TypeVar, Union
 
+from opdynamics.socialnetworks import NoisySocialNetwork, OpenChamber, SocialNetwork
 from opdynamics.utils.cache import save_results
-from opdynamics.socialnetworks import SocialNetwork, OpenChamber
-from opdynamics.socialnetworks import NoisySocialNetwork
 from opdynamics.utils.distributions import negpowerlaw
-from opdynamics.visualise import (
-    show_periodic_noise,
-    show_simulation_results,
-)
+from opdynamics.visualise import show_periodic_noise, show_simulation_results
+from opdynamics.visualise.vissimulation import show_simulation_range
 
 logging.basicConfig(level=logging.INFO)
 
@@ -343,6 +339,7 @@ def run_product(
     cache: Union[bool, str] = False,
     cache_sim: Union[bool, str] = True,
     parallel: Union[bool, int] = False,
+    plot_opinion: bool = False,
     **kwargs,
 ) -> Union[pd.DataFrame, List[SN]]:
     """Run a combination of variables, varying noise for each combination.
@@ -395,7 +392,8 @@ def run_product(
             kwargs.get("cache_sim_file_name", "noise_source").replace(".h5", "")
             + ".h5",
         )
-
+    logger.debug(f"cache_sim={cache_sim} file_name={file_name}")
+    map_file_name = file_name.replace(".h5", ".txt")
     vaex_file_name = file_name.replace(".h5", ".hdf5")
 
     # # This allows a mixed-type to be passed where `range` isn't necessary.
@@ -441,19 +439,23 @@ def run_product(
                 ranges_have_run.update(chunk.groupby(col_names).count().index)
         ranges_to_run = {x for x in ranges_to_run if x not in ranges_have_run}
 
+    ranges_to_run = sorted(ranges_to_run)
+
     # list to store SocialNetwork objects (only if not cache_sim)
-    nec_list = []
+    sn_list = []
 
     # create helper functions for running synchronously or asynchronously
     def run_sync():
         """Normal ``for`` loop over range."""
         for values in tqdm(ranges_to_run, desc="full range"):
-            nsn, params = _comp_unit(cls, keys, values, cache=cache, **kwargs)
+            nsn, params = _comp_unit(
+                cls, keys, values, cache=cache, write_mapping=map_file_name, **kwargs
+            )
             if cache_sim:
-                save_results(file_name, nsn, **params)
+                save_results(file_name, nsn, cls=cls, **params)
             else:
                 # if not being run for caching, store results in a list
-                nec_list.append(nsn)
+                sn_list.append(nsn)
 
     def run_async(n_processes=None):
         """Create a pool of size ``n_processes`` for running multiple networks simultaneously.
@@ -474,7 +476,7 @@ def run_product(
 
         # change mapping to False as it may cause multi-access errors
         kwargs.pop("write_mapping", False)
-        write_file_name = os.path.join(cache_dir, "map.txt")
+        write_file_name = os.path.join(cache_dir, map_file_name)
 
         for nsn, params in p.imap(
             partial(_comp_unit, cls, keys, cache=cache, write_mapping=False, **kwargs),
@@ -487,16 +489,22 @@ def run_product(
                 save_results(file_name, nsn, **params)
             else:
                 # if not being run for caching, store results in a list
-                nec_list.append(nsn)
+                sn_list.append(nsn)
         p.close()
         p.join()
 
-    logger.info(f"running {len(ranges_to_run)} simulations")
+    logger.info(
+        f"running {len(ranges_to_run)} simulations" + " in parallel" if parallel else ""
+    )
     if parallel:
+        # note: do not use isinstance(parallel, int) as bool is a subtype
         run_async(n_processes=parallel if type(parallel) is int else None)
     else:
         run_sync()
     logger.info(f"done running")
+
+    if plot_opinion and len(sn_list) > 0:
+        show_simulation_range(sn_list)
 
     # load all results into a vaex DataFrame
     #   the existing file is converted to a vaex-compatible format (different hdf5 implementations)
@@ -544,7 +552,7 @@ def run_product(
             if col in df.columns:
                 df = df[df[col].isin(value["range"] if "range" in value else value)]
         return df
-    return nec_list
+    return sn_list
 
 
 def example():
