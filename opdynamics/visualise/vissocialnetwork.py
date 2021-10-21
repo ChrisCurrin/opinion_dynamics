@@ -167,7 +167,7 @@ class VisSocialNetwork(object):
         ax.set(
             title="Activity distribution",
             ylabel="count",
-            xlabel="activity",
+            xlabel="activity probability",
             xlim=(
                 np.min(np.append(self.sn.activities, 0)),
                 np.max(np.append(self.sn.activities, 1)),

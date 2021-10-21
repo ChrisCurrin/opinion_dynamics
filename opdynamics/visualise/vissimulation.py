@@ -14,7 +14,7 @@ from opdynamics.socialnetworks import SocialNetwork, NoisySocialNetwork
 logger = logging.getLogger("vis simulation")
 
 
-def show_simulation_results(_ec: SocialNetwork, plot_opinion: str):
+def show_simulation_results(_ec: SocialNetwork, plot_opinion: str = None):
     logging.getLogger("matplotlib").setLevel(logging.WARNING)
     from opdynamics.visualise.vissocialnetwork import VisSocialNetwork
     import seaborn as sns
@@ -41,27 +41,27 @@ def show_simulation_results(_ec: SocialNetwork, plot_opinion: str):
         fig.subplots_adjust(hspace=0.1)
 
 
-def show_simulation_range(var_range, nec_arr, fig_ax=None):
+def show_simulation_range(sn_arr, fig_ax=None):
     from opdynamics.visualise.vissocialnetwork import VisSocialNetwork
     import matplotlib.pyplot as plt
     import seaborn as sns
 
-    cs = sns.color_palette("husl", n_colors=len(var_range))
+    cs = sns.color_palette("husl", n_colors=len(sn_arr))
     if fig_ax is not None and type(fig_ax) is tuple:
         fig, ax = fig_ax
     else:
         fig, ax = plt.subplots(
-            nrows=len(var_range), ncols=1, sharex="all", sharey="col", figsize=(8, 11)
+            nrows=len(sn_arr), ncols=1, sharex="all", sharey="col", figsize=(8, 11)
         )
     logger.debug(f"ax.shape = {ax.shape}")
-    for i, (nsn, _ax) in enumerate(zip(nec_arr, ax)):
+    for i, (nsn, _ax) in enumerate(zip(sn_arr, ax)):
         vis = VisSocialNetwork(nsn)
         # 0 is first column, 1 is 2nd column
         kwargs = {"ax": _ax, "color": cs[i]}
         if i > 0:
             kwargs["title"] = False
         vis.show_opinions_distribution(**kwargs)
-        if i != len(nec_arr) - 1:
+        if i != len(sn_arr) - 1:
             _ax.set_xlabel("")
         _ax.set_ylabel(
             vis.sn.name,
