@@ -51,7 +51,6 @@ def solve_ode(
 def solve_sde(
     dy_dt: Callable,
     diffusion: Callable,
-    wiener_process: Callable,
     t_span: tuple,
     y0: np.ndarray,
     method: str,
@@ -63,9 +62,7 @@ def solve_sde(
     """Solve a stochastic ordinary differential equation using a method in `opdynamics.integrate.methods`."""
     if method in SDE_INTEGRATORS:
         logger.info(f"solving SDE using {method}")
-        solver = SDE_INTEGRATORS[method](
-            dy_dt, diffusion, wiener_process, y0, args, diff_args
-        )
+        solver = SDE_INTEGRATORS[method](dy_dt, diffusion, y0, args, diff_args)
         return _run_solver(solver, t_span, dt, **kwargs)
     else:
         raise NotImplementedError(

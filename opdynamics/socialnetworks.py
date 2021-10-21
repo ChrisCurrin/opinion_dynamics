@@ -5,7 +5,7 @@
 import copy
 import logging
 import os
-from functools import lru_cache
+from functools import lru_cache, partial
 from typing import Callable, Tuple, Union
 
 import numpy as np
@@ -737,7 +737,7 @@ class NoisySocialNetwork(SocialNetwork):
         self.D: float = 0
         self.super_dy_dt: Callable = None
 
-    def set_dynamics(self, D=0.01, *args, **kwargs):
+    def set_dynamics(self, *args, D=0.01, **kwargs):
         """Network with noise.
 
         :param D: Strength of noise.
@@ -759,10 +759,9 @@ class OpenChamber(NoisySocialNetwork):
     def __init__(self, *args, name="open SocialNetwork", **kwargs):
         super().__init__(*args, name=name, **kwargs)
         self.diffusion: diffeq = None
-        self.wiener_process: Callable = None
         self.diff_args = ()
 
-    def set_dynamics(self, D=0.01, *args, **kwargs):
+    def set_dynamics(self, *args, D=0.01, **kwargs):
         """Network with *external* noise.
 
         External noise:
@@ -776,13 +775,13 @@ class OpenChamber(NoisySocialNetwork):
         :param D: Strength of noise.
 
         """
+        from opdynamics.dynamics.opinions import partial_diffusion
+
         # assign drift as before, aka dy_dt
         super().set_dynamics(D=D)
 
-        self.diffusion = lambda t, y, *diff_args: D
-        self.wiener_process = lambda dt: self.rn.normal(
-            loc=0, scale=np.sqrt(dt), size=self.N
-        )
+        # assign diffusion term
+        self.diffusion = partial(partial_diffusion, self.rn, D, self.N)
 
     def run_network(
         self,
@@ -802,7 +801,6 @@ class OpenChamber(NoisySocialNetwork):
             self.result: SolverResult = solve_sde(
                 self.dy_dt,
                 self.diffusion,
-                self.wiener_process,
                 t_span=t_span,
                 y0=self._opinions,
                 method=method,

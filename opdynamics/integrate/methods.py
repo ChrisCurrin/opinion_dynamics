@@ -64,14 +64,12 @@ class SDEIntegrator(metaclass=ABCMeta):
         self,
         dy_dt: diffeq,
         diffusion: diffeq,
-        wiener_process: Callable,
         y0: np.ndarray,
         args: tuple,
         diff_args: tuple,
     ):
         self.dy_dt = dy_dt
         self.diffusion = diffusion
-        self.wiener_process = wiener_process
         self.y = y0.copy()
         self.args = args
         self.diff_args = diff_args
@@ -86,4 +84,4 @@ class EulerMaruyama(SDEIntegrator):
     def step(self, t: float, dt: float):
         drift = self.dy_dt(t, self.y, *self.args)
         diff = self.diffusion(t, self.y, *self.diff_args)
-        self.y = self.y + drift * dt + diff * self.wiener_process(dt)
+        self.y = self.y + drift * dt + diff * np.sqrt(dt)
