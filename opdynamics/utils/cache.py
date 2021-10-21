@@ -2,12 +2,16 @@ import os
 
 from typing import Tuple, Union
 
+import logging
 import json
 import numpy as np
 import pandas as pd
 
 from opdynamics.socialnetworks import SocialNetwork
 from opdynamics.utils.constants import DEFAULT_COMPRESSION_LEVEL
+
+
+logger = logging.getLogger("cache")
 
 _cache_dir = None
 
@@ -122,14 +126,49 @@ def save_results(file_name: str, sn: SocialNetwork, **kwargs) -> None:
     """
     df_builder = []
 
-    kwargs.pop("cls", None)
-    kwargs.pop("method", None)
+    cls = kwargs.pop("cls", None)
+    kwargs["cls"] = cls.__name__ if cls is not None else ""
+
+    method = kwargs.pop("method", None)
+    kwargs["method"] = method if method is not None else ""
+
+    activity_distribution = kwargs.pop("activity_distribution", None)
+    kwargs["activity_distribution"] = (
+        activity_distribution.__name__ if activity_distribution is not None else ""
+    )
+
+    kwargs.pop("plot_opinion", None)
+
+    kwargs["name"] = sn.name
 
     # put data into dictionaries with keys for column names
     for y_idx, opinion in enumerate(sn.result.y[:, -1]):
         df_builder.append({"i": y_idx, "opinion": opinion, **kwargs})
+
     with pd.HDFStore(file_name) as store:
-        store.append("df", pd.DataFrame(df_builder))
+        try:
+            store.append(
+                "df",
+                pd.DataFrame(df_builder),
+                format="table",
+                data_columns=True,
+                index=False,
+                min_itemsize={
+                    "name": 50,
+                    "cls": 30,
+                    "method": 30,
+                    "activity_distribution": 30,
+                },
+            )
+        except ValueError as err:
+            logger.error(f"Could not save results to {file_name}")
+            logger.debug(f"kwargs = {kwargs}")
+            current_columns = store["df"].columns
+            new_columns = pd.DataFrame(df_builder).columns
+            logger.debug(
+                f"new (first line) vs old(second line)\n'{new_columns}'\n'{current_columns}'"
+            )
+            raise err
 
 
 def get_hash_filename(hashable_obj, filetype="h5", extra="", cache_kwargs=None) -> str:
