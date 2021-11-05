@@ -293,7 +293,6 @@ def _comp_unit(
     # create copy of kwargs
     updated_kwargs = dict(kwargs)
 
-    base_name = updated_kwargs.pop("name", "")
     noise_start = updated_kwargs.pop("noise_start", 0)
     if noise_start > 0:
         T = updated_kwargs.pop("T", 1.0)
@@ -305,10 +304,11 @@ def _comp_unit(
     # re-assign
     for key, value in zip(keys, values):
         updated_kwargs[key] = value
-        names.append(f"{key}={value}")
+        if key != "seed":
+            names.append(f"{key}={value}")
 
-    # create a name based on changed key-values
-    name = base_name + ", ".join(names)
+    # create a name based on changed key-values if not already set
+    updated_kwargs.setdefault("name", ", ".join(names))
 
     # run according to noise_start
     if noise_start > 0:
@@ -317,7 +317,6 @@ def _comp_unit(
             noise_length,
             recovery,
             cls=cls,
-            name=name,
             cache=cache,
             write_mapping=write_mapping,
             **updated_kwargs,
@@ -325,7 +324,6 @@ def _comp_unit(
     else:
         nsn = run_params(
             cls,
-            name=name,
             cache=cache,
             write_mapping=write_mapping,
             **updated_kwargs,
@@ -338,6 +336,7 @@ def run_product(
     cls: Type[SN] = SocialNetwork,
     cache: Union[bool, str] = False,
     cache_sim: Union[bool, str] = True,
+    cache_mem: bool = False,
     parallel: Union[bool, int] = False,
     plot_opinion: bool = False,
     **kwargs,
@@ -370,6 +369,7 @@ def run_product(
     :param cache_sim: Whether to cache the ``pd.DataFrame`` used to store the simulation results (default ``True``).
         By default, saves to "noise_source.h5". Can be specified using ``cache_sim_file_name`` or ``cache_sim``
         itself.
+    :param cache_mem: Whether to keep the ``SocialNetwork`` objects in memory (default ``False``).
     :param parallel: Run iterations serially (``False``) or in parallel (``True``). Defaults to ``False``.
         An integer can be passed to explicitly set the pool size, else it is equalt to th number of CPU cores.
         Parallel run uses ``multiprocessing`` library and is not fully tested.
@@ -381,6 +381,9 @@ def run_product(
     from opdynamics.utils.cache import get_cache_dir
 
     write_mapping = kwargs.pop("write_mapping", False)  # determined by parallel
+
+    if not cache_sim and not cache and not cache_mem:
+        raise ValueError("Must specify at least one cache method.")
 
     cache_dir = get_cache_dir()
 
@@ -396,11 +399,16 @@ def run_product(
     map_file_name = file_name.replace(".h5", ".txt")
     vaex_file_name = file_name.replace(".h5", ".hdf5")
 
-    # # This allows a mixed-type to be passed where `range` isn't necessary.
-    # verbose_other_vars = {
-    #     k: {"range": v, "title": k} for k, v in range_parameters.items() if type(v) is not dict
-    # }
-    # range_parameters.update(verbose_other_vars)
+    # add seed to kwargs if not present
+    range_parameters.setdefault("seed", [1337])
+
+    # This allows a mixed-type to be passed where `range` isn't necessary.
+    verbose_other_vars = {
+        k: {"range": v, "title": k}
+        for k, v in range_parameters.items()
+        if type(v) is not dict
+    }
+    range_parameters.update(verbose_other_vars)
 
     # allow variable range to be None to use stored values
     if os.path.exists(vaex_file_name):
@@ -447,13 +455,18 @@ def run_product(
     # create helper functions for running synchronously or asynchronously
     def run_sync():
         """Normal ``for`` loop over range."""
-        for values in tqdm(ranges_to_run, desc="full range"):
+        pbar = tqdm(ranges_to_run)
+        for values in pbar:
+            pbar.set_description(
+                ",".join(["{0}={1}".format(k, v) for k, v in zip(keys, values)])
+            )
+
             nsn, params = _comp_unit(
                 cls, keys, values, cache=cache, write_mapping=map_file_name, **kwargs
             )
             if cache_sim:
                 save_results(file_name, nsn, cls=cls, **params)
-            else:
+            elif cache_mem:
                 # if not being run for caching, store results in a list
                 sn_list.append(nsn)
 
@@ -478,6 +491,8 @@ def run_product(
         kwargs.pop("write_mapping", False)
         write_file_name = os.path.join(cache_dir, map_file_name)
 
+        pbar = tqdm(total=len(ranges_to_run), desc="parallel")
+
         for nsn, params in p.imap(
             partial(_comp_unit, cls, keys, cache=cache, write_mapping=False, **kwargs),
             ranges_to_run,
@@ -487,14 +502,19 @@ def run_product(
                     write_file.write(nsn.save_txt)
             if cache_sim:
                 save_results(file_name, nsn, **params)
-            else:
+            elif cache_mem:
                 # if not being run for caching, store results in a list
                 sn_list.append(nsn)
+            pbar.update(1)
+
         p.close()
         p.join()
 
     logger.info(
-        f"running {len(ranges_to_run)} simulations" + " in parallel" if parallel else ""
+        f"running {len(ranges_to_run)} simulations (out of {number_of_combinations} supplied)"
+        + " in parallel"
+        if parallel
+        else ""
     )
     if parallel:
         # note: do not use isinstance(parallel, int) as bool is a subtype
@@ -515,31 +535,59 @@ def run_product(
         if len(ranges_to_run) or not os.path.exists(vaex_file_name):
             logger.info(f"changes detected to {file_name}")
             # noinspection PyTypeChecker
-            chunks: Iterable = pd.read_hdf(file_name, iterator=True, chunksize=100000)
-            convert_dir = os.path.join(".temp", "convert")
-            try:
-                os.makedirs(convert_dir)
-            except IOError as err:
-                logger.error(
-                    "Needed to create a temporary directory for conversion but failed."
-                )
-                raise err
+            convert_dir = os.path.join(get_cache_dir(), ".temp", "convert")
+            if not os.path.exists(convert_dir):
+                try:
+                    os.makedirs(convert_dir)
+                except IOError as err:
+                    logger.error(
+                        "Needed to create a temporary directory for conversion but failed."
+                    )
+                    raise err
+
             logger.info("converting...")
+            chunks: Iterable = pd.read_hdf(file_name, iterator=True, chunksize=100000)
+            file_names = []
+            vaex_chunk_name = os.path.split(vaex_file_name)[-1].replace(".hdf5", "")
             for i, chunk in enumerate(chunks):
                 vaex_df = vaex.from_pandas(chunk, copy_index=False)
-                vaex_df.export(f"batch_{i}.hdf5")
-            df = vaex.open("batch*.hdf5")
+                fname_chunk = os.path.join(
+                    convert_dir, f"{vaex_chunk_name}_batch_{i}.hdf5"
+                )
+                vaex_df.export(fname_chunk)
+                vaex_df.close_files()
+                file_names.append(fname_chunk)
+
+            num_chunks = i + 1
             logger.info(f"saving new version to {vaex_file_name}...")
-            df.export(vaex_file_name)
+
+            df = vaex.open_many(file_names)
+
+            # convert to single file
+            # see https://github.com/vaexio/vaex/issues/486 for more info
+            df.export(vaex_file_name, progress=True)
+
+            for _df in df.dfs:
+                _df.close_files()
+
             logger.info("removing conversion directory")
             try:
                 os.removedirs(convert_dir)
             except IOError:
-                logger.error(
+                logger.warning(
                     f"Tried to delete temporary conversion directory '{convert_dir}' but failed. "
-                    f"Please delete manually."
                 )
-                pass
+                for fname in file_names:
+                    try:
+                        os.remove(fname)
+                    except IOError as err:
+                        logging.error(f"failed to remove {fname}: {err}")
+                        break
+                else:
+                    logging.warning(
+                        f"removed all files in {convert_dir} without removing directory itself"
+                    )
+
             logger.info("converted")
 
         logger.info("loading full DataFrame from storage")
@@ -557,8 +605,9 @@ def run_product(
 
 def example():
     import matplotlib.pyplot as plt
+    from opdynamics.socialnetworks import SampleNetwork
 
-    _kwargs = dict(
+    kwargs = dict(
         N=1000,  # number of agents
         m=10,  # number of other agents to interact with
         alpha=2,  # controversialness of issue (sigmoidal shape)
@@ -569,32 +618,12 @@ def example():
         activity_distribution=negpowerlaw,
         r=0.5,
         dt=0.01,
-        t_dur=0.5,
-    )
-
-    # run_params(
-    #     SocialNetwork, **_kwargs, plot_opinion="summary",
-    # )
-    kwargs = dict(
-        N=1000,
-        m=10,
-        T=10,
-        epsilon=1e-2,
-        gamma=2.1,
-        dt=0.01,
-        K=2,
-        beta=1,
-        alpha=3,
-        r=0.65,
-        k_steps=10,
+        T=0.5,
+        cls=SampleNetwork,
     )
 
     _other_vars = {
         "D": {"range": np.round(np.arange(0.000, 0.01, 0.002), 3)},
-        "k_steps": {
-            "range": [1, 10, 100],
-            "title": "k",
-        },
     }
     run_product(_other_vars, **kwargs)
     plt.show()
