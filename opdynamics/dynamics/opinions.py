@@ -83,7 +83,7 @@ def sample_dy_dt_activity(t: float, y: np.ndarray, *all_args) -> np.ndarray:
 ##############################
 
 
-def _basic_clt_sample(sn, y: np.ndarray, n: int, num_samples: int):
+def _full_clt_sample_means(sn, y: np.ndarray, n: int, num_samples: int):
     """
     method to re-assign self._sample_means
     :math:`\\sqrt {n}\\left(\\bar{X}_{n}-\\mu \\right) \\rightarrow \\mathcal{N}\\left(0,\\sigma ^{2}\\right)`
@@ -156,10 +156,38 @@ def _subsample_clt_sample(sn, y: np.ndarray, n: int, num_samples: int):
     ) - sample_means(y, n, num_samples=num_samples, rng=sn.rn)
 
 
+def _sigmoid_clt_subsample(sn, y: np.ndarray, n: int, num_samples: int):
+    """
+
+    where :math:`X` is a random sample and :math:`\\bar{X}_{n}` is the sample mean for :math:`n` random samples.
+
+    :param sn: SocialNetwork object to store sample means (and to use it's random number generator)
+    :type sn: opdynamics.socialnetworks.SocialNetwork
+    :param y: opinions
+    :param n: sample size
+    :param num_samples: number of samples (N or 1)
+    """
+    sn._sample_means = np.tanh(sample_means(y, 1, num_samples=num_samples, rng=sn.rn))
+
+
+def _simple_clt_sample_means(sn, y: np.ndarray, n: int, num_samples: int):
+    """
+
+    :param sn: SocialNetwork object to store sample means (and to use it's random number generator)
+    :type sn: opdynamics.socialnetworks.SocialNetwork
+    :param y: opinions
+    :param n: sample size
+    :param num_samples: number of samples (N or 1)
+    """
+    sn._sample_means = sample_means(y, n, num_samples=num_samples, rng=sn.rn)
+
+
 clt_methods = {
-    "basic": _basic_clt_sample,
+    "full": _full_clt_sample_means,
     "outer_sigmoid": _outer_sigmoid_clt_sample,
     "inner_sigmoid": _inner_sigmoid_clt_sample,
     "subsample": _subsample_clt_sample,
+    "sigmoid_subsample": _sigmoid_clt_subsample,
+    "simple": _simple_clt_sample_means,
 }
-clt_methods.setdefault(None, _basic_clt_sample)
+clt_methods.setdefault(None, _full_clt_sample_means)

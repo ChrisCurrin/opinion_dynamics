@@ -14,7 +14,7 @@ from numpy.random import default_rng
 from pandas.errors import PerformanceWarning
 from scipy.stats import powerlaw
 
-from opdynamics.dynamics.opinions import dy_dt, sample_dy_dt
+from opdynamics.dynamics.opinions import dy_dt, sample_dy_dt, sample_dy_dt_activity
 from opdynamics.integrate.types import SolverResult, diffeq
 from opdynamics.metrics.opinions import (
     distribution_modality,
@@ -177,7 +177,7 @@ class SocialNetwork(object):
         :param r: Probability of a mutual interaction [0,1].
         :param store_all: Store all the interaction matrice (True) or only the accumulative interactions and last interaction (False).
 
-        :keyword update_conn: Whether to update connection probabilities at every dt (default False).
+        :keyword update_conn: Whether to update connection probabilities at every dt (default True).
 
         """
         from opdynamics.dynamics.socialinteractions import SocialInteraction
@@ -219,7 +219,7 @@ class SocialNetwork(object):
     @property
     def has_results(self):
         """Check if this object has a results property with simulation data."""
-        return self.result is not None
+        return len(self.result.t) > 1
 
     @property
     def current_time(self):
@@ -555,6 +555,7 @@ class SocialNetwork(object):
         complevel=DEFAULT_COMPRESSION_LEVEL,
         write_mapping=True,
         dt=None,
+        raise_error=True,
     ) -> str:
         """Save the SocialNetwork to the cache using the HDF file format.
 
@@ -571,6 +572,7 @@ class SocialNetwork(object):
         import warnings
 
         from tables import NaturalNameWarning
+        from tables.exceptions import HDF5ExtError
 
         filename = self._get_filename()
         hash_txt = os.path.split(filename)[-1]
@@ -593,35 +595,46 @@ class SocialNetwork(object):
         df_adj_mat_last.name = f"adj_mat_last"
         meta = dict(complevel=complevel, complib="blosc:zstd")
         df_meta = pd.Series(meta, name="meta")
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", NaturalNameWarning)
-            warnings.simplefilter("ignore", PerformanceWarning)
-            for df in [
-                df_opinions,
-                df_act,
-                df_adj_mat_accum,
-                df_adj_mat_last,
-                df_meta,
-            ]:
-                df.to_hdf(filename, df.name, complevel=7, complib="blosc:zstd")
 
-        self.adj_mat.compress()
+        try:
 
-        logger.info("saved")
-        logger.debug(f"{self}\n-> {filename}")
-        self.save_txt = f"\n{self}\n\t{hash_txt}"
-        if write_mapping:
-            if isinstance(write_mapping, str):
-                map_file_name = write_mapping
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", NaturalNameWarning)
+                warnings.simplefilter("ignore", PerformanceWarning)
+                for df in [
+                    df_opinions,
+                    df_act,
+                    df_adj_mat_accum,
+                    df_adj_mat_last,
+                    df_meta,
+                ]:
+                    df.to_hdf(filename, df.name, complevel=7, complib="blosc:zstd")
+
+            self.adj_mat.compress()
+        except (HDF5ExtError, AttributeError) as err:
+            err_msg = f"Could not save {self} to {filename}. \n{err}"
+            if raise_error:
+                logger.error(err_msg)
+                print(err_msg)
+                raise err
             else:
-                map_file_name = os.path.join(os.path.split(filename)[0], "map.txt")
-            logger.debug(f"write to '{map_file_name}'")
-            with open(map_file_name, "a+") as f_map:
-                f_map.write(self.save_txt)
+                logger.warning(err_msg)
+        else:
+            logger.info("saved")
+            logger.debug(f"{self}\n-> {filename}")
+            self.save_txt = f"\n{self}\n\t{hash_txt}"
+            if write_mapping:
+                if isinstance(write_mapping, str):
+                    map_file_name = write_mapping
+                else:
+                    map_file_name = os.path.join(os.path.split(filename)[0], "map.txt")
+                logger.debug(f"write to '{map_file_name}'")
+                with open(map_file_name, "a+") as f_map:
+                    f_map.write(self.save_txt)
 
         return filename
 
-    def load(self, dt, T):
+    def load(self, dt, T, raise_error=False):
         """
         Try to get previous results from the cache and return successful or not.
         :param dt: Time step accuracy of simulation to load. Asking for a coarser dt than a simulation has been run
@@ -631,8 +644,10 @@ class SocialNetwork(object):
             That is, asking for T=0.5 for a simulation that has run for T=1.0 will not load because the adjacency
             matrix at T=0.5 cannot be determined. A workaround is do short simulations and change the name of
             SocialNetwork object between `run_network` calls.
+        :param raise_error: Raise an error if the file exists but not loaded properly, otherwise return False.
         :return: True if loaded, False otherwise.
         """
+        from tables.exceptions import HDF5ExtError
 
         filename = self._get_filename()
         logger.debug(f"trying to hit cache for {filename}\n{self}")
@@ -648,76 +663,83 @@ class SocialNetwork(object):
             }
             loaded_keys = copy.deepcopy(cached_results)
 
-            with pd.HDFStore(filename, mode="r") as hdf:
-                keys = hdf.keys()
-                # retrieve opinions for the time info first
-                df = hdf.get("opinions")
-                t_arr = df.index.values
-                y_arr = df.values
-                _dt = df.index.name
-                _t_end = t_arr[-1]
-                if (
-                    np.round(T - _t_end, T_scale) != 0.0
-                    or np.round(dt - _dt, dt_scale) != 0.0
-                ):
-                    return False
-                compressed = False
-                cached_results["opinions"] = SolverResult(
-                    t_arr,
-                    y_arr.T,
-                    None,
-                    None,
-                    None,
-                    0,
-                    0,
-                    0,
-                    1,
-                    "success",
-                    True,
-                )
-                loaded_keys["opinions"] = True
-                for key in keys:
-                    df: Union[pd.DataFrame, pd.Series, object] = hdf.get(key)
-                    if key.startswith("/"):
-                        key = key[1:]
-                    if "-" in key:
-                        # backwards compatible
-                        key, p = key.split("-")
-                    if "opinions" in key:
-                        continue
-                    elif "meta" in key:
-                        if df.loc["complevel"] > 0:
-                            compressed = True
-                    cached_results[key] = df.values
-                    loaded_keys[key] = True
+            try:
+                with pd.HDFStore(filename, mode="r") as hdf:
+                    keys = hdf.keys()
+                    # retrieve opinions for the time info first
+                    df = hdf.get("opinions")
+                    t_arr = df.index.values
+                    y_arr = df.values
+                    _dt = df.index.name
+                    _t_end = t_arr[-1]
+                    if (
+                        np.round(T - _t_end, T_scale) != 0.0
+                        or np.round(dt - _dt, dt_scale) != 0.0
+                    ):
+                        return False
+                    compressed = False
+                    cached_results["opinions"] = SolverResult(
+                        t_arr,
+                        y_arr.T,
+                        None,
+                        None,
+                        None,
+                        0,
+                        0,
+                        0,
+                        1,
+                        "success",
+                        True,
+                    )
+                    loaded_keys["opinions"] = True
+                    for key in keys:
+                        df: Union[pd.DataFrame, pd.Series, object] = hdf.get(key)
+                        if key.startswith("/"):
+                            key = key[1:]
+                        if "-" in key:
+                            # backwards compatible
+                            key, p = key.split("-")
+                        if "opinions" in key:
+                            continue
+                        elif "meta" in key:
+                            if df.loc["complevel"] > 0:
+                                compressed = True
+                        cached_results[key] = df.values
+                        loaded_keys[key] = True
 
-                if all(loaded_keys.values()):
-                    self.result = cached_results["opinions"]
-                    self.activities = cached_results["activities"]
-                    self.adj_mat._accumulator = cached_results["adj_mat_accum"]
-                    self.adj_mat._last_adj_mat = cached_results["adj_mat_last"]
-                    self._post_run()
+                    if all(loaded_keys.values()):
+                        self.result = cached_results["opinions"]
+                        self.activities = cached_results["activities"]
+                        self.adj_mat._accumulator = cached_results["adj_mat_accum"]
+                        self.adj_mat._last_adj_mat = cached_results["adj_mat_last"]
+                        self._post_run()
+                    else:
+                        # not everything loaded
+                        return False
+
+                if self.adj_mat._time_mat is not None:
+                    adj_mat_file_compressed = self.adj_mat._time_mat.filename.replace(
+                        ".dat", ".npz"
+                    )
+
+                    new_time_mat = np.load(adj_mat_file_compressed, mmap_mode="r+")[
+                        "time_mat"
+                    ]
+                    # delete previous mmap file to explicitly clear storage
+                    del self.adj_mat._time_mat
+                    #
+                    self.adj_mat._time_mat = new_time_mat
+
+                logger.debug(f"{self.name} loaded from {filename}")
+                if not compressed:
+                    self.save(only_last=self.result.y.shape[1] > 1, dt=_dt)
+                return True
+            except (HDF5ExtError, AttributeError) as err:
+                os.remove(filename)
+                if raise_error:
+                    raise err
                 else:
-                    # not everything loaded
-                    return False
-
-            if self.adj_mat._time_mat is not None:
-                adj_mat_file_compressed = self.adj_mat._time_mat.filename.replace(
-                    ".dat", ".npz"
-                )
-
-                new_time_mat = np.load(adj_mat_file_compressed, mmap_mode="r+")[
-                    "time_mat"
-                ]
-                # delete previous mmap file to explicitly clear storage
-                del self.adj_mat._time_mat
-                #
-                self.adj_mat._time_mat = new_time_mat
-
-            logger.debug(f"{self.name} loaded from {filename}")
-            if not compressed:
-                self.save(only_last=self.result.y.shape[1] > 1, dt=_dt)
-            return True
+                    logger.warning(f"{self} failed to load from {filename}\n{err}")
         return False
 
     def __repr__(self):
@@ -740,7 +762,7 @@ class ConnChamber(SocialNetwork):
     Just in case, the delayed internal noise figure is run by default with ``update_conn=True``.
     """
 
-    def set_social_interactions(self, *args, p_opp=0, update_conn=True, **kwargs):
+    def set_social_interactions(self, p_opp=0, update_conn=True, *args, **kwargs):
         from opdynamics.dynamics.socialinteractions import (
             get_connection_probabilities_opp,
         )
@@ -764,7 +786,7 @@ class NoisySocialNetwork(SocialNetwork):
         self.D: float = 0
         self.super_dy_dt: Callable = None
 
-    def set_dynamics(self, *args, D=0.01, **kwargs):
+    def set_dynamics(self, D=0.01, *args, **kwargs):
         """Network with noise.
 
         :param D: Strength of noise.
@@ -845,7 +867,7 @@ class OpenChamber(NoisySocialNetwork):
 
 
 class ContrastChamber(NoisySocialNetwork):
-    """Network with noise by contrasting the opinions of a select group of agents to every other agent."""
+    """Network with noise by contrasting the opinions of a select agent to every other agent."""
 
     # noinspection PyTypeChecker
     def __init__(self, *args, name="contrast SocialNetwork", **kwargs):
@@ -872,11 +894,10 @@ class ContrastChamber(NoisySocialNetwork):
         :param contrast: Whether to nudge using only agent k's opinion (False),
             or the difference between the current agent and agent k (True).
         """
-        # assign drift as before, aka dy_dt
         super().set_dynamics(D=D)
         super_dy_dt = self.dy_dt
 
-        self._idx = self.rn.uniform(0, self.N, self.N)
+        self._idx = np.round(self.rn.uniform(0, self.N - 1, size=self.N), 0).astype(int)
         precision, scale = precision_and_scale(k_steps)
 
         def choose_k(t, dt, _k_steps):
@@ -923,14 +944,18 @@ class SampleChamber(NoisySocialNetwork):
     def __init__(self, *args, name="sample chamber", **kwargs):
         super().__init__(*args, name=name, **kwargs)
         self._sample_size: int = 0
+        self._num_samples: int = None
         self._sample_means: float = 0.0
         self._sample_method: Union[str, Callable] = None
+        self._background: bool = True
 
     def set_dynamics(
         self,
         D: float = 0,
         sample_size: int = 20,
         sample_method: str = "basic",
+        num_samples: int = None,
+        background: bool = True,
         *args,
         **kwargs,
     ):
@@ -943,7 +968,18 @@ class SampleChamber(NoisySocialNetwork):
         # object to store sample_means value at distinct time points
         self._sample_means = 0
         self._sample_size = sample_size
-        self.dy_dt = sample_dy_dt
+        self._num_samples = num_samples if num_samples is not None else self.N
+
+        if not (self._num_samples == 1 or self._num_samples == self.N):
+            raise ValueError(
+                "num_samples must be either None (which becomes N) or 1 to be broadcast properly in the dynamics"
+            )
+
+        if background:
+            self.dy_dt = sample_dy_dt
+        else:
+            self.dy_dt = sample_dy_dt_activity
+
         if type(sample_method) is str:
             assert (
                 sample_method in clt_methods
@@ -957,11 +993,17 @@ class SampleChamber(NoisySocialNetwork):
 
     def _args(self, *args):
         return super()._args(
-            *args, self._sample_method[1], self, self._sample_size, self.N
+            *args, self._sample_method[1], self, self._sample_size, self._num_samples
         )
 
     def __repr__(self):
-        return f"{super().__repr__()} sample_method={self._sample_method[0]} n={self._sample_size}"
+        return (
+            f"{super().__repr__()}"
+            f" sample_method={self._sample_method[0]}"
+            f" n={self._sample_size}"
+            f" num_samples={self._num_samples}"
+            f" background={self._background}"
+        )
 
 
 def example():

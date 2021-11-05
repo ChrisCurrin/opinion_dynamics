@@ -209,7 +209,7 @@ def get_social_interaction_exp(
 
 
 @hashable
-class SocialInteraction(object):
+class SocialInteraction:
     """
     Compute the social interactions for the associated SocialNetwork at time of request by calling
     ``si_object[<index>]``.
@@ -225,12 +225,16 @@ class SocialInteraction(object):
     * ``p_mutual_interaction`` - 'r', the probability of a mutual interaction between agents i and j.
     * ``conn_method`` - the method used to calculate connection probabilities
     * ``update_conn`` - whether to update connection probabilities at every call (every `dt`).
-    * ``conn_kwargs`` - Keyword arguments for ``conn_method``. E.g. ``beta``.
+    * ``conn_kwargs`` - keyword arguments for ``conn_method``. E.g. ``beta``. 
+
 
     Methods:
     ------
     * ``accumulate(t_idx)`` - number of interactions up to ``t_idx``. If ``t_idx`` is provided, instance must have
         ``_time_mat``.
+    * ``compress(overwrite=True)`` - compress the memory-mapped matrix to save memory.
+    * ``clear(raise_error=False)`` - clear the cached matrix.
+    * ``store_interactions(dt, t_dur)`` - initialise memory-mapped matrix to store interactions.
 
     Properties:
     ---------
@@ -242,6 +246,7 @@ class SocialInteraction(object):
     * ``_time_mat`` - adjacency matrix at each time point. Used to store eagerly computed results.
     * ``_last_adj_mat`` - keep a reference to the newest adjacency matrix of social interactions. Retrieved via [-1]
     * ``_p_conn`` - keep a reference to the latest connection probabilities matrix.
+    * ``_update_conn`` - whether to update connection probabilities at every dt (default True).
 
     """
 
@@ -250,14 +255,16 @@ class SocialInteraction(object):
         sn: SocialNetwork,
         p_mutual_interaction: float,
         conn_method=get_connection_probabilities,
-        update_conn=False,
+        update_conn=True,
         **conn_kwargs,
     ):
         self.sn = sn
         self.p_mutual_interaction = p_mutual_interaction
+
         self.conn_method = conn_method
         # get (keyword) arguments for the connection probability method being used
         required_conn_kwargs = set(inspect.getfullargspec(conn_method)[0])
+        # remove social network as this is passed explicitly when called
         if "sn" in required_conn_kwargs:
             required_conn_kwargs.remove("sn")
         # only save required (keyword) arguments
@@ -265,6 +272,8 @@ class SocialInteraction(object):
             k: v for k, v in conn_kwargs.items() if k in required_conn_kwargs
         }
         self.conn_kwargs = conn_kwargs
+
+        # private properties
         self._p_conn: np.ndarray = (
             self.conn_method(sn, **conn_kwargs) if not update_conn else None
         )
@@ -285,7 +294,6 @@ class SocialInteraction(object):
                 logger.debug(f"saving full adj_mat to '{adj_mat_file_compressed}'")
                 # save compressed version
                 np.savez_compressed(adj_mat_file_compressed, time_mat=self._time_mat)
-                fname = self._time_mat.filename
                 # delete previous mmap file to explicitly clear storage
                 self.clear()
                 # link to stored version
@@ -294,9 +302,17 @@ class SocialInteraction(object):
                 ]
                 logger.debug(f"...saved full adj_mat and deleted memory map")
 
-    def clear(self):
+    def clear(self, raise_error=False):
+        fname = self._time_mat.filename
         del self._time_mat
         self._time_mat = None
+        if os.path.exists(fname):
+            try:
+                os.remove(fname)
+            except OSError as err:
+                logger.warning(f"could not delete mmap file {fname}")
+                if raise_error:
+                    raise err
 
     def store_interactions(self, dt: float, t_dur: float):
         """Initialise the object to store social interactions (the adjacency matrix) for each time step until t_dur."""

@@ -107,6 +107,7 @@ def cache_ec(
 
     """
     if cache:
+        logger.info(f"Caching {sn.name}")
         if type(cache) is str and "all" in cache:
             cache = cache.replace("all", "")
             complevel = int(cache) if len(cache) else DEFAULT_COMPRESSION_LEVEL
@@ -154,9 +155,9 @@ def save_results(file_name: str, sn: SocialNetwork, **kwargs) -> None:
                 data_columns=True,
                 index=False,
                 min_itemsize={
-                    "name": 50,
+                    "name": 100,
                     "cls": 30,
-                    "method": 30,
+                    "sample_method": 30,
                     "activity_distribution": 30,
                 },
             )
