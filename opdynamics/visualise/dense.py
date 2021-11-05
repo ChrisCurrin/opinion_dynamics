@@ -215,7 +215,6 @@ def show_matrix(
                 "outer right",
                 size="5%",
                 ax=ax,
-                cmap=cmap,
                 **cbar_kws,
             )
         elif isinstance(cax, Axes):
@@ -381,6 +380,8 @@ def show_opinion_grid(
 
     data_kwargs = dict(zip(["col", "row", "hue"], columns))
 
+    opinion_col_name = "opinion" if "opinion" in df.columns else OPINION_SYMBOL
+
     g = sns.FacetGrid(df, **data_kwargs, **grid_kwargs)
 
     if "hue" not in data_kwargs:
@@ -389,9 +390,9 @@ def show_opinion_grid(
     kde_kwargs.setdefault("thresh", 0)
     if "D" in columns:
         cmap = kde_kwargs.pop("cmap", sns.cubehelix_palette(reverse=True, as_cmap=True))
-        g.map(kdeplot, "opinion", **kde_kwargs)
+        g.map(kdeplot, x=df[opinion_col_name], **kde_kwargs)
     else:
-        g.map(kdeplot, x="opinion", y="D", **kde_kwargs)
+        g.map(kdeplot, x=df[opinion_col_name], y=df["D"], **kde_kwargs)
     return g
 
 

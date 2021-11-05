@@ -537,7 +537,7 @@ class VisSocialNetwork(object):
         # logger.debug("*"*32+"\nsaving graph as png...")
         # plt.savefig("output/fig_net.png", dpi=300)
         # logger.debug("*"*32+"\nsaving graph as pdf...")
-        # plt.savefig("output/fig_net.pdf", dpi=300, rasterized=True)
+        # plt.savefig("output/fig_net.svg", dpi=300, rasterized=True)
         return plt.gcf()
 
     def show_summary(self, single_fig=True, fig_kwargs=None) -> Tuple[Figure, Axes]:
