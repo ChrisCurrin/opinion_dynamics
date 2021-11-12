@@ -148,18 +148,22 @@ def save_results(file_name: str, sn: SocialNetwork, **kwargs) -> None:
 
     with pd.HDFStore(file_name) as store:
         try:
+            df = pd.DataFrame(df_builder)
+            min_itemsize = {
+                "name": 100,
+                "cls": 30,
+                "activity_distribution": 30,
+            }
+            if "sample_method" in df.columns:
+                min_itemsize["sample_method"] = 30
+
             store.append(
                 "df",
-                pd.DataFrame(df_builder),
+                df,
                 format="table",
                 data_columns=True,
                 index=False,
-                min_itemsize={
-                    "name": 100,
-                    "cls": 30,
-                    "sample_method": 30,
-                    "activity_distribution": 30,
-                },
+                min_itemsize=min_itemsize,
             )
         except ValueError as err:
             logger.error(f"Could not save results to {file_name}")
