@@ -244,7 +244,7 @@ class SocialNetwork(object):
             t_end += t_start
             # noinspection PyTypeChecker
             self.prev_result: SolverResult = copy.deepcopy(self.result)
-            logger.info(
+            logger.debug(
                 f"continuing dynamics from {t_start:.6f} until {t_end:.6f}. Opinions can be reset using "
                 f"sn.init_opinions()."
             )
@@ -277,7 +277,7 @@ class SocialNetwork(object):
         self._opinions = self.result.y[:, -1]
         if len(self.result.t) > 2 and self.result.t[0] > 0:
             self.result = self.prev_result + self.result
-        logger.info(f"done running {self.name}")
+        logger.debug(f"done running {self.name}")
 
     def run_network(
         self, dt: float = 0.01, t_dur: float = 0.05, method: str = "Euler"
@@ -953,7 +953,7 @@ class SampleChamber(NoisySocialNetwork):
         self,
         D: float = 0,
         sample_size: int = 20,
-        sample_method: str = "basic",
+        sample_method: str = "full",
         num_samples: int = None,
         background: bool = True,
         *args,

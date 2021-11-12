@@ -35,9 +35,14 @@ def show_simulation_results(_ec: SocialNetwork, plot_opinion: str = None):
             1, 2, sharey="col", gridspec_kw={"width_ratios": [1, 0.1]}
         )
         _vis.show_opinions(True, ax=axs[0])
-        _vis.show_opinions_distribution(vertical=True, ax=axs[-1])
+        _vis.show_opinions_distribution(vertical=True, ax=axs[-1], fill=True)
+        sns.despine(ax=axs[-1], left=True, bottom=True)
+        axs[0].spines["right"].set_color("purple")
+        axs[0].spines["top"].set_visible(False)
         axs[-1].set_ylabel("")
         axs[-1].set_yticklabels([])
+        axs[-1].set_xticks([])
+        axs[-1].set_xlabel("")
         fig.subplots_adjust(hspace=0.1)
 
 

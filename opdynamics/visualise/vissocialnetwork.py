@@ -450,25 +450,26 @@ class VisSocialNetwork(object):
     def show_nearest_neighbour(
         self, bw_adjust=0.5, t=-1, title=True, **kwargs
     ) -> sns.JointGrid:
+        from opdynamics.visualise.dense import show_jointplot
+
         nn = self.sn.get_nearest_neighbours(t)
         idx = get_time_point_idx(self.sn.result.t, t)
         opinions = self.sn.result.y[:, idx]
         kwargs.setdefault("color", "Purple")
         marginal_kws = kwargs.pop("marginal_kws", dict())
-        marginal_kws.update(bw_adjust=bw_adjust)
-        g = sns.jointplot(
+        marginal_kws.update(bw=bw_adjust)
+        fig, ax_joint, ax_marg_x, ax_marg_y = show_jointplot(
             self.sn._opinions,
             nn,
-            kind="kde",
-            bw_adjust=bw_adjust,
+            bw=bw_adjust,
             marginal_kws=marginal_kws,
             **kwargs,
         )
-        g.ax_joint.set_xlabel(OPINION_SYMBOL)
-        g.ax_joint.set_ylabel(MEAN_NEAREST_NEIGHBOUR)
+        ax_joint.set_xlabel(OPINION_SYMBOL)
+        ax_joint.set_ylabel(MEAN_NEAREST_NEIGHBOUR)
         if title:
-            g.fig.suptitle("Neighbour's opinions", va="bottom")
-        return g
+            fig.suptitle("Neighbour's opinions", va="bottom")
+        return fig, ax_joint, ax_marg_x, ax_marg_y
 
     def show_graph(self, **kwargs):
         import networkx as nx
