@@ -399,6 +399,9 @@ def run_product(
     map_file_name = file_name.replace(".h5", ".txt")
     vaex_file_name = file_name.replace(".h5", ".hdf5")
 
+    if os.path.exists(vaex_file_name) and range_parameters is None:
+        return vaex.open(vaex_file_name)
+
     # add seed to kwargs if not present
     range_parameters.setdefault("seed", [1337])
 
@@ -413,9 +416,7 @@ def run_product(
     # allow variable range to be None to use stored values
     if os.path.exists(vaex_file_name):
         df = vaex.open(vaex_file_name)
-        if range_parameters is None or all(
-            [variable["range"] is None for variable in range_parameters.values()]
-        ):
+        if all([variable["range"] is None for variable in range_parameters.values()]):
             # if every range passed is None, return the full DataFrame directly
             return df
         for key, variable in range_parameters.items():
