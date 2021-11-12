@@ -247,11 +247,34 @@ def show_matrix(
 
 
 def show_jointplot(
-    x, y, ax=(), cmap=None, joint_kws=None, marginal_kws=None, annot_kws=None, **kwargs
+    x,
+    y,
+    ax=(),
+    fig=None,
+    cmap=None,
+    joint_kws=None,
+    marginal_kws=None,
+    annot_kws=None,
+    **kwargs,
 ):
     """Nearest Neighbour plot for inside a bigger figure"""
     if np.iterable(ax):
-        ax_joint, ax_marg_x, ax_marg_y = ax
+        if len(ax) == 0:
+            fig, axs = plt.subplots(
+                2,
+                2,
+                gridspec_kw=dict(width_ratios=[1, 0.1], height_ratios=[0.1, 1]),
+                sharey="row",
+                sharex="col",
+            )
+            (ax_marg_x, ax_empty), (
+                ax_joint,
+                ax_marg_y,
+            ) = axs
+            ax_empty.remove()
+            fig.subplots_adjust(wspace=0.1, hspace=0.1)
+        else:
+            ax_joint, ax_marg_x, ax_marg_y = ax
     else:
         ax_joint, ax_marg_x, ax_marg_y = ax, None, None
     # Set up empty default kwarg dicts
@@ -297,6 +320,8 @@ def show_jointplot(
         marginal_kws.setdefault("color", sns.cubehelix_palette(8, reverse=True)[3])
         kdeplot(x=x_array, vertical=False, ax=ax_marg_x, **marginal_kws)
         kdeplot(y=y_array, vertical=True, ax=ax_marg_y, **marginal_kws)
+
+    return fig, ax_joint, ax_marg_x, ax_marg_y
 
 
 def show_noise_panel(
