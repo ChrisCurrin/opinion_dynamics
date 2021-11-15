@@ -1,3 +1,4 @@
+import dataclasses
 from collections import namedtuple
 from typing import Any, Callable, Iterable, NamedTuple, Optional, TypeVar
 
@@ -10,7 +11,8 @@ diffeq = TypeVar("diffeq", bound=Callable[[float, np.ndarray, Any], np.ndarray])
 # create a named tuple for hinting of result object from ODE solver
 # see `scipy.stats.solve_ivp` for return object definition
 SolverResultNT = namedtuple(
-    "SolverResult", "t y sol t_events y_events nfev njev nlu status message success",
+    "SolverResult",
+    "t y sol t_events y_events nfev njev nlu status message success",
 )
 
 
@@ -31,7 +33,8 @@ class OdeResult(_OdeResult):
         )
 
 
-class SolverResult(NamedTuple, OdeResult):
+@dataclasses.dataclass
+class SolverResult(OdeResult):
     """Store results from the solver.
 
     Allows adding of results.
