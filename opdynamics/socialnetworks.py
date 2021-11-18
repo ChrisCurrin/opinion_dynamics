@@ -552,6 +552,7 @@ class SocialNetwork(object):
     def save(
         self,
         only_last=True,
+        interactions=True,
         complevel=DEFAULT_COMPRESSION_LEVEL,
         write_mapping=True,
         dt=None,
@@ -573,6 +574,7 @@ class SocialNetwork(object):
 
         from tables import NaturalNameWarning
         from tables.exceptions import HDF5ExtError
+        logger.debug(f"saving {self}")
 
         filename = self._get_filename()
         hash_txt = os.path.split(filename)[-1]
@@ -608,9 +610,9 @@ class SocialNetwork(object):
                     df_adj_mat_last,
                     df_meta,
                 ]:
-                    df.to_hdf(filename, df.name, complevel=7, complib="blosc:zstd")
-
-            self.adj_mat.compress()
+                    df.to_hdf(filename, df.name, **meta)
+            if interactions:
+                self.adj_mat.compress()
         except (HDF5ExtError, AttributeError) as err:
             err_msg = f"Could not save {self} to {filename}. \n{err}"
             if raise_error:
@@ -620,8 +622,7 @@ class SocialNetwork(object):
             else:
                 logger.warning(err_msg)
         else:
-            logger.info("saved")
-            logger.debug(f"{self}\n-> {filename}")
+            logger.debug(f"saved\n{self}\n-> {filename}")
             self.save_txt = f"\n{self}\n\t{hash_txt}"
             if write_mapping:
                 if isinstance(write_mapping, str):
