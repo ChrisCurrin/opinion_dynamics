@@ -82,7 +82,14 @@ def show_simulation_range(sn_arr, fig_ax=None):
 
 
 def show_periodic_noise(
-    nsn: NoisySocialNetwork, noise_start, noise_length, recovery, interval, num, D
+    nsn: NoisySocialNetwork,
+    noise_start,
+    noise_length,
+    recovery,
+    interval,
+    num,
+    D,
+    time_points=None,
 ):
     logger.debug("plotting periodic noise")
     import matplotlib.pyplot as plt
@@ -91,6 +98,8 @@ def show_periodic_noise(
     from opdynamics.visualise import VisSocialNetwork
     from opdynamics.utils.plot_utils import get_time_point_idx
 
+    if time_points is None:
+        time_points = [noise_start, noise_start + noise_length, -1]
     # calculate optimal bin edges from opinions distribution at noise start + noise_length
     hist, bin_edges = np.histogram(
         nsn.result.y[
@@ -103,58 +112,56 @@ def show_periodic_noise(
     # create figure and axes
     fig = plt.figure()
     gs = gridspec.GridSpec(
-        nrows=2, ncols=3, figure=fig, wspace=0.3, hspace=0.8, height_ratios=(1, 2)
+        nrows=2,
+        ncols=len(time_points),
+        figure=fig,
+        wspace=0.3,
+        hspace=0.8,
+        height_ratios=(1, 2),
     )
     ax_time = fig.add_subplot(gs[0, :])
-    ax_start = fig.add_subplot(gs[-1, 0])
-    ax_noise = fig.add_subplot(gs[-1, 1], sharey=ax_start)
-    ax_recovery = fig.add_subplot(gs[-1, 2], sharey=ax_start)
 
-    _colors = [PRE_RDN_COLOR, POST_RDN_COLOR, POST_RECOVERY_COLOR]
+    _colors = [PRE_RDN_COLOR, POST_RDN_COLOR] + [POST_RECOVERY_COLOR] * (
+        len(time_points) - 2
+    )
     # plot graphs
-    vis.show_opinions(ax=ax_time, color_code="line", subsample=5, title=False)
-    vis.show_opinions_distribution(
-        ax=ax_start,
-        t=noise_start,
-        title=f"t = {noise_start}",
-        color=PRE_RDN_COLOR,
-        bins=bin_edges,
+    vis.show_opinions(
+        ax=ax_time, color_code="line", subsample=5, title=False, rasterized=True
     )
-    vis.show_opinions_distribution(
-        ax=ax_noise,
-        t=noise_start + noise_length,
-        title=f"t={noise_start + noise_length}",
-        color=POST_RDN_COLOR,
-        bins=bin_edges,
-    )
-    vis.show_opinions_distribution(
-        ax=ax_recovery,
-        t=-1,
-        title=f"t={noise_start + noise_length + recovery}",
-        color=POST_RECOVERY_COLOR,
-        bins=bin_edges,
-    )
+
+    ax_dist_time = None
+    for i, time_point in enumerate(time_points):
+        ax_dist_time = fig.add_subplot(
+            gs[-1, i], sharey=ax_dist_time, sharex=ax_dist_time
+        )
+
+        vis.show_opinions_distribution(
+            ax=ax_dist_time,
+            t=time_point,
+            title=f"t = {time_point}",
+            color=_colors[i],
+            bins=bin_edges,
+        )
+        if i > 0:
+            ax_dist_time.set_ylabel("")
+            ax_dist_time.set_yticklabels([])
+
     # adjust view limits
     from scipy import stats
 
     x_data, y_data = nsn.result.t, nsn.result.y
     s = stats.describe(y_data)
-    lower_bound, upper_bound = s.mean - s.variance, s.mean + s.variance
+    lower_bound, upper_bound = - s.variance, s.variance
     mask = np.logical_and(lower_bound < y_data, y_data < upper_bound)
     y_mask = y_data[mask]
     lim = (np.min(y_mask), np.max(y_mask))
     ax_time.set_ylim(*lim)
-    ax_start.set_xlim(*lim)
-    ax_noise.set_xlim(*lim)
-    ax_recovery.set_xlim(*lim)
+    ax_dist_time.set_xlim(*lim)
+
     # annotate plots
     # points where opinion snapshots are taken
     ax_time.vlines(
-        x=[
-            noise_start,
-            noise_start + noise_length,
-            noise_start + noise_length + recovery,
-        ],
+        x=time_points,
         ymin=lim[0],
         ymax=lim[1],
         color=_colors,
@@ -171,7 +178,7 @@ def show_periodic_noise(
         y=[lim[1]] * num,
         xmin=block_times_s,
         xmax=block_times_e,
-        lw=5,
+        lw=3,
         color="k",
         clip_on=False,
     )
@@ -185,6 +192,4 @@ def show_periodic_noise(
     #     va="bottom",
     # )
     sns.despine()
-    ax_noise.set_ylabel("")
-    ax_recovery.set_ylabel("")
     return fig, gs

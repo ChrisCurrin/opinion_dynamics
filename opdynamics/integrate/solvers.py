@@ -19,7 +19,7 @@ def _run_solver(
     t_start, t_end = t_span
     t_arr = np.arange(t_start, t_end + dt, dt)
     y_arr = np.zeros(shape=(len(t_arr), len(solver.y)))
-    logger.info(f"{len(t_arr)} iterations to do...")
+    logger.debug(f"{len(t_arr)} iterations to do...")
     for i, t in tenumerate(t_arr, desc=desc):
         y_arr[i] = solver.y
         solver.step(t, dt)
@@ -39,7 +39,7 @@ def solve_ode(
 ) -> SolverResult:
     """Solve an ordinary differential equation using a method in `opdynamics.integrate.methods`."""
     if method in ODE_INTEGRATORS:
-        logger.info(f"solving ODE using {method}")
+        logger.debug(f"solving ODE using {method}")
         solver = ODE_INTEGRATORS[method](dy_dt, y0, args)
         return _run_solver(solver, t_span, dt, **kwargs)
     else:
@@ -61,7 +61,7 @@ def solve_sde(
 ) -> SolverResult:
     """Solve a stochastic ordinary differential equation using a method in `opdynamics.integrate.methods`."""
     if method in SDE_INTEGRATORS:
-        logger.info(f"solving SDE using {method}")
+        logger.debug(f"solving SDE using {method}")
         solver = SDE_INTEGRATORS[method](dy_dt, diffusion, y0, args, diff_args)
         return _run_solver(solver, t_span, dt, **kwargs)
     else:

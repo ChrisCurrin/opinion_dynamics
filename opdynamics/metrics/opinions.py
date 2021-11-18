@@ -29,8 +29,8 @@ def nearest_neighbours(opinions: np.ndarray, accum_adj_mat: np.ndarray) -> np.nd
     and :math:`\\sum_j a_{ij}` is the degree of node `i`.
 
     """
-    close_opinions = np.sum(accum_adj_mat * opinions, axis=0)
-    out_degree_i = np.sum(accum_adj_mat, axis=0)
+    close_opinions = np.sum(accum_adj_mat * opinions, axis=1)
+    out_degree_i = np.sum(accum_adj_mat, axis=1)
     with np.errstate(divide="ignore", invalid="ignore"):
         # suppress warnings about dividing by nan or 0
         nn = close_opinions / out_degree_i
@@ -97,7 +97,7 @@ def _basic_unimodal(opinions: np.ndarray) -> bool:
 def _holzmann_unimodal(opinions) -> bool:
     """
     see https://en.wikipedia.org/wiki/Unimodality
-    see https://doi.org/10.1007/s10182-008-0057-2 
+    see https://doi.org/10.1007/s10182-008-0057-2
     """
     # holzmann
     pop1 = opinions[opinions < 0]
@@ -151,7 +151,11 @@ def distribution_modality(opinions: np.ndarray, bin_width: float = "auto") -> fl
         if bin_width == "auto"
         else np.round(np.arange(np.floor(np.min(pop1)), bin_width, bin_width), 1)
     )
-    hist, bin_edges = np.histogram(pop1, bins=bins, range=(np.floor(np.min(pop1)), 0),)
+    hist, bin_edges = np.histogram(
+        pop1,
+        bins=bins,
+        range=(np.floor(np.min(pop1)), 0),
+    )
     max_opinion_pop1 = bin_edges[1 + np.argmax(hist)]
 
     bins = (
@@ -159,7 +163,11 @@ def distribution_modality(opinions: np.ndarray, bin_width: float = "auto") -> fl
         if bin_width == "auto"
         else np.round(np.arange(0, np.ceil(np.max(pop2)), bin_width), 1)
     )
-    hist, bin_edges = np.histogram(pop2, bins=bins, range=(0, np.ceil(np.max(pop2))),)
+    hist, bin_edges = np.histogram(
+        pop2,
+        bins=bins,
+        range=(0, np.ceil(np.max(pop2))),
+    )
     max_opinion_pop2 = bin_edges[np.argmax(hist)]
     return max_opinion_pop2 - max_opinion_pop1
 

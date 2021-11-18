@@ -107,11 +107,20 @@ def cache_ec(
 
     """
     if cache:
-        logger.info(f"Caching {sn.name}")
-        if type(cache) is str and "all" in cache:
+        if type(cache) is str:
+            cache = cache.replace("_", "").replace(" ", "").lower()
+            only_last = "all" not in cache
+            cache_interactions = "opinion" in cache
             cache = cache.replace("all", "")
-            complevel = int(cache) if len(cache) else DEFAULT_COMPRESSION_LEVEL
-            sn.save(only_last=False, complevel=complevel, write_mapping=write_mapping)
+            cache = cache.replace("opinion", "")
+        
+            complevel = int(cache) if cache.isnumeric() else DEFAULT_COMPRESSION_LEVEL
+            sn.save(
+                only_last=only_last,
+                interactions=cache_interactions,
+                complevel=complevel,
+                write_mapping=write_mapping,
+            )
         else:
             complevel = cache if cache > 1 else DEFAULT_COMPRESSION_LEVEL
             sn.save(only_last=True, complevel=complevel, write_mapping=write_mapping)

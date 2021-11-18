@@ -258,7 +258,7 @@ range_parameters = {"D": {"range": D_range}, "title": "D"}
 _sns = run_product(
     range_parameters,
     cls=ec_type,
-    cache=True,
+    cache="all",
     cache_sim=False,
     parallel=True,
     **kwargs,

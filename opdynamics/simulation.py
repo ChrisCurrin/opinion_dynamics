@@ -32,7 +32,7 @@ def run_params(
     K: float = 3,
     alpha: float = 2,
     beta: float = 2,
-    activity: Callable = negpowerlaw,
+    activity_distribution: Callable = negpowerlaw,
     gamma: float = 2.1,
     epsilon: float = 1e-2,
     r: float = 0.5,
@@ -80,16 +80,17 @@ def run_params(
 
     # allow explicit setting of storing interactions
     store_all = sim_kwargs.pop("store_all", cache == "all")
+    activity_distribution = sim_kwargs.pop("distribution", activity_distribution)
 
     logger.debug(
         f"run_params for {cls.__name__} with (N={N}, m={m}, K={K}, alpha={alpha}, beta={beta}, activity "
-        f"={str(activity)}(epsilon={epsilon}, gamma={gamma}), dt={dt}, T={T}, r={r}, plot_opinion="
+        f"={str(activity_distribution)}(epsilon={epsilon}, gamma={gamma}), dt={dt}, T={T}, r={r}, plot_opinion="
         f"{plot_opinion})"
     )
     logger.debug(f"additional args={sim_args}\tadditional kwargs={sim_kwargs}")
 
     _ec = cls(N, m, K, alpha, *sim_args, **sim_kwargs)
-    _ec.set_activities(activity, gamma, epsilon, 1, dim=1, **sim_kwargs)
+    _ec.set_activities(activity_distribution, gamma, epsilon, 1, dim=1, **sim_kwargs)
     _ec.set_social_interactions(
         beta=beta, r=r, store_all=store_all, dt=dt, t_dur=T, **sim_kwargs
     )
@@ -116,7 +117,7 @@ def run_periodic_noise(
     K: float = 3,
     alpha: float = 2,
     beta: float = 2,
-    activity: Callable = negpowerlaw,
+    activity_distribution: Callable = negpowerlaw,
     gamma: float = 2.1,
     epsilon: float = 1e-2,
     r: float = 0.5,
@@ -124,6 +125,7 @@ def run_periodic_noise(
     cache: bool = True,
     method: str = None,
     plot_opinion: bool = False,
+    plot_kws: Dict[str, str] = None,
     write_mapping=True,
     *args,
     **kwargs,
@@ -202,6 +204,7 @@ def run_periodic_noise(
             method = "RK45"
 
     store_all = kwargs.pop("store_all", cache == "all")
+    activity_distribution = kwargs.pop("distribution", activity_distribution)
 
     logger.debug(f"letting network interact without noise until {noise_start}.")
     t_dur = noise_start + noise_length + recovery
@@ -213,17 +216,16 @@ def run_periodic_noise(
         f" Storing all interactions: {store_all}."
     )
     # create progress bar
-    t = tqdm(
+    pbar = tqdm(
         iterable=None,
         desc="periodic noise",
         total=t_dur,
-        disable=logger.getEffectiveLevel() > logging.INFO,
     )
     print()
     name = kwargs.pop("name", "")
     name += f"[num={num} interval={interval}]"
     nsn = cls(N, m, K, alpha, *args, **kwargs)
-    nsn.set_activities(activity, gamma, epsilon, 1, dim=1)
+    nsn.set_activities(activity_distribution, gamma, epsilon, 1, dim=1)
     nsn.set_social_interactions(
         beta=beta, r=r, store_all=store_all, dt=dt, t_dur=t_dur, **kwargs
     )
@@ -242,31 +244,48 @@ def run_periodic_noise(
         # reset history
         nsn._D_hist = []
         if noise_start > 0:
+            pbar.set_description(f"noise = 0")
+
             nsn.set_dynamics(D=0, *args, **kwargs)
             nsn.run_network(dt=dt, t_dur=noise_start, method=method)
-            t.update(noise_start)
+
+            pbar.update(noise_start)
+
         # inner loop of noise on-off in blocks
         for i in range(num):
+            pbar.set_description(f"noise = {D}")
+
             nsn.set_dynamics(D=D, *args, **kwargs)
             nsn.run_network(t_dur=block_time, method=method)
-            t.update(int(block_time))
+
+            pbar.update(int(block_time))
             # only include a silent block of time if this wasn't the last block
             if i < num - 1:
+                pbar.set_description(f"noise = 0")
+
                 nsn.set_dynamics(D=0, *args, **kwargs)
                 nsn.run_network(t_dur=interval, method=method)
-                t.update(interval)
+
+                pbar.update(interval)
         logger.debug(
             f"removing noise and letting network settle at {noise_start + noise_length} for {recovery}."
         )
         if recovery > 0:
+            pbar.set_description(f"noise = 0")
+
             nsn.set_dynamics(D=0, *args, **kwargs)
             nsn.run_network(t_dur=recovery, method=method)
-            t.update(recovery)
+
+            pbar.update(recovery)
 
         cache_ec(cache, nsn, write_mapping=write_mapping)
 
     if plot_opinion:
-        show_periodic_noise(nsn, noise_start, noise_length, recovery, interval, num, D)
+        if plot_kws is None:
+            plot_kws = {}
+        show_periodic_noise(
+            nsn, noise_start, noise_length, recovery, interval, num, D, **plot_kws
+        )
         sample_size = kwargs.get("sample_size", None)
         sample_method = kwargs.get("sample_method", None)
         if sample_size or sample_method:
@@ -274,7 +293,7 @@ def run_periodic_noise(
 
             fig: plt.Figure = plt.gcf()
             title = f"{sample_size}" if sample_size else ""
-            title += f"{sample_method}" if sample_method else ""
+            title += f" {sample_method}" if sample_method else ""
             fig.suptitle(title)
 
     return nsn

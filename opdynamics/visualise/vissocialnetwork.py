@@ -342,11 +342,11 @@ class VisSocialNetwork(object):
 
         if vertical:
             ax.set_ylabel(OPINION_SYMBOL)
-            ax.set_xlabel(f"$P({OPINION_SYMBOL})$")
+            ax.set_xlabel(f"P({OPINION_SYMBOL})")
             ax.set_ylim(*self._get_equal_opinion_limits())
         else:
             ax.set_xlabel(OPINION_SYMBOL)
-            ax.set_ylabel(f"$P({OPINION_SYMBOL})$")
+            ax.set_ylabel(f"P({OPINION_SYMBOL})")
             ax.set_xlim(*self._get_equal_opinion_limits())
         if title:
             ax.set_title(title)
@@ -541,7 +541,9 @@ class VisSocialNetwork(object):
         # plt.savefig("output/fig_net.svg", dpi=300, rasterized=True)
         return plt.gcf()
 
-    def show_summary(self, single_fig=True, fig_kwargs=None) -> Tuple[Figure, Axes]:
+    def show_summary(
+        self, single_fig=True, fig_kwargs=None, rasterized=True
+    ) -> Tuple[Figure, Axes]:
         nrows = 3
         ncols = 2
         if single_fig:
@@ -562,13 +564,15 @@ class VisSocialNetwork(object):
             self.show_nearest_neighbour()
             self.show_adjacency_matrix("clustermap")
         # first column
-        _, ax[0, 0] = self.show_opinions(ax=ax[0, 0])
+        _, ax[0, 0] = self.show_opinions(ax=ax[0, 0], rasterized=rasterized)
         _, ax[1, 0] = self.show_adjacency_matrix("mesh", sort=True, ax=ax[1, 0])
-        _, ax[2, 0] = self.show_activities(ax=ax[2, 0])
+        _, ax[2, 0] = self.show_activities(ax=ax[2, 0], rasterized=rasterized)
         # second column has opinion as x-axis
         _, ax[0, 1] = self.show_opinions_distribution(ax=ax[0, 1])
         _, ax[1, 1] = self.show_agent_opinions(ax=ax[1, 1], sort=True)
-        _, ax[2, 1], cbar = self.show_activity_vs_opinion(ax=ax[2, 1])
+        _, ax[2, 1], cbar = self.show_activity_vs_opinion(
+            ax=ax[2, 1], rasterized=rasterized
+        )
         # `show_agent_opinions` already calculates optimal limits
         xlim = ax[1, 1].get_xlim()
         ax[0, 1].set_xlim(*xlim)

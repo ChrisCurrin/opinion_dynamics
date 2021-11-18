@@ -38,10 +38,10 @@ TIME_SYMBOL = "$t$"
 OPINION_SYMBOL = "$x$"
 OPINION_AGENT_SYMBOL = math_fix(f"${OPINION_SYMBOL}_i$")
 OPINION_AGENT_TIME = math_fix(f"${OPINION_AGENT_SYMBOL} (t)$")
-P_A_X = "$P(a,x)$"
+P_A_X = f"P($a$,{OPINION_SYMBOL})"
 ACTIVITY_SYMBOL = "$a$"
 ABS_MEAN_FINAL_OPINION = math_fix(f"$|\langle {OPINION_SYMBOL}_{{f}} \\rangle|$")
-MEAN_NEAREST_NEIGHBOUR = math_fix(f"$\langle {OPINION_SYMBOL} \\rangle^{{NN}}$")
+MEAN_NEAREST_NEIGHBOUR = math_fix(f"$\langle {OPINION_SYMBOL}^{{NN}} \\rangle$")
 SAMPLE_MEAN = "$\overline{X}_n$"
 MEAN = MU = "$\mu$"
 PEAK_DISTANCE = math_fix(f"$\Lambda_{OPINION_SYMBOL}$")
