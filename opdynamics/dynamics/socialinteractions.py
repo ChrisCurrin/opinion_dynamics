@@ -85,7 +85,7 @@ def get_connection_probabilities_opp(
         opinion.
     """
     if p_opp > 0:
-        betas = sn.rn.choice([beta, -beta], size=sn.N, p=[p_opp, 1 - p_opp])
+        betas = sn.rn.choice([beta, -beta], size=sn.N, p=[1 - p_opp, p_opp])
     else:
         betas = beta
     return get_connection_probabilities(sn, beta=betas, **conn_kwargs)
@@ -316,9 +316,9 @@ class SocialInteraction:
 
     def store_interactions(self, dt: float, t_dur: float):
         """Initialise the object to store social interactions (the adjacency matrix) for each time step until t_dur."""
-        logger.info(f"storing {1 + int(t_dur/dt)} adjacency matrices...")
+        logger.debug(f"storing {1 + int(t_dur/dt)} adjacency matrices...")
         t_arr = np.arange(0, t_dur + dt, dt)
-        adj_mat_memmap_file = get_hash_filename(self, "dat", extra=f"{self.sn._seed}")
+        adj_mat_memmap_file = get_hash_filename(self, "dat", extra=f"{self.sn}")
 
         is_extend_time = self._time_mat is not None
 
