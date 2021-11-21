@@ -3,16 +3,16 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python=3.7
-  - scipy==1.4.1
-  - numpy==1.19.2
+  - python>=3.7
+  - scipy
+  - numpy
   - cython
   - jupyter
-  - seaborn==0.11
+  - seaborn
   - black
   - flake8
   - tqdm
-  - pytables==3.6.1
-  - vaex-hdf5==0.6.0
-  - vaex==3.0.0
+  - pytables
+  - vaex-hdf5
+  - vaex
 prefix: C:\Users\Chris\Anaconda3\envs\opinion_dynamics

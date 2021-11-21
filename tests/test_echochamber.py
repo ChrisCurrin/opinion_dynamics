@@ -271,12 +271,12 @@ class TestSocialNetwork(TestCase):
         _predictable_interaction(ec_last)
         ec_last.set_dynamics()
 
-        filename_T0 = self.sn._get_filename()
+        filename_T0 = self.sn.filename()
         self.assertFalse(os.path.exists(filename_T0))
         self.assertFalse(self.sn.load(dt, T))
 
         self.sn.run_network(dt, T)
-        filename = self.sn._get_filename()
+        filename = self.sn.filename()
 
         try:
             # last time point only
@@ -330,8 +330,8 @@ class TestSocialNetwork(TestCase):
         T2 = np.round(T + T_more, 5)
         self.sn.run_network(dt, T_more, method="Euler")
         ec_T1.run_network(dt, T_more, method="Euler")
-        filename_T2 = self.sn._get_filename()
-        filename_T2_new_ec = ec_T1._get_filename()
+        filename_T2 = self.sn.filename()
+        filename_T2_new_ec = ec_T1.filename()
 
         self.assertEqual(
             filename,
@@ -405,13 +405,13 @@ class TestNoisySocialNetwork(TestCase):
         _predictable_interaction(ec_D_const)
         ec_D_const.set_dynamics(D=0.1)
 
-        filename_T0 = self.sn._get_filename()
+        filename_T0 = self.sn.filename()
         self.assertFalse(os.path.exists(filename_T0))
         self.assertFalse(self.sn.load(dt, T))
 
         self.sn.run_network(dt, T)
-        filename = self.sn._get_filename()
-        filename_ec_D = ec_D_const._get_filename()
+        filename = self.sn.filename()
+        filename_ec_D = ec_D_const.filename()
         try:
             saved_filename = self.sn.save(False)
             self.assertTrue(saved_filename, filename)
@@ -454,8 +454,8 @@ class TestNoisySocialNetwork(TestCase):
         self.sn.run_network(dt, T_more)
         # keep noise the same
         ec_D_const.run_network(dt, T_more)
-        filename_T2 = self.sn._get_filename()
-        filename_ec_D_T2 = ec_D_const._get_filename()
+        filename_T2 = self.sn.filename()
+        filename_ec_D_T2 = ec_D_const.filename()
 
         self.assertNotEqual(
             filename,
@@ -478,7 +478,7 @@ class TestNoisySocialNetwork(TestCase):
         )
         _predictable_interaction(ec_D_T2)
         ec_D_T2.set_dynamics(D=0.1)
-        filename_D_T2 = ec_D_T2._get_filename()
+        filename_D_T2 = ec_D_T2.filename()
 
         try:
             self.assertEqual(
@@ -500,7 +500,7 @@ class TestNoisySocialNetwork(TestCase):
             _predictable_interaction(ec_D_change)
             ec_D_change.set_dynamics(D=0.1)
             ec_D_change._D_hist = [(0, 0.1), (T, 0.5)]
-            filename_Dchange_T2 = ec_D_change._get_filename()
+            filename_Dchange_T2 = ec_D_change.filename()
             self.assertEqual(
                 filename_T2,
                 filename_Dchange_T2,

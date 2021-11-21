@@ -92,9 +92,7 @@ class VisSocialNetwork(object):
         """
         cmap = kwargs.pop("cmap", CONNECTIONS_CMAP)
         # noinspection PyProtectedMember
-        p_conn = self.sn.adj_mat._p_conn
-        if p_conn is None:
-            p_conn = self.sn.adj_mat.conn_method(self.sn, **self.sn.adj_mat.conn_kwargs)
+        p_conn = self.sn.adj_mat.get_connection_probabilities()
         return show_matrix(
             p_conn,
             "$P_{ij}$",

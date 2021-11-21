@@ -25,9 +25,12 @@ def dy_dt(t: float, y: np.ndarray, *args) -> np.ndarray:
 
     """
     K, alpha, adj, dt = args
+
+    adj.update_connection_probabilities(y)
+
     # get activity matrix for this time point
     At = adj[int(t / dt)]
-    return -y.T + K * np.sum(At * np.tanh(alpha * y.T), axis=1)
+    return -y.ravel() + K * np.sum(At * np.tanh(alpha * y.ravel()), axis=1)
 
 
 # create local *named* functions as they need to be pickled but also have attached variables

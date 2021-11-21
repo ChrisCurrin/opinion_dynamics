@@ -19,8 +19,8 @@ SolverResultNT = namedtuple(
 class OdeResult(_OdeResult):
     def __add__(self, other: SolverResultNT):
         return OdeResult(
-            t=np.append(self.t, other.t),
-            y=np.append(self.y, other.y, axis=1),
+            t=np.append(self.t, other.t[1:]),
+            y=np.append(self.y, other.y[:, 1:], axis=1),
             sol=other.sol,
             t_events=np.append(self.t_events, other.t_events),
             y_events=np.append(self.y_events, other.y_events),

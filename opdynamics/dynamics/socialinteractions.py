@@ -41,13 +41,16 @@ from opdynamics.utils.decorators import hashable
 logger = logging.getLogger("social interaction")
 
 
-def get_connection_probabilities(sn: SocialNetwork, beta: float = 0.0, **conn_kwargs):
+def compute_connection_probabilities(
+    opinions: np.ndarray, beta: float = 0.0, **conn_kwargs
+):
     """For agent `i`, the probability of connecting to agent `j` is a function of the absolute strength of
     their opinions and a beta param, relative to all of the differences between an agent i and every other agent.
 
     .. math::
         p_{ij} = \\frac{|x_i - x_j|^{-\\beta}}{\sum_j |x_i - x_j|^{-\\beta}}
 
+    # FIXME: Update docstring
     :param sn: SocialNetwork object so we know
         1) number of agents
         2) agent opinions
@@ -55,21 +58,22 @@ def get_connection_probabilities(sn: SocialNetwork, beta: float = 0.0, **conn_kw
         When beta=0, then connection probabilities are uniform.
 
     """
+    N = opinions.size
     # create N * N matrix of opinions
-    p_conn = np.zeros(shape=(sn.N, sn.N))
-    betas = beta if np.iterable(beta) else np.full(sn.N, beta)
-    for i in range(sn.N):
+    p_conn = np.zeros(shape=(N, N))
+
+    for i in range(N):
         # compute magnitude (between agent i and every other agent)*N agents
-        mag = np.abs(sn._opinions[i] - sn._opinions)
+        mag = np.abs(opinions[i] - opinions).ravel()
         mag[i] = np.nan
-        p_conn[i] = np.power(mag, -betas[i])
+        p_conn[i] = np.power(mag, -beta)
         p_conn[i, i] = 0
         p_conn[i] /= np.sum(p_conn[i])
     return p_conn
 
 
-def get_connection_probabilities_opp(
-    sn: SocialNetwork, beta: float = 0.0, p_opp: float = 0.0, **conn_kwargs
+def compute_connection_probabilities_opp(
+    opinions: np.ndarray, beta: float = 0.0, p_opp: float = 0.0, rng=None, **conn_kwargs
 ):
     """For agent `i`, the probability of connecting to agent `j` is a function of the absolute strength of
     their opinions and a beta param, relative to all of the differences between an agent i and every
@@ -85,10 +89,10 @@ def get_connection_probabilities_opp(
         opinion.
     """
     if p_opp > 0:
-        betas = sn.rn.choice([beta, -beta], size=sn.N, p=[1 - p_opp, p_opp])
+        betas = rng.choice([beta, -beta], size=opinions.size, p=[1 - p_opp, p_opp])
     else:
         betas = beta
-    return get_connection_probabilities(sn, beta=betas, **conn_kwargs)
+    return compute_connection_probabilities(opinions, beta=betas, **conn_kwargs)
 
 
 # TODO: Test
@@ -109,9 +113,9 @@ def get_connection_probabilities_exp(
 
     """
     # create N * N matrix of opinions
-    mat_opinions = np.tile(sn._opinions, sn.N)
+    mat_opinions = np.tile(sn.opinions, sn.N)
     # compute magnitude (between agent i and every other agent)*N agents
-    mag = np.abs(sn._opinions - mat_opinions)
+    mag = np.abs(sn.opinions - mat_opinions)
     self_mask = np.identity(sn.N)
     mag[self_mask] = 0
     p_conn = np.power(mag, -beta)
@@ -131,7 +135,6 @@ def get_social_interaction(
     :param sn: SocialNetwork object so we know
         1) number of agents
         2) number of other agents to interact with
-        3) the probability of interacting with each other agent
     :param active_threshold: Threshold for an agent to be active.
     :param p_mutual_interaction: Probability that an interaction is mutual (matrix becomes symmetrical if all
         interactions are mutual).
@@ -225,7 +228,7 @@ class SocialInteraction:
     * ``p_mutual_interaction`` - 'r', the probability of a mutual interaction between agents i and j.
     * ``conn_method`` - the method used to calculate connection probabilities
     * ``update_conn`` - whether to update connection probabilities at every call (every `dt`).
-    * ``conn_kwargs`` - keyword arguments for ``conn_method``. E.g. ``beta``. 
+    * ``conn_kwargs`` - keyword arguments for ``conn_method``. E.g. ``beta``.
 
 
     Methods:
@@ -254,7 +257,7 @@ class SocialInteraction:
         self,
         sn: SocialNetwork,
         p_mutual_interaction: float,
-        conn_method=get_connection_probabilities,
+        conn_method=compute_connection_probabilities,
         update_conn=True,
         **conn_kwargs,
     ):
@@ -274,9 +277,7 @@ class SocialInteraction:
         self.conn_kwargs = conn_kwargs
 
         # private properties
-        self._p_conn: np.ndarray = (
-            self.conn_method(sn, **conn_kwargs) if not update_conn else None
-        )
+        self._p_conn: np.ndarray = self.conn_method(sn.opinions, **conn_kwargs)
         self._update_conn = update_conn
         self._accumulator = np.zeros((sn.N, sn.N), dtype=int)
         self._last_adj_mat: np.ndarray = None
@@ -286,6 +287,21 @@ class SocialInteraction:
             0 <= p_mutual_interaction <= 1
         ), "p_mutual_interaction is a probability between 0 and 1"
         logger.debug(f"Social Interaction for {sn.name} initialised {self}.")
+
+    def get_connection_probabilities(self) -> np.ndarray:
+        return self._p_conn
+
+    def set_connection_probabilities(self, p_conn: np.ndarray):
+        """
+        Set the connection probabilities.
+        """
+        self._p_conn = p_conn
+
+    def update_connection_probabilities(self, opinions):
+        """
+        Update the connection probabilities.
+        """
+        self._p_conn = self.conn_method(opinions, **self.conn_kwargs)
 
     def compress(self, overwrite=True):
         if self._time_mat is not None:
@@ -316,11 +332,14 @@ class SocialInteraction:
 
     def store_interactions(self, dt: float, t_dur: float):
         """Initialise the object to store social interactions (the adjacency matrix) for each time step until t_dur."""
-        logger.debug(f"storing {1 + int(t_dur/dt)} adjacency matrices...")
         t_arr = np.arange(0, t_dur + dt, dt)
         adj_mat_memmap_file = get_hash_filename(self, "dat", extra=f"{self.sn}")
 
         is_extend_time = self._time_mat is not None
+
+        logger.debug(
+            f"storing {1 + int(t_dur/dt)} adjacency matrices...\n{adj_mat_memmap_file}"
+        )
 
         self._time_mat = np.memmap(
             adj_mat_memmap_file,
@@ -375,8 +394,8 @@ class SocialInteraction:
 
         # compute interactions
 
-        if self._update_conn:
-            self._p_conn = self.conn_method(self.sn, **self.conn_kwargs)
+        # if self._update_conn:
+        #     self._p_conn = self.conn_method(self.sn, **self.conn_kwargs)
 
         self._last_adj_mat = get_social_interaction(
             self.sn, self.sn.rn.random(), self.p_mutual_interaction, self._p_conn

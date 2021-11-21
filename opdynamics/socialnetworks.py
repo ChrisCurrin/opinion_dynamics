@@ -6,7 +6,7 @@ import copy
 import logging
 import os
 from functools import lru_cache, partial
-from typing import Callable, Tuple, Union
+from typing import Callable, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -61,6 +61,7 @@ class SocialNetwork(object):
         alpha: float,
         name="SocialNetwork",
         seed=1337,
+        filename: str = None,
         *args,
         **kwargs,
     ):
@@ -72,6 +73,7 @@ class SocialNetwork(object):
 
         # create a human-readable name for ths object
         self.name = name
+        self.filename = filename
 
         # assign args to object variables
         self.N = N
@@ -82,7 +84,7 @@ class SocialNetwork(object):
         # private attributes
         self._dist: str = None
         self._beta: float = None
-        self._store_interactions = False
+        self._store_interactions: bool = False
 
         # quick checks
         assert N > 0 and type(N) is int
@@ -91,7 +93,6 @@ class SocialNetwork(object):
         assert K >= 0
 
         # create array variables
-        self._opinions: np.ndarray = None
         self.adj_mat: SocialInteraction = None
         self.activities: np.ndarray = None
         self.dy_dt: diffeq = None
@@ -107,12 +108,11 @@ class SocialNetwork(object):
         :param min_val: lowest value (inclusive)
         :param max_val: highest value (inclusive)
         """
-        self._opinions = self.rn.uniform(min_val, max_val, size=self.N)
         if self.result is None:
             # create a dummy result in case `opinions` property is requested, which requires `result`
             self.result = SolverResult(
                 np.array([0]),
-                np.expand_dims(self._opinions, 1),
+                np.expand_dims(self.rn.uniform(min_val, max_val, size=self.N), 1),
                 None,
                 None,
                 None,
@@ -209,15 +209,15 @@ class SocialNetwork(object):
         return self.result.y[:, t_idx]
 
     @property
-    def opinions(self):
+    def opinions(self) -> np.ndarray:
         return self.opinions_at_t(-1)
 
     @property
-    def all_opinions(self):
+    def all_opinions(self) -> np.ndarray:
         return self.result.y
 
     @property
-    def has_results(self):
+    def has_results(self) -> bool:
         """Check if this object has a results property with simulation data."""
         return len(self.result.t) > 1
 
@@ -229,6 +229,28 @@ class SocialNetwork(object):
     @lru_cache(maxsize=1)
     def agent_idxs(self):
         return list(range(self.N))
+
+    @property
+    def filename(self) -> str:
+        """get a cacheable filename for this instance"""
+        from opdynamics.utils.cache import get_hash_filename
+
+        if self._filename is None:
+            return get_hash_filename(self)
+        return self._filename
+
+    @filename.setter
+    def filename(self, value: Optional[str]):
+        if value is not None:
+            from opdynamics.utils.cache import get_cache_dir
+
+            if os.path.split(value)[0] == "":
+                # no parent specified
+                value = os.path.join(get_cache_dir(), value)
+            if os.path.splitext(value)[1] == "":
+                # no extension specified
+                value = value + ".h5"
+        self._filename = value
 
     def _setup_run(self, dt: float, t_dur: float) -> Tuple[float, float]:
         if self.activities is None or self.adj_mat is None or self.dy_dt is None:
@@ -273,9 +295,8 @@ class SocialNetwork(object):
         return (*args, self.K, self.alpha, self.adj_mat)
 
     def _post_run(self):
-        # reassign opinions to last time point
-        self._opinions = self.result.y[:, -1]
         if len(self.result.t) > 2 and self.result.t[0] > 0:
+            # concatenate results
             self.result = self.prev_result + self.result
         logger.debug(f"done running {self.name}")
 
@@ -308,7 +329,7 @@ class SocialNetwork(object):
             self.result: SolverResult = solve_ode(
                 self.dy_dt,
                 t_span=t_span,
-                y0=self._opinions,
+                y0=self.opinions,
                 method=method,
                 dt=dt,
                 args=args,
@@ -324,7 +345,7 @@ class SocialNetwork(object):
                 solve_ivp(
                     self.dy_dt,
                     t_span=t_span,
-                    y0=self._opinions,
+                    y0=self.opinions,
                     method=method,
                     vectorized=True,
                     args=args,
@@ -543,12 +564,6 @@ class SocialNetwork(object):
         df.name = "opinions"
         return df
 
-    def _get_filename(self) -> str:
-        """get a cacheable filename for this instance"""
-        from opdynamics.utils.cache import get_hash_filename
-
-        return get_hash_filename(self)
-
     def save(
         self,
         only_last=True,
@@ -560,7 +575,7 @@ class SocialNetwork(object):
     ) -> str:
         """Save the SocialNetwork to the cache using the HDF file format.
 
-        File name and format specified in ``_get_filename()``
+        File name and format specified in ``filename``
 
         :param only_last: Save only the last time point (default True).
         :param complevel: Compression level (default DEFAULT_COMPRESSION_LEVEL defined in ``constants``).
@@ -574,9 +589,10 @@ class SocialNetwork(object):
 
         from tables import NaturalNameWarning
         from tables.exceptions import HDF5ExtError
+
         logger.debug(f"saving {self}")
 
-        filename = self._get_filename()
+        filename = self.filename
         hash_txt = os.path.split(filename)[-1]
 
         df_opinions = self.result_df()
@@ -650,7 +666,7 @@ class SocialNetwork(object):
         """
         from tables.exceptions import HDF5ExtError
 
-        filename = self._get_filename()
+        filename = self.filename
         logger.debug(f"trying to hit cache for {filename}\n{self}")
         if os.path.exists(filename):
             dt_precision, dt_scale = precision_and_scale(dt)
@@ -765,15 +781,16 @@ class ConnChamber(SocialNetwork):
 
     def set_social_interactions(self, p_opp=0, update_conn=True, *args, **kwargs):
         from opdynamics.dynamics.socialinteractions import (
-            get_connection_probabilities_opp,
+            compute_connection_probabilities_opp,
         )
 
-        conn_method = kwargs.pop("conn_method", get_connection_probabilities_opp)
+        conn_method = kwargs.pop("conn_method", compute_connection_probabilities_opp)
         super().set_social_interactions(
             *args,
             conn_method=conn_method,
             update_conn=update_conn,
             p_opp=p_opp,
+            rng=self.rn,
             **kwargs,
         )
 
@@ -852,7 +869,7 @@ class OpenChamber(NoisySocialNetwork):
                 self.dy_dt,
                 self.diffusion,
                 t_span=t_span,
-                y0=self._opinions,
+                y0=self.opinions,
                 method=method,
                 dt=dt,
                 args=args,

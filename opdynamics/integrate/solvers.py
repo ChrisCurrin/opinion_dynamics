@@ -17,7 +17,7 @@ def _run_solver(
 ) -> SolverResult:
     """Given a numerical integrator, call its 'step' method T/dt times (where T is last element of t_span)."""
     t_start, t_end = t_span
-    t_arr = np.arange(t_start, t_end + dt, dt)
+    t_arr = np.round(np.arange(t_start, t_end + dt, dt), 6)
     y_arr = np.zeros(shape=(len(t_arr), len(solver.y)))
     logger.debug(f"{len(t_arr)} iterations to do...")
     for i, t in tenumerate(t_arr, desc=desc):
