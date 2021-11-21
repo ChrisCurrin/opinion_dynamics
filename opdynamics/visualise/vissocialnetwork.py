@@ -227,7 +227,7 @@ class VisSocialNetwork(object):
                 c = sm.to_rgba(agent_opinions.values)
                 s = kwargs.pop("s", 0.1)
                 ax.scatter(
-                    agent_opinions.index, agent_opinions.values, c=c, s=s, **kwargs
+                    agent_opinions.index, agent_opinions.values, c=c, s=s, lw=0, **kwargs
                 )
         else:
             ls = kwargs.pop("ls", "-")
@@ -438,11 +438,7 @@ class VisSocialNetwork(object):
         return fig, ax
 
     def _get_equal_opinion_limits(self):
-        if self.sn.result is None:
-            opinions = self.sn._opinions
-        else:
-            opinions = self.sn.result.y
-        v = np.max(np.abs(opinions))
+        v = np.max(np.abs(self.sn.result.y))
         return -v, v
 
     def show_nearest_neighbour(

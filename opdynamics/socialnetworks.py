@@ -108,21 +108,20 @@ class SocialNetwork(object):
         :param min_val: lowest value (inclusive)
         :param max_val: highest value (inclusive)
         """
-        if self.result is None:
-            # create a dummy result in case `opinions` property is requested, which requires `result`
-            self.result = SolverResult(
-                np.array([0]),
-                np.expand_dims(self.rn.uniform(min_val, max_val, size=self.N), 1),
-                None,
-                None,
-                None,
-                0,
-                0,
-                0,
-                1,
-                "init",
-                True,
-            )
+        # create a dummy result in case `opinions` property is requested, which requires `result`
+        self.result = SolverResult(
+            np.array([0]),
+            np.expand_dims(self.rn.uniform(min_val, max_val, size=self.N), 1),
+            None,
+            None,
+            None,
+            0,
+            0,
+            0,
+            1,
+            "init",
+            True,
+        )
 
     def set_activities(
         self, distribution=negpowerlaw, *dist_args, dim: int = 1, **kwargs
@@ -177,8 +176,6 @@ class SocialNetwork(object):
         :param r: Probability of a mutual interaction [0,1].
         :param store_all: Store all the interaction matrice (True) or only the accumulative interactions and last interaction (False).
 
-        :keyword update_conn: Whether to update connection probabilities at every dt (default True).
-
         """
         from opdynamics.dynamics.socialinteractions import SocialInteraction
 
@@ -217,13 +214,8 @@ class SocialNetwork(object):
         return self.result.y
 
     @property
-    def has_results(self) -> bool:
-        """Check if this object has a results property with simulation data."""
-        return len(self.result.t) > 1
-
-    @property
     def current_time(self):
-        return 0 if not self.has_results else self.result.t[-1]
+        return self.result.t[-1]
 
     @property
     @lru_cache(maxsize=1)
@@ -257,19 +249,15 @@ class SocialNetwork(object):
             raise ECSetupError
 
         t_end = t_dur
-
-        if not self.has_results:
-            t_start = 0
+        t_start = self.result.t[-1]
+        t_end += t_start
+        if t_start == 0:
             self.prev_result = None
         else:
-            t_start = self.result.t[-1]
-            t_end += t_start
             # noinspection PyTypeChecker
             self.prev_result: SolverResult = copy.deepcopy(self.result)
-            logger.debug(
-                f"continuing dynamics from {t_start:.6f} until {t_end:.6f}. Opinions can be reset using "
-                f"sn.init_opinions()."
-            )
+        logger.debug(f"running dynamics from {t_start:.6f} until {t_end:.6f}. dt={dt}")
+        
         if self._store_interactions:
             self.adj_mat.store_interactions(dt, t_end)
         return np.round(t_start, 6), np.round(t_end, 6)
@@ -770,16 +758,15 @@ class ConnChamber(SocialNetwork):
     """Network that calculates new connection probabilities at every time step, optionally specifying the probability,
     ``p_opp``, that an agent will interact with another agent holding an opposing opinion.
 
-    Note that this can be trivially used with NoisySocialNetworks (below) by passing ``conn_method``, ``p_opp``, and ``update_conn`` to the
+    Note that this can be trivially used with NoisySocialNetworks (below) by passing ``conn_method``, ``p_opp``, to the
     :meth:`set_social_interactions` method.
 
     This class demonstrates a default implementation of continuous connection updates. Updating the connections at every time step doesn't
     seem to change the results but does incur additional computational costs.
 
-    Just in case, the delayed internal noise figure is run by default with ``update_conn=True``.
     """
 
-    def set_social_interactions(self, p_opp=0, update_conn=True, *args, **kwargs):
+    def set_social_interactions(self, p_opp=0, *args, **kwargs):
         from opdynamics.dynamics.socialinteractions import (
             compute_connection_probabilities_opp,
         )
@@ -788,7 +775,6 @@ class ConnChamber(SocialNetwork):
         super().set_social_interactions(
             *args,
             conn_method=conn_method,
-            update_conn=update_conn,
             p_opp=p_opp,
             rng=self.rn,
             **kwargs,

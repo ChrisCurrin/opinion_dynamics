@@ -4,7 +4,7 @@ from unittest import TestCase
 
 from opdynamics.socialnetworks import SocialNetwork
 from opdynamics.dynamics.socialinteractions import (
-    get_social_interaction,
+    compute_social_interaction,
     get_social_interaction_exp,
 )
 
@@ -28,7 +28,7 @@ class TestSocialInteraction(TestCase):
         active_threshold = 0
 
         self.sn.rn = np.random.default_rng(42)
-        adj_mat = get_social_interaction(self.sn, active_threshold, r)
+        adj_mat = compute_social_interaction(self.sn, active_threshold, r)
         self.assertTrue(np.all(np.sum(adj_mat, axis=0) == self.sn.m))
         self.assertTrue(
             np.all(adj_mat.diagonal() == 0), "expected no interactions with self"

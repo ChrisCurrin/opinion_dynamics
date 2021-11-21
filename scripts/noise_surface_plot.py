@@ -49,7 +49,6 @@ if __name__ == "__main__":
         gamma=2.1,
         dt=0.01,
         r=0.5,
-        update_conn=True,
         cls=SampleChamber,
         method="RK45",
         name="sample chamber",

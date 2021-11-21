@@ -20,13 +20,17 @@ def dy_dt(t: float, y: np.ndarray, *args) -> np.ndarray:
     1. get the interactions (A) that happen at this time point between each of N agents based on activity
     probabilities (p_conn) and the number of agents to interact with (m).
 
-    2. calculate opinion derivative by getting the scaled (by social influence, alpha) opinions (y.T) of agents
+    2. calculate opinion derivative by getting the scaled (by social influence, alpha) opinions (y) of agents
     interacting with each other (A), multiplied by social interaction strength (K).
 
     """
     K, alpha, adj, dt = args
+    if t - adj.last_update >= dt:
+        adj.last_update = t
+        from opdynamics.dynamics.socialinteractions import SocialInteraction
 
-    adj.update_connection_probabilities(y)
+        adj: SocialInteraction
+        adj.update_connection_probabilities(y)
 
     # get activity matrix for this time point
     At = adj[int(t / dt)]
@@ -50,8 +54,12 @@ def sample_dy_dt(t: float, y: np.ndarray, *all_args) -> np.ndarray:
 
     """
     clt_sample_method, sn, n, num_samples, *other_args = all_args
-    if np.round(t % other_args[-1], 6) == 0:
-        # calculate sample means every explicit dt (other_args[-1]) - independent of solver's dt
+    adj, dt = other_args[-2:]
+    from opdynamics.dynamics.socialinteractions import SocialInteraction
+    assert isinstance(adj, SocialInteraction)
+    if t - adj.last_update >= dt:
+        adj.last_update = t
+        # calculate sample means every explicit dt - independent of solver's dt
         if type(n) is tuple:
             # choose between low and high values (randint not implemented for default_rng)
             n = sn.rn.choice(np.arange(n[0], n[1], dtype=int))
@@ -66,8 +74,9 @@ def sample_dy_dt_activity(t: float, y: np.ndarray, *all_args) -> np.ndarray:
 
     """
     clt_sample_method, sn, n, num_samples, *other_args = all_args
-    K, alpha, A, dt = other_args
-    if np.round(t % dt, 6) == 0:
+    K, alpha, adj, dt = other_args
+    if t - adj.last_update >= dt:
+        adj.last_update = t
         # calculate sample means every explicit dt (other_args[-1]) - independent of solver's dt
         if type(n) is tuple:
             # choose between low and high values (randint not implemented for default_rng)
@@ -75,7 +84,7 @@ def sample_dy_dt_activity(t: float, y: np.ndarray, *all_args) -> np.ndarray:
         clt_sample_method(sn, y, n, num_samples)
 
     return sn.super_dy_dt(t, y, *other_args) + sn.D * np.sum(
-        A[int(t / dt)] * sn._sample_means, axis=1
+        adj[int(t / dt)] * sn._sample_means, axis=1
     )
 
 

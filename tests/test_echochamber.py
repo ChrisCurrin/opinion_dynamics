@@ -80,7 +80,7 @@ class TestSocialNetwork(TestCase):
 
         # this must be first (before setting activities and connection probabilities)
         with self.assertRaises(RuntimeError):
-            self.sn.set_social_interactions(0, 0, store_all=True)
+            self.sn.set_social_interactions(0, 0, store_all=False)
 
         # required setup
         # set activities to all be 1 (all agents interact at every time step)
@@ -91,14 +91,14 @@ class TestSocialNetwork(TestCase):
         # ------------------------------
         # probabilities must sum to 1 (by definition)
         for beta in np.arange(-2, 2, 0.5):
-            self.sn.set_social_interactions(beta, 0, store_all=True, update_conn=False)
+            self.sn.set_social_interactions(beta, 0, store_all=False)
             p_conn_i = np.round(np.sum(self.sn.adj_mat._p_conn, axis=1), 4)
             self.assertTrue(
                 np.all(p_conn_i == 1),
                 msg=f"probabilities do not sum to 1 for beta={beta}. p_conn_i={p_conn_i}",
             )
             self.assertAlmostEqual(
-                np.sum(self.sn.p_conn),
+                np.sum(self.sn.adj_mat._p_conn),
                 self.sn.N,
                 places=4,
                 msg=f"there should be {self.sn.N} probability distributions for beta={beta}",
@@ -107,7 +107,7 @@ class TestSocialNetwork(TestCase):
             self.assertTrue(np.all(diag_v == 0), "self-connections must be 0")
 
         # beta = 0 is the same as a uniform distribution
-        self.sn.set_social_interactions(0, 0, store_all=True, update_conn=False)
+        self.sn.set_social_interactions(0, 0, store_all=False)
         diag_mat = np.diagflat([1] * self.sn.N).astype(bool)
         self.assertTrue(
             np.all(np.round(self.sn.adj_mat._p_conn[~diag_mat], 4) == (1 / self.sn.N)),
@@ -117,8 +117,8 @@ class TestSocialNetwork(TestCase):
         # ------------------------------
         # test different r's
         # ------------------------------
-        for r in [0, 0.2, 0.5, 0.8, 1]:
-            self.sn.set_social_interactions(0, r, store_all=True)
+        for r in [0, 0.2, 0.4, 0.5, 0.6, 0.8, 1]:
+            self.sn.set_social_interactions(0, r, store_all=False)
             mat = self.sn.adj_mat[0]
             total = np.sum(mat)
 
@@ -192,7 +192,7 @@ class TestSocialNetwork(TestCase):
 
         # required setup
         self.sn.set_activities(negpowerlaw, gamma, epsilon)
-        self.sn.set_social_interactions(beta=beta, r=r, store_all=True)
+        self.sn.set_social_interactions(beta=beta, r=r, store_all=False)
         self.sn.set_dynamics()
 
         # run network using scipy solver (Rk45) and custom solver (Euler)
@@ -219,10 +219,13 @@ class TestSocialNetwork(TestCase):
 
         self.sn.N = 10000
         self.sn.init_opinions(-1, 1)
-        self.assertAlmostEqual(np.mean(self.sn._opinions), 0, 2)
+        self.assertEqual(
+            self.sn.opinions.shape, (self.sn.N,), "expected opinion array of shape (N,)"
+        )
+        self.assertAlmostEqual(np.mean(self.sn.opinions), 0, 2)
 
         self.sn.set_activities(negpowerlaw, gamma, epsilon)
-        self.sn.set_social_interactions(beta=beta, r=r, store_all=True)
+        self.sn.set_social_interactions(beta=beta, r=r, store_all=False)
         self.sn.set_dynamics()
 
         T = 0.02
@@ -271,12 +274,12 @@ class TestSocialNetwork(TestCase):
         _predictable_interaction(ec_last)
         ec_last.set_dynamics()
 
-        filename_T0 = self.sn.filename()
+        filename_T0 = self.sn.filename
         self.assertFalse(os.path.exists(filename_T0))
         self.assertFalse(self.sn.load(dt, T))
 
         self.sn.run_network(dt, T)
-        filename = self.sn.filename()
+        filename = self.sn.filename
 
         try:
             # last time point only
@@ -284,7 +287,7 @@ class TestSocialNetwork(TestCase):
             self.assertTrue(saved_filename, filename)
             self.assertTrue(os.path.exists(filename))
             self.assertTrue(ec_last.load(dt, T), "did not load results as expected")
-            self.assertTrue(ec_last.has_results, "expected results to loaded")
+            print(ec_last.result)
             self.assertListEqual(
                 list(ec_last.result.t), [T], "expected single time point"
             )
@@ -294,13 +297,7 @@ class TestSocialNetwork(TestCase):
             saved_filename = self.sn.save(False)
             self.assertTrue(saved_filename, filename)
             self.assertTrue(os.path.exists(filename))
-
-            self.assertTrue(
-                ec_T1.result is None, "expected results to be None before loading"
-            )
             self.assertTrue(ec_T1.load(dt, T), "did not load results as expected")
-            self.assertTrue(ec_T1.has_results, "expected results to loaded")
-            self.assertFalse(ec_T2.has_results, "ec_T2 should still be a shell")
 
             self.assertListEqual(
                 list(self.sn.result.y.ravel()),
@@ -313,8 +310,8 @@ class TestSocialNetwork(TestCase):
                 "T1: expected activities to be the same",
             )
             self.assertListEqual(
-                list(self.sn.p_conn.ravel()),
-                list(ec_T1.p_conn.ravel()),
+                list(self.sn.adj_mat._p_conn.ravel()),
+                list(ec_T1.adj_mat._p_conn.ravel()),
                 "T1: expected p_conn to be the same",
             )
             self.assertListEqual(
@@ -330,8 +327,8 @@ class TestSocialNetwork(TestCase):
         T2 = np.round(T + T_more, 5)
         self.sn.run_network(dt, T_more, method="Euler")
         ec_T1.run_network(dt, T_more, method="Euler")
-        filename_T2 = self.sn.filename()
-        filename_T2_new_ec = ec_T1.filename()
+        filename_T2 = self.sn.filename
+        filename_T2_new_ec = ec_T1.filename
 
         self.assertEqual(
             filename,
@@ -366,8 +363,8 @@ class TestSocialNetwork(TestCase):
                 "T2: expected activities to be the same",
             )
             self.assertListEqual(
-                list(self.sn.p_conn.ravel()),
-                list(ec_T2.p_conn.ravel()),
+                list(self.sn.adj_mat._p_conn.ravel()),
+                list(ec_T2.adj_mat._p_conn.ravel()),
                 "T2: expected p_conn to be the same",
             )
             self.assertListEqual(
@@ -417,11 +414,7 @@ class TestNoisySocialNetwork(TestCase):
             self.assertTrue(saved_filename, filename)
             self.assertTrue(os.path.exists(filename))
 
-            self.assertFalse(
-                ec_D_const.has_results, "expected results to be None before loading"
-            )
             self.assertTrue(ec_D_const.load(dt, T), "did not load results as expected")
-            self.assertTrue(ec_D_const.has_results, "expected results to loaded")
 
             self.assertListEqual(
                 list(self.sn.result.y.ravel()),
@@ -487,11 +480,8 @@ class TestNoisySocialNetwork(TestCase):
                 "expected same D_hist to have same filename (hash)."
                 f"\n{ec_D_const}\n{ec_D_T2}",
             )
-            self.assertFalse(
-                ec_D_T2.has_results, "expected results to be None before loading"
-            )
+
             self.assertTrue(ec_D_T2.load(dt, T2), "did not load results as expected")
-            self.assertTrue(ec_D_T2.has_results, "expected results to loaded")
 
             # create D_hist to restore desired sim
             ec_D_change = NoisySocialNetwork(
@@ -507,13 +497,9 @@ class TestNoisySocialNetwork(TestCase):
                 "expected same D_hist to have same filename (hash)."
                 f"\n{self.sn}\n{ec_D_change}",
             )
-            self.assertFalse(
-                ec_D_change.has_results, "expected results to be None before loading"
-            )
             self.assertTrue(
                 ec_D_change.load(dt, T2), "did not load results as expected"
             )
-            self.assertTrue(ec_D_change.has_results, "expected results to loaded")
         finally:
             for f in files_to_del:
                 try:

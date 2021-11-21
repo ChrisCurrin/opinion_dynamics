@@ -123,7 +123,7 @@ def get_connection_probabilities_exp(
     return p_conn
 
 
-def get_social_interaction(
+def compute_social_interaction(
     sn: SocialNetwork,
     active_threshold: float,
     p_mutual_interaction: float,
@@ -227,7 +227,6 @@ class SocialInteraction:
     * ``sn`` - SocialNetwork to generate the social interaction from.
     * ``p_mutual_interaction`` - 'r', the probability of a mutual interaction between agents i and j.
     * ``conn_method`` - the method used to calculate connection probabilities
-    * ``update_conn`` - whether to update connection probabilities at every call (every `dt`).
     * ``conn_kwargs`` - keyword arguments for ``conn_method``. E.g. ``beta``.
 
 
@@ -249,7 +248,6 @@ class SocialInteraction:
     * ``_time_mat`` - adjacency matrix at each time point. Used to store eagerly computed results.
     * ``_last_adj_mat`` - keep a reference to the newest adjacency matrix of social interactions. Retrieved via [-1]
     * ``_p_conn`` - keep a reference to the latest connection probabilities matrix.
-    * ``_update_conn`` - whether to update connection probabilities at every dt (default True).
 
     """
 
@@ -258,12 +256,10 @@ class SocialInteraction:
         sn: SocialNetwork,
         p_mutual_interaction: float,
         conn_method=compute_connection_probabilities,
-        update_conn=True,
         **conn_kwargs,
     ):
         self.sn = sn
         self.p_mutual_interaction = p_mutual_interaction
-
         self.conn_method = conn_method
         # get (keyword) arguments for the connection probability method being used
         required_conn_kwargs = set(inspect.getfullargspec(conn_method)[0])
@@ -276,9 +272,10 @@ class SocialInteraction:
         }
         self.conn_kwargs = conn_kwargs
 
+        self.last_update: float = 0
+
         # private properties
         self._p_conn: np.ndarray = self.conn_method(sn.opinions, **conn_kwargs)
-        self._update_conn = update_conn
         self._accumulator = np.zeros((sn.N, sn.N), dtype=int)
         self._last_adj_mat: np.ndarray = None
         self._time_mat: np.memmap = None
@@ -393,11 +390,7 @@ class SocialInteraction:
             return self._time_mat[item]
 
         # compute interactions
-
-        # if self._update_conn:
-        #     self._p_conn = self.conn_method(self.sn, **self.conn_kwargs)
-
-        self._last_adj_mat = get_social_interaction(
+        self._last_adj_mat = compute_social_interaction(
             self.sn, self.sn.rn.random(), self.p_mutual_interaction, self._p_conn
         )
         # update accumulator
@@ -422,5 +415,4 @@ class SocialInteraction:
             f"Aij[r={self.p_mutual_interaction}] "
             f"{self.conn_method.__name__}("
             f"{json.dumps(self.conn_kwargs, sort_keys=True, separators=(',', ':'), cls=NpEncoder)})"
-            f"{'(t)' if self._update_conn else ''}"
         )
