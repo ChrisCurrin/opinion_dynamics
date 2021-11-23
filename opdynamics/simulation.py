@@ -70,7 +70,7 @@ def run_params(
 
     :return: Instance of SocialNetwork (or a subclass)
     """
-    from opdynamics.utils.cache import cache_ec
+    from opdynamics.utils.cache import process_cache_arg
 
     if method is None:
         if cls is OpenChamber:
@@ -79,7 +79,10 @@ def run_params(
             method = "RK45"
 
     # allow explicit setting of storing interactions
-    store_all = sim_kwargs.pop("store_all", cache == "all")
+    store_all = sim_kwargs.pop(
+        "store_all",
+        cache == "all" or (isinstance(cache, str) and "interaction" in cache),
+    )
     activity_distribution = sim_kwargs.pop("distribution", activity_distribution)
 
     logger.debug(
@@ -89,19 +92,25 @@ def run_params(
     )
     logger.debug(f"additional args={sim_args}\tadditional kwargs={sim_kwargs}")
 
-    _ec = cls(N, m, K, alpha, *sim_args, **sim_kwargs)
-    _ec.set_activities(activity_distribution, gamma, epsilon, 1, dim=1, **sim_kwargs)
-    _ec.set_social_interactions(
+    _sn = cls(N, m, K, alpha, *sim_args, **sim_kwargs)
+    _sn.set_activities(activity_distribution, gamma, epsilon, 1, dim=1, **sim_kwargs)
+    _sn.set_social_interactions(
         beta=beta, r=r, store_all=store_all, dt=dt, t_dur=T, **sim_kwargs
     )
-    _ec.set_dynamics(*sim_args, **sim_kwargs)
-    if not (cache and _ec.load(dt, T)):
-        _ec.run_network(dt=dt, t_dur=T, method=method)
-        cache_ec(cache, _ec, write_mapping=write_mapping)
+    _sn.set_dynamics(*sim_args, **sim_kwargs)
+    if not (cache and _sn.load(dt, T)):
+        _sn.run_network(dt=dt, t_dur=T, method=method)
+        if cache:
+            _sn.save(
+                *process_cache_arg(cache),  # only_last, comp_level
+                write_mapping=write_mapping,
+                dt=dt,
+                raise_error=True,
+            )
 
     if plot_opinion:
-        show_simulation_results(_ec, plot_opinion)
-    return _ec
+        show_simulation_results(_sn, plot_opinion)
+    return _sn
 
 
 def run_periodic_noise(
@@ -195,7 +204,7 @@ def run_periodic_noise(
 
     :return: NoisySocialNetwork created for the simulation.
     """
-    from opdynamics.utils.cache import cache_ec
+    from opdynamics.utils.cache import process_cache_arg
 
     if method is None:
         if cls is OpenChamber:
@@ -203,7 +212,10 @@ def run_periodic_noise(
         else:
             method = "RK45"
 
-    store_all = kwargs.pop("store_all", cache == "all")
+    store_all = kwargs.pop(
+        "store_all",
+        cache == "all" or (isinstance(cache, str) and "interaction" in cache),
+    )
     activity_distribution = kwargs.pop("distribution", activity_distribution)
 
     logger.debug(f"letting network interact without noise until {noise_start}.")
@@ -278,7 +290,13 @@ def run_periodic_noise(
 
             pbar.update(recovery)
 
-        cache_ec(cache, nsn, write_mapping=write_mapping)
+        if cache:
+            nsn.save(
+                *process_cache_arg(cache),  # only_last, comp_level
+                write_mapping=write_mapping,
+                dt=dt,
+                raise_error=True,
+            )
 
     if plot_opinion:
         if plot_kws is None:

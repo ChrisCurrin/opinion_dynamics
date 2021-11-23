@@ -28,7 +28,7 @@ from opdynamics.utils.distributions import negpowerlaw
 from opdynamics.utils.errors import ECSetupError
 from opdynamics.utils.plot_utils import get_time_point_idx
 
-logger = logging.getLogger("SocialNetwork")
+logger = logging.getLogger("social_networks")
 
 
 @hashable
@@ -73,7 +73,6 @@ class SocialNetwork(object):
 
         # create a human-readable name for ths object
         self.name = name
-        self.filename = filename
 
         # assign args to object variables
         self.N = N
@@ -101,6 +100,7 @@ class SocialNetwork(object):
 
         # other public attributes assigned during an operation
         self.save_txt: str = None
+        self.filename: str = filename
 
     def init_opinions(self, min_val=-1.0, max_val=1.0):
         """Randomly initialise opinions for all N agents between [min_val, max_val] from a uniform distribution
@@ -239,9 +239,12 @@ class SocialNetwork(object):
             if os.path.split(value)[0] == "":
                 # no parent specified
                 value = os.path.join(get_cache_dir(), value)
-            if os.path.splitext(value)[1] == "":
-                # no extension specified
-                value = value + ".h5"
+            root, ext = os.path.splitext(value)
+            value = value + ".h5"
+                
+            if self.adj_mat is not None:
+                self.adj_mat.filename = value
+
         self._filename = value
 
     def _setup_run(self, dt: float, t_dur: float) -> Tuple[float, float]:
@@ -257,7 +260,7 @@ class SocialNetwork(object):
             # noinspection PyTypeChecker
             self.prev_result: SolverResult = copy.deepcopy(self.result)
         logger.debug(f"running dynamics from {t_start:.6f} until {t_end:.6f}. dt={dt}")
-        
+
         if self._store_interactions:
             self.adj_mat.store_interactions(dt, t_end)
         return np.round(t_start, 6), np.round(t_end, 6)
@@ -555,7 +558,6 @@ class SocialNetwork(object):
     def save(
         self,
         only_last=True,
-        interactions=True,
         complevel=DEFAULT_COMPRESSION_LEVEL,
         write_mapping=True,
         dt=None,
@@ -615,8 +617,8 @@ class SocialNetwork(object):
                     df_meta,
                 ]:
                     df.to_hdf(filename, df.name, **meta)
-            if interactions:
-                self.adj_mat.compress()
+            # only saves if self._store_interactions is True
+            self.adj_mat.compress()
         except (HDF5ExtError, AttributeError) as err:
             err_msg = f"Could not save {self} to {filename}. \n{err}"
             if raise_error:

@@ -31,14 +31,14 @@ import json
 import logging
 import os
 from functools import lru_cache
-from typing import Tuple, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 from opdynamics.socialnetworks import SocialNetwork
 from opdynamics.utils.cache import NpEncoder, get_hash_filename
 from opdynamics.utils.decorators import hashable
 
-logger = logging.getLogger("social interaction")
+logger = logging.getLogger("social_interactions")
 
 
 def compute_connection_probabilities(
@@ -280,10 +280,35 @@ class SocialInteraction:
         self._last_adj_mat: np.ndarray = None
         self._time_mat: np.memmap = None
 
+        # will be None if sn._filename is not set (must be private property)
+        self.filename = sn._filename
+
         assert (
             0 <= p_mutual_interaction <= 1
         ), "p_mutual_interaction is a probability between 0 and 1"
         logger.debug(f"Social Interaction for {sn.name} initialised {self}.")
+
+    @property
+    def filename(self):
+        if self._filename is None:
+            self._filename = get_hash_filename(self, "dat", extra=f"{self.sn}")
+            logging.debug(f"generated filename for {self} is {self._filename}")
+        return self._filename
+
+    @filename.setter
+    def filename(self, value: Optional[str]):
+        if value is not None:
+            from opdynamics.utils.cache import get_cache_dir
+
+            if os.path.split(value)[0] == "":
+                # no parent specified
+                value = os.path.join(get_cache_dir(), value)
+
+            root, ext = os.path.splitext(value)
+            value = root + ".dat"
+            if self._time_mat is not None:
+                self._copy_interactions(value)
+        self._filename = value
 
     def get_connection_probabilities(self) -> np.ndarray:
         return self._p_conn
@@ -302,35 +327,36 @@ class SocialInteraction:
 
     def compress(self, overwrite=True):
         if self._time_mat is not None:
-            adj_mat_file_compressed = self._time_mat.filename.replace(".dat", ".npz")
+            adj_mat_file_compressed = self.filename.replace(".dat", ".npz")
             if overwrite or not os.path.exists(adj_mat_file_compressed):
                 logger.debug(f"saving full adj_mat to '{adj_mat_file_compressed}'")
                 # save compressed version
                 np.savez_compressed(adj_mat_file_compressed, time_mat=self._time_mat)
                 # delete previous mmap file to explicitly clear storage
-                self.clear()
+                self.clear(delete_file=".dat", raise_error=False)
                 # link to stored version
-                self._time_mat = np.load(adj_mat_file_compressed, mmap_mode="r+")[
-                    "time_mat"
-                ]
+                npzfile = np.load(adj_mat_file_compressed, mmap_mode="r+")
+                self._filename = npzfile.zip.filename
+                self._time_mat = npzfile["time_mat"]
                 logger.debug(f"...saved full adj_mat and deleted memory map")
 
-    def clear(self, raise_error=False):
-        fname = self._time_mat.filename
+    def clear(self, delete_file=True, raise_error=False):
         del self._time_mat
         self._time_mat = None
-        if os.path.exists(fname):
+        if isinstance(delete_file, str):
+            delete_file = self.filename.endswith(delete_file)
+        if delete_file and os.path.exists(self.filename):
             try:
-                os.remove(fname)
+                os.remove(self.filename)
             except OSError as err:
-                logger.warning(f"could not delete mmap file {fname}")
+                logger.warning(f"could not delete mmap file {self.filename}")
                 if raise_error:
                     raise err
 
     def store_interactions(self, dt: float, t_dur: float):
         """Initialise the object to store social interactions (the adjacency matrix) for each time step until t_dur."""
         t_arr = np.arange(0, t_dur + dt, dt)
-        adj_mat_memmap_file = get_hash_filename(self, "dat", extra=f"{self.sn}")
+        adj_mat_memmap_file = self.filename
 
         is_extend_time = self._time_mat is not None
 
@@ -347,9 +373,29 @@ class SocialInteraction:
 
         # set up hook to clean up upon system exit
         if not is_extend_time:
-            atexit.register(self.clear)
+            atexit.register(self.clear, delete_file=".dat")
 
         logger.debug(f"adjacency matrix has shape = {self._time_mat.shape}")
+
+    def _copy_interactions(self, fname: str):
+        assert fname.endswith(".dat")
+
+        if os.path.exists(fname):
+            return  # already exists
+
+        prev_time_mat = self._time_mat
+
+        if prev_time_mat is not None:
+            logger.debug(f"copying interactions to {fname}")
+            # new empty file
+            self._time_mat = np.memmap(
+                fname,
+                dtype=int,
+                mode="w+",
+                shape=prev_time_mat.shape,
+            )
+            # copy data
+            self._time_mat[:] = prev_time_mat[:]
 
     def accumulate(self, t_idx: Union[int, slice, Tuple[int, int]] = -1):
         """The total number of interactions between agents i and j (matrix).

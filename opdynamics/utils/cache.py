@@ -6,7 +6,7 @@ import logging
 import json
 import numpy as np
 import pandas as pd
-
+from enum import Enum
 from opdynamics.socialnetworks import SocialNetwork
 from opdynamics.utils.constants import DEFAULT_COMPRESSION_LEVEL
 
@@ -96,34 +96,29 @@ class cache_dir:
         _cache_dir = self.saved_dir
 
 
-def cache_ec(
-    cache: Union[str, int, bool], sn: SocialNetwork, write_mapping=True
-) -> None:
-    """Cache an SocialNetwork object if `cache` is neither `False` nor `None`.
+def process_cache_arg(cache: Union[str, int]) -> Tuple[bool, int]:
+    """Process the cache argument and return the appropriate value
 
-    :param cache: Either "all" or True (last time point) or ℤ ∈ [1, 9] for compression level (last time point).
-    :param sn: SocialNetwork (or subclass) object to save.
-    :param write_mapping: Write to a file that maps the object's string representation and it's hash value.
+    :param cache: Either "all" or ℤ ∈ [1, 9] for compression level (last time point).
 
+    :return Tuple[bool, int]: (only_last, complevel)
     """
-    if cache:
-        if type(cache) is str:
-            cache = cache.replace("_", "").replace(" ", "").lower()
-            only_last = "all" not in cache
-            cache_interactions = "opinion" in cache
-            cache = cache.replace("all", "")
-            cache = cache.replace("opinion", "")
-        
-            complevel = int(cache) if cache.isnumeric() else DEFAULT_COMPRESSION_LEVEL
-            sn.save(
-                only_last=only_last,
-                interactions=cache_interactions,
-                complevel=complevel,
-                write_mapping=write_mapping,
-            )
-        else:
-            complevel = cache if cache > 1 else DEFAULT_COMPRESSION_LEVEL
-            sn.save(only_last=True, complevel=complevel, write_mapping=write_mapping)
+    only_last, complevel = True, DEFAULT_COMPRESSION_LEVEL
+    if type(cache) is str:
+        cache = cache.replace("_", "").replace(" ", "").lower()
+        only_last = "all" not in cache
+        cache = cache.replace("all", "")
+        cache = cache.replace("opinion", "").replace("interaction", "")
+        if len(cache) > 0:
+            if cache.isnumeric():
+                complevel = int(cache)
+            else:
+                raise ValueError(
+                    f"Invalid cache argument after processing: {cache}"
+                )
+    elif cache > 1:
+        complevel = cache
+    return only_last, complevel
 
 
 def save_results(file_name: str, sn: SocialNetwork, **kwargs) -> None:
