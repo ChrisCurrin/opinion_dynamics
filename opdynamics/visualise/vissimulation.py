@@ -99,12 +99,16 @@ def show_periodic_noise(
     from opdynamics.utils.plot_utils import get_time_point_idx
 
     if time_points is None:
-        time_points = [noise_start, noise_start + noise_length, -1]
+        time_points = [
+            noise_start,
+            noise_start + noise_length,
+            noise_start + noise_length + recovery,
+        ]
+    t_window = np.min([1.0, noise_start / 10.0])
     # calculate optimal bin edges from opinions distribution at noise start + noise_length
+    t_idx, opinions = nsn.opinions_at_t((time_points[1] - t_window, time_points[1]))
     hist, bin_edges = np.histogram(
-        nsn.result.y[
-            :, get_time_point_idx(nsn.result.t, float(noise_start + noise_length))
-        ],
+        opinions,
         bins="auto",
     )
 
@@ -126,7 +130,7 @@ def show_periodic_noise(
     )
     # plot graphs
     vis.show_opinions(
-        ax=ax_time, color_code="line", subsample=5, title=False, rasterized=True
+        ax=ax_time, color_code="line", subsample=5, lw=0.05, title=False, rasterized=True
     )
 
     ax_dist_time = None
@@ -137,10 +141,11 @@ def show_periodic_noise(
 
         vis.show_opinions_distribution(
             ax=ax_dist_time,
-            t=time_point,
+            t=(time_point - t_window, time_point),
             title=f"t = {time_point}",
             color=_colors[i],
             bins=bin_edges,
+            kde_kws={"bw_adjust": 0.5},
         )
         if i > 0:
             ax_dist_time.set_ylabel("")
@@ -151,7 +156,7 @@ def show_periodic_noise(
 
     x_data, y_data = nsn.result.t, nsn.result.y
     s = stats.describe(y_data)
-    lower_bound, upper_bound = - s.variance, s.variance
+    lower_bound, upper_bound = -s.variance, s.variance
     mask = np.logical_and(lower_bound < y_data, y_data < upper_bound)
     y_mask = y_data[mask]
     lim = (np.min(y_mask), np.max(y_mask))

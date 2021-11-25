@@ -30,7 +30,7 @@ import inspect
 import json
 import logging
 import os
-from functools import lru_cache
+from functools import lru_cache, partial
 from typing import Optional, Tuple, Union
 
 import numpy as np
@@ -263,13 +263,20 @@ class SocialInteraction:
         self.conn_method = conn_method
         # get (keyword) arguments for the connection probability method being used
         required_conn_kwargs = set(inspect.getfullargspec(conn_method)[0])
-        # remove social network as this is passed explicitly when called
+
         if "sn" in required_conn_kwargs:
+            # remove social network as this is passed explicitly when called
             required_conn_kwargs.remove("sn")
+
         # only save required (keyword) arguments
         conn_kwargs = {
             k: v for k, v in conn_kwargs.items() if k in required_conn_kwargs
         }
+        if "rng" in required_conn_kwargs:
+            # method then becomes partial method with random number generator attached
+            self.conn_method = partial(self.conn_method, rng=self.sn.rn)
+            self.conn_method.__name__ = conn_method.__name__
+
         self.conn_kwargs = conn_kwargs
 
         self.last_update: float = 0
@@ -411,7 +418,7 @@ class SocialInteraction:
         elif self._time_mat is not None:
             if isinstance(t_idx, int):
                 return np.sum(self._time_mat[:t_idx], axis=0)
-            elif np.iterable(t_idx):
+            elif np.iterable(t_idx) and len(t_idx) == 2:
                 return np.sum(self._time_mat[t_idx[0] : t_idx[1]], axis=0)
             # slice
             return np.sum(self._time_mat[t_idx], axis=0)

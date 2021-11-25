@@ -67,9 +67,7 @@ class SocialNetwork(object):
     ):
         from opdynamics.dynamics.socialinteractions import SocialInteraction
 
-        # create a random number generator for this object (to be thread-safe)
-        self.rn = default_rng(seed)
-        self._seed = seed
+        self.seed = seed
 
         # create a human-readable name for ths object
         self.name = name
@@ -101,6 +99,17 @@ class SocialNetwork(object):
         # other public attributes assigned during an operation
         self.save_txt: str = None
         self.filename: str = filename
+
+    @property
+    def seed(self):
+        return self._seed
+    
+    @seed.setter
+    def seed(self, value: int):
+        # create a random number generator for this object (to be thread-safe)
+        self.rn = default_rng(value)
+        self._seed = value
+
 
     def init_opinions(self, min_val=-1.0, max_val=1.0):
         """Randomly initialise opinions for all N agents between [min_val, max_val] from a uniform distribution
@@ -188,7 +197,6 @@ class SocialNetwork(object):
                 sn.set_social_interactions(...)
                 """
             )
-
         self.adj_mat = SocialInteraction(self, r, beta=beta, **kwargs)
         self._beta = beta
         self._store_interactions = store_all
@@ -201,13 +209,18 @@ class SocialNetwork(object):
 
         self.dy_dt = dy_dt
 
-    def opinions_at_t(self, t: Union[int, float] = -1):
+    def opinions_at_t(
+        self, t: Union[Tuple[Union[int, float]], int, float] = -1, flatten: int = True
+    ):
         t_idx = get_time_point_idx(self.result.t, t)
-        return self.result.y[:, t_idx]
+        _opinions: np.ndarray = self.result.y[:, t_idx]
+        if flatten:
+            _opinions = _opinions.ravel()
+        return t_idx, _opinions
 
     @property
     def opinions(self) -> np.ndarray:
-        return self.opinions_at_t(-1)
+        return self.opinions_at_t(-1)[-1]
 
     @property
     def all_opinions(self) -> np.ndarray:
@@ -241,7 +254,7 @@ class SocialNetwork(object):
                 value = os.path.join(get_cache_dir(), value)
             root, ext = os.path.splitext(value)
             value = value + ".h5"
-                
+
             if self.adj_mat is not None:
                 self.adj_mat.filename = value
 
@@ -409,9 +422,8 @@ class SocialNetwork(object):
         and :math:`\\sum_j a_{ij}` is the degree of node `i`.
 
         """
-        idx = get_time_point_idx(self.result.t, t)
+        idx, opinions = self.opinions_at_t(t)
         snapshot_adj_mat = self.adj_mat.accumulate(idx)
-        opinions = self.result.y[:, idx]
         return nearest_neighbours(opinions, snapshot_adj_mat)
 
     # noinspection NonAsciiCharacters
@@ -437,8 +449,7 @@ class SocialNetwork(object):
 
 
         """
-        t_idx = get_time_point_idx(self.result.t, t)
-        opinions = self.result.y[:, t_idx]
+        t_idx, opinions = self.opinions_at_t(t)
         return distribution_modality(opinions)
 
     def get_change_in_opinions(self, dt=0.01) -> np.ndarray:
@@ -464,17 +475,17 @@ class SocialNetwork(object):
 
         import networkx as nx
 
-        t_idx = get_time_point_idx(self.result.t, t)
-        if np.iterable(t_idx):
-            last_t_idx = t_idx[1]
-        else:
-            last_t_idx = t_idx
+        t_idx, opinions = self.opinions_at_t(t)
 
         conn_weights = self.adj_mat.accumulate(t_idx)
 
         G = nx.DiGraph()
 
-        df_opinions_at_t = self.result_df().iloc[last_t_idx]
+        if np.iterable(t_idx):
+            # just need last time index for last opinion
+            t_idx = t_idx[-1]
+
+        df_opinions_at_t = self.result_df().iloc[t_idx]
 
         for i in self.agent_idxs:
             G.add_node(i, x=df_opinions_at_t[i])
@@ -778,7 +789,6 @@ class ConnChamber(SocialNetwork):
             *args,
             conn_method=conn_method,
             p_opp=p_opp,
-            rng=self.rn,
             **kwargs,
         )
 

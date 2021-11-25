@@ -138,8 +138,9 @@ class VisSocialNetwork(object):
 
         """
         cmap = kwargs.pop("cmap", INTERACTIONS_CMAP)
+        vmin = kwargs.pop("vmin", 1)
 
-        t_idx = get_time_point_idx(self.sn.result.t, t)
+        t_idx, opinions = self.sn.opinions_at_t(t)
 
         conn_weights = self.sn.adj_mat.accumulate(t_idx)
 
@@ -147,8 +148,8 @@ class VisSocialNetwork(object):
             conn_weights,
             "Number of interactions",
             *args,
-            vmin=1,
             cmap=cmap,
+            vmin=vmin,
             title=title,
             **kwargs,
         )
@@ -227,7 +228,12 @@ class VisSocialNetwork(object):
                 c = sm.to_rgba(agent_opinions.values)
                 s = kwargs.pop("s", 0.1)
                 ax.scatter(
-                    agent_opinions.index, agent_opinions.values, c=c, s=s, lw=0, **kwargs
+                    agent_opinions.index,
+                    agent_opinions.values,
+                    c=c,
+                    s=s,
+                    lw=0,
+                    **kwargs,
                 )
         else:
             ls = kwargs.pop("ls", "-")
@@ -276,10 +282,10 @@ class VisSocialNetwork(object):
         cmap = kwargs.pop("cmap", "viridis")
         df_opinions = self.sn.result_df()
 
-        idx = get_time_point_idx(self.sn.result.t, t)
+        t_idx, opinions = self.sn.opinions_at_t(t)
 
-        t_val = df_opinions.index[idx]
-        df_change_from_start = np.abs(df_opinions.iloc[idx] - df_opinions)
+        t_val = df_opinions.index[t_idx]
+        df_change_from_start = np.abs(df_opinions.iloc[t_idx] - df_opinions)
 
         vmin = kwargs.pop("vmin", np.max([df_change_from_start.values.min(), 1]))
         vmax = kwargs.pop("vmax", df_change_from_start.values.max())
@@ -325,16 +331,19 @@ class VisSocialNetwork(object):
         title: str = "Opinions distribution",
         **kwargs,
     ) -> Tuple[Figure, Axes]:
-        idx = get_time_point_idx(self.sn.result.t, t)
+        t_idx, opinions = self.sn.opinions_at_t(t)
+
         bins = kwargs.pop("bins", "auto")
         kwargs.setdefault("color", "Purple")
         kwargs.setdefault("kde", True)
         kwargs.setdefault("stat", "probability")
+        bw_adjust = kwargs.pop("bw_adjust", 0.5)
+        kwargs.setdefault("kde_kws", dict(bw_adjust=bw_adjust))
         vertical = kwargs.pop("vertical", False)
 
         data = {
-            "x": self.sn.result.y[:, idx] if not vertical else None,
-            "y": self.sn.result.y[:, idx] if vertical else None,
+            "x": opinions if not vertical else None,
+            "y": opinions if vertical else None,
         }
         sns.histplot(**data, bins=bins, ax=ax, **kwargs)
 
@@ -365,8 +374,8 @@ class VisSocialNetwork(object):
     ) -> Tuple[Figure, Axes]:
         cmap = kwargs.pop("cmap", OPINIONS_CMAP)
 
-        idx = get_time_point_idx(self.sn.result.t, t)
-        opinions = self.sn.result.y[:, idx]
+        t_idx, opinions = self.sn.opinions_at_t(t)
+
         agents = np.arange(self.sn.N)
         if not direction:
             # only magnitude
@@ -447,13 +456,13 @@ class VisSocialNetwork(object):
         from opdynamics.visualise.dense import show_jointplot
 
         nn = self.sn.get_nearest_neighbours(t)
-        idx = get_time_point_idx(self.sn.result.t, t)
-        opinions = self.sn.result.y[:, idx]
+        t_idx, opinions = self.sn.opinions_at_t(t)
+
         kwargs.setdefault("color", "Purple")
         marginal_kws = kwargs.pop("marginal_kws", dict())
         marginal_kws.update(bw=bw_adjust)
         fig, ax_joint, ax_marg_x, ax_marg_y = show_jointplot(
-            self.sn._opinions,
+            opinions,
             nn,
             bw=bw_adjust,
             marginal_kws=marginal_kws,

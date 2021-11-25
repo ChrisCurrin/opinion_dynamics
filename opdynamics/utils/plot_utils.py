@@ -35,15 +35,17 @@ def get_time_point_idx(
         assert (
             len(time_point_or_index) == 2
         ), "`t` should be either a single value or 2 values in a tuple/list"
-        return (
+        return np.arange(
             get_time_point_idx(time_series, time_point_or_index[0]),
             get_time_point_idx(time_series, time_point_or_index[1]),
         )
-
-    if isinstance(time_point_or_index, int) and time_point_or_index not in (0, -1):
+    elif isinstance(time_point_or_index, int) and time_point_or_index not in (0, -1):
         logger.warn(
             "'t' passed as an integer and will be treated as an array index. Pass as a float (e.g. 1.0) to treat as a time point."
         )
+    elif isinstance(time_point_or_index, slice):
+        return time_series[time_point_or_index]
+
     return int(
         np.argmin(np.abs(time_point_or_index - time_series))
         if isinstance(time_point_or_index, float)

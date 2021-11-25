@@ -593,7 +593,7 @@ def run_product(
                     convert_dir, f"{vaex_chunk_name}_batch_{i}.hdf5"
                 )
                 vaex_df.export(fname_chunk)
-                vaex_df.close_files()
+                vaex_df.close()
                 file_names.append(fname_chunk)
 
             num_chunks = i + 1
@@ -605,8 +605,11 @@ def run_product(
             # see https://github.com/vaexio/vaex/issues/486 for more info
             df.export(vaex_file_name, progress=True)
 
-            for _df in df.dfs:
-                _df.close_files()
+            if hasattr(df, "dfs"):
+                for _df in df.dfs:
+                    _df.close()
+            else:
+                df.close()
 
             logger.info("removing conversion directory")
             try:
