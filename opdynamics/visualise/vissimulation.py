@@ -90,6 +90,7 @@ def show_periodic_noise(
     num,
     D,
     time_points=None,
+    t_window=0.,
 ):
     logger.debug("plotting periodic noise")
     import matplotlib.pyplot as plt
@@ -104,7 +105,6 @@ def show_periodic_noise(
             noise_start + noise_length,
             noise_start + noise_length + recovery,
         ]
-    t_window = np.min([1.0, noise_start / 10.0])
     # calculate optimal bin edges from opinions distribution at noise start + noise_length
     t_idx, opinions = nsn.opinions_at_t((time_points[1] - t_window, time_points[1]))
     hist, bin_edges = np.histogram(

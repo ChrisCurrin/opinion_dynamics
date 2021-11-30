@@ -26,6 +26,8 @@ def dy_dt(t: float, y: np.ndarray, *args) -> np.ndarray:
 
     """
     K, alpha, adj, dt = args
+    
+    # the rounding is to avoid floating point errors at extreme decimal point locations
     act_dyn_t_idx = int(np.round(t / dt, 12))
     if act_dyn_t_idx > adj.last_update:
         adj.last_update = act_dyn_t_idx
@@ -35,7 +37,6 @@ def dy_dt(t: float, y: np.ndarray, *args) -> np.ndarray:
         adj.update_connection_probabilities(y)
 
     # get activity matrix for this time point
-    # the rounding is to avoid floating point errors at extreme decimal point locations
     At = adj[act_dyn_t_idx]
     return -y.ravel() + K * np.sum(At * np.tanh(alpha * y.ravel()), axis=1)
 
