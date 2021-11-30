@@ -348,7 +348,8 @@ class SocialNetwork(object):
             # use a method in `scipy.integrate`
             # use custom OdeResult (which SolverResult inherits from) for type
             from opdynamics.integrate.types import OdeResult
-
+            # TODO: add t_eval to solve_ivp
+            t_eval = np.arange(t_span[0], t_span[1], dt)
             # noinspection PyTypeChecker
             self.result = OdeResult(
                 solve_ivp(
@@ -740,11 +741,10 @@ class SocialNetwork(object):
                         # not everything loaded
                         return False
 
-                if self.adj_mat._time_mat is not None:
-                    adj_mat_file_compressed = self.adj_mat._time_mat.filename.replace(
+                adj_mat_file_compressed = self.adj_mat.filename.replace(
                         ".dat", ".npz"
                     )
-
+                if os.path.exists(adj_mat_file_compressed):
                     new_time_mat = np.load(adj_mat_file_compressed, mmap_mode="r+")[
                         "time_mat"
                     ]
