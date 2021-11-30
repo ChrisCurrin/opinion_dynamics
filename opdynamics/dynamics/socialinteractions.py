@@ -441,7 +441,7 @@ class SocialInteraction:
         if self._time_mat is not None and np.sum(self._time_mat[item]) > 0:
             # we are storing interactions and have already computed this item (not every value is 0)
             return self._time_mat[item]
-        logger.debug(f"computing adjacency matrix for t={item}")
+
         # compute interactions
         self._last_adj_mat = compute_social_interaction(
             self.sn, self.sn.rn.random(), self.p_mutual_interaction, self._p_conn
