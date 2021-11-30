@@ -286,9 +286,11 @@ class SocialInteraction:
         self._accumulator = np.zeros((sn.N, sn.N), dtype=int)
         self._last_adj_mat: np.ndarray = None
         self._time_mat: np.memmap = None
+        self._t_arr: np.ndarray = None
 
         # will be None if sn._filename is not set (must be private property)
         self.filename = sn._filename
+        self._is_custom_filename = sn._filename is not None
 
         assert (
             0 <= p_mutual_interaction <= 1
@@ -299,7 +301,7 @@ class SocialInteraction:
     def filename(self):
         if self._filename is None:
             self._filename = get_hash_filename(self, "dat", extra=f"{self.sn}")
-            logging.debug(f"generated filename for {self} is {self._filename}")
+            logger.debug(f"generated filename for {self} is {self._filename}")
         return self._filename
 
     @filename.setter
@@ -316,6 +318,46 @@ class SocialInteraction:
             if self._time_mat is not None:
                 self._copy_interactions(value)
         self._filename = value
+
+    def reset_filename(self, raise_error=False, show_warning=True):
+        """
+        Reset filename to hash and copy data automatically
+        """
+        prev_filename = self.filename
+        if self._is_custom_filename:
+            if show_warning:
+                logger.warning(
+                    f"{self} has a custom name of {prev_filename}, resetting to hash"
+                )
+            self._is_custom_filename = False
+        hash_filename = get_hash_filename(self, "dat", extra=f"{self.sn}")
+        if prev_filename == hash_filename:
+            # early return if no change
+            return prev_filename
+
+        # note: reassign private property
+        #   the equivalent is assign None to self.filename and then the next call 
+        #   to self.filename will generate the hash
+        self._filename = hash_filename
+
+        if self._time_mat is not None:
+            
+            # remove current reference to time_mat
+            self.clear(delete_file=False)
+
+            if os.path.exists(prev_filename):
+                os.rename(prev_filename, hash_filename)
+            elif os.path.exists(prev_filename.replace(".dat", ".npz")):
+                os.rename(prev_filename.replace(".dat", ".npz"), hash_filename)
+            else:
+                raise FileNotFoundError(
+                    f"{prev_filename} or {prev_filename.replace('.dat', '.npz')} not found"
+                )
+            dt = np.max(np.diff(self._t_arr))
+            # re-assign memory-mapped matrix to new filename
+            self.store_interactions(dt, self._t_arr[-1])
+
+        return self.filename
 
     def get_connection_probabilities(self) -> np.ndarray:
         return self._p_conn
@@ -334,6 +376,10 @@ class SocialInteraction:
 
     def compress(self, overwrite=True):
         if self._time_mat is not None:
+            if not self._is_custom_filename:
+                # get most up-to-date filename from hash
+                self.reset_filename()
+
             adj_mat_file_compressed = self.filename.replace(".dat", ".npz")
             if overwrite or not os.path.exists(adj_mat_file_compressed):
                 logger.debug(f"saving full adj_mat to '{adj_mat_file_compressed}'")
@@ -362,7 +408,7 @@ class SocialInteraction:
 
     def store_interactions(self, dt: float, t_dur: float):
         """Initialise the object to store social interactions (the adjacency matrix) for each time step until t_dur."""
-        t_arr = np.round(np.arange(0, t_dur + dt, dt), 6)
+        self._t_arr = np.round(np.arange(0, t_dur + dt, dt), 6)
         adj_mat_memmap_file = self.filename
 
         is_extend_time = self._time_mat is not None
@@ -371,11 +417,14 @@ class SocialInteraction:
             f"storing {1 + int(t_dur/dt)} adjacency matrices...\n{adj_mat_memmap_file}"
         )
 
+        if is_extend_time:
+            self._copy_interactions(adj_mat_memmap_file)
+
         self._time_mat = np.memmap(
             adj_mat_memmap_file,
             dtype=int,
             mode="r+" if os.path.exists(adj_mat_memmap_file) else "w+",
-            shape=(len(t_arr), self.sn.N, self.sn.N),
+            shape=(len(self._t_arr), self.sn.N, self.sn.N),
         )
 
         # set up hook to clean up upon system exit
