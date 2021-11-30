@@ -103,13 +103,12 @@ class SocialNetwork(object):
     @property
     def seed(self):
         return self._seed
-    
+
     @seed.setter
     def seed(self, value: int):
         # create a random number generator for this object (to be thread-safe)
         self.rn = default_rng(value)
         self._seed = value
-
 
     def init_opinions(self, min_val=-1.0, max_val=1.0):
         """Randomly initialise opinions for all N agents between [min_val, max_val] from a uniform distribution
@@ -305,7 +304,11 @@ class SocialNetwork(object):
         logger.debug(f"done running {self.name}")
 
     def run_network(
-        self, dt: float = 0.01, t_dur: float = 0.05, method: str = "Euler"
+        self,
+        dt: float = 0.01,
+        t_dur: float = 0.05,
+        method: str = "Euler",
+        show_method_pbar: bool = True,
     ) -> None:
         """Run a simulation for the SocialNetwork until `t_dur` with a time step of `dt`.
 
@@ -318,6 +321,7 @@ class SocialNetwork(object):
         :param t_dur: Time for simulation to span. Number of iterations will be at least t_dur/dt.
         :param method: Integration method to use. Must be one specified by `scipy.integrate.solver_ivp` or
             `opdynamics.integrate.solvers`
+        :param show_method_pbar: Show a progress bar for the integration method, if custom.
 
         """
         from scipy.integrate import solve_ivp
@@ -338,6 +342,7 @@ class SocialNetwork(object):
                 dt=dt,
                 args=args,
                 desc=self.name,
+                show_pbar=show_method_pbar,
             )
         else:
             # use a method in `scipy.integrate`

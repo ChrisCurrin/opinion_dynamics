@@ -13,14 +13,19 @@ SDE_INTEGRATORS = {"Euler-Maruyama": EulerMaruyama}
 
 
 def _run_solver(
-    solver, t_span: Tuple[float, float], dt: float, desc: str = "solver"
+    solver,
+    t_span: Tuple[float, float],
+    dt: float,
+    desc: str = "solver",
+    show_pbar=True,
 ) -> SolverResult:
     """Given a numerical integrator, call its 'step' method T/dt times (where T is last element of t_span)."""
     t_start, t_end = t_span
     t_arr = np.round(np.arange(t_start, t_end + dt, dt), 6)
     y_arr = np.zeros(shape=(len(t_arr), len(solver.y)))
     logger.debug(f"{len(t_arr)} iterations to do...")
-    for i, t in tenumerate(t_arr, desc=desc):
+
+    for i, t in tenumerate(t_arr, desc=desc, disable=(not show_pbar)):
         y_arr[i] = solver.y
         solver.step(t, dt)
     # add final y

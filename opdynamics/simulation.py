@@ -233,7 +233,6 @@ def run_periodic_noise(
         desc="periodic noise",
         total=t_dur,
     )
-    print()
     name = kwargs.pop("name", "")
     name += f"[num={num} interval={interval}]"
     nsn = cls(N, m, K, alpha, *args, **kwargs)
@@ -297,8 +296,9 @@ def run_periodic_noise(
                 dt=dt,
                 raise_error=True,
             )
-
+    
     if plot_opinion:
+        pbar.set_description(f"plotting")
         if plot_kws is None:
             plot_kws = {}
         show_periodic_noise(
@@ -313,7 +313,7 @@ def run_periodic_noise(
             title = f"{sample_size}" if sample_size else ""
             title += f" {sample_method}" if sample_method else ""
             fig.suptitle(title)
-
+    pbar.set_description(f"{nsn.name}")
     return nsn
 
 

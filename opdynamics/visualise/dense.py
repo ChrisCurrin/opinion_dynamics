@@ -280,12 +280,18 @@ def show_jointplot(
     # Set up empty default kwarg dicts
     joint_kws = {} if joint_kws is None else joint_kws.copy()
     joint_kws.update(kwargs)
+    joint_kws.setdefault("bw_adjust", 0.5)
+    joint_kws.setdefault("fill", True)
+    joint_kws.setdefault("thresh", 0.0)  # shade lowest
     marginal_kws = {} if marginal_kws is None else marginal_kws.copy()
+    marginal_kws.setdefault("bw_adjust", 0.5)
+    joint_kws.setdefault("fill", True)
     annot_kws = {} if annot_kws is None else annot_kws.copy()
 
     # Make a colormap based off the plot color
     if cmap is None:
         cmap = sns.cubehelix_palette(8, reverse=True, as_cmap=True)
+    joint_kws.setdefault("cmap", cmap)
 
     if ax_marg_x is not None:
         # Turn off tick visibility for the measure axis on the marginal plots
@@ -311,15 +317,13 @@ def show_jointplot(
     x_array = x_array[not_na]
     y_array = y_array[not_na]
 
-    joint_kws.setdefault("shade", True)
-    joint_kws.setdefault("cmap", cmap)
-    kdeplot(x=x_array, y=y_array, ax=ax_joint, **joint_kws)
+    sns.kdeplot(x=x_array, y=y_array, ax=ax_joint, **joint_kws)
 
     if ax_marg_x is not None:
         marginal_kws.setdefault("fill", True)
         marginal_kws.setdefault("color", sns.cubehelix_palette(8, reverse=True)[3])
-        kdeplot(x=x_array, vertical=False, ax=ax_marg_x, **marginal_kws)
-        kdeplot(y=y_array, vertical=True, ax=ax_marg_y, **marginal_kws)
+        sns.kdeplot(x=x_array, ax=ax_marg_x, **marginal_kws)
+        sns.kdeplot(y=y_array, ax=ax_marg_y, **marginal_kws)
 
     return fig, ax_joint, ax_marg_x, ax_marg_y
 
