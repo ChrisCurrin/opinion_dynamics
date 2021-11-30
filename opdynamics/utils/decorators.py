@@ -44,7 +44,7 @@ def optional_fig_ax(function: Callable):
     return wrapper
 
 
-class timeblock(object):
+class timeblock:
     """Context guard for timing a block of code"""
 
     def __enter__(self, name=""):
@@ -66,11 +66,8 @@ def timefunc(f):
 
     @wraps(f)
     def wrapper(*args, **kwargs):
-        start = time.time()
-        result = f(*args, **kwargs)
-        end = time.time()
-        logging.debug(f"function:{f.__name__} took: {end-start:2.2f} sec")
-        return result
+        with timeblock:
+            return f(*args, **kwargs)
 
     return wrapper
 
@@ -125,3 +122,57 @@ def hash_repeat(*args, **kwargs):
         ).hexdigest(),
         16,
     )
+
+
+class CountCalls:
+    """Simple counter, counting an invocation my means of a string (explicit call) or function name (decorator)
+
+    see: https://gist.github.com/AndiH/ba697e888fb4d92f37b31983949fe17c
+
+    .. code-block :: python
+
+        @Counter
+        def testfunction():
+            return 1
+
+        def example():
+            Counter("Start")
+            Counter("Start")
+            Counter("End")
+
+            testfunction()
+            testfunction()
+            testfunction()
+
+            Counter.print()
+
+    """
+
+    counters = {}
+
+    def __init__(self, *args, **kwargs):
+        """Construct class. First, check if class is called via a decorator or directly. If true, defer incrementing counter until wrapped function is actually called (see __call__). If false, increment counter now."""
+        if callable(args[0]):
+            self.func = args[0]
+            self.name = args[0].__name__
+        else:
+            name = args[0]
+
+            self.potentiallyIncrementByName(name)
+
+    def __call__(self, *args, **kwargs):
+        """Function for when Counter is used as a decorator. In that case, this class method call with increment the counter."""
+        self.potentiallyIncrementByName(self.name)
+        return self.func(*args, **kwargs)
+
+    @classmethod
+    def potentiallyIncrementByName(self, name):
+        """Either the Counter is incremented (if it exists already) or created"""
+        CountCalls.counters[name] = CountCalls.counters.get(name, 0) + 1
+
+    @classmethod
+    def print(self):
+        """Convenience method to print counted methods."""
+        padding = len(max(CountCalls.counters.keys()))
+        for (name, count) in CountCalls.counters.items():
+            print(f"{name:>{padding}}: {count}")

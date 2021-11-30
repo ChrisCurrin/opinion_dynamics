@@ -5,8 +5,9 @@ Methods that define how opinions evolve over time.
 - must have a call signature of ``t, y, *args`` for compatibility with scipy's ODE solvers
     ``*args`` is specified by ``SocialNetwork._args``
 """
-import numpy as np
+import logging
 
+import numpy as np
 from opdynamics.metrics.opinions import sample_means
 
 ##############################
@@ -25,15 +26,17 @@ def dy_dt(t: float, y: np.ndarray, *args) -> np.ndarray:
 
     """
     K, alpha, adj, dt = args
-    if t - adj.last_update >= dt:
-        adj.last_update = t
+    act_dyn_t_idx = int(np.round(t / dt, 12))
+    if act_dyn_t_idx > adj.last_update:
+        adj.last_update = act_dyn_t_idx
         from opdynamics.dynamics.socialinteractions import SocialInteraction
 
         adj: SocialInteraction
         adj.update_connection_probabilities(y)
 
     # get activity matrix for this time point
-    At = adj[int(t / dt)]
+    # the rounding is to avoid floating point errors at extreme decimal point locations
+    At = adj[act_dyn_t_idx]
     return -y.ravel() + K * np.sum(At * np.tanh(alpha * y.ravel()), axis=1)
 
 
@@ -55,10 +58,11 @@ def sample_dy_dt(t: float, y: np.ndarray, *all_args) -> np.ndarray:
     """
     clt_sample_method, sn, n, num_samples, *other_args = all_args
     adj, dt = other_args[-2:]
-    from opdynamics.dynamics.socialinteractions import SocialInteraction
-    assert isinstance(adj, SocialInteraction)
-    if t - adj.last_update >= dt:
-        adj.last_update = t
+    act_dyn_t_idx = int(np.round(t / dt, 12))
+
+    if act_dyn_t_idx > adj.last_update:
+        # warning: do not update adj.last_update here, as it is used in dy_dt
+
         # calculate sample means every explicit dt - independent of solver's dt
         if type(n) is tuple:
             # choose between low and high values (randint not implemented for default_rng)
@@ -75,8 +79,8 @@ def sample_dy_dt_activity(t: float, y: np.ndarray, *all_args) -> np.ndarray:
     """
     clt_sample_method, sn, n, num_samples, *other_args = all_args
     K, alpha, adj, dt = other_args
-    if t - adj.last_update >= dt:
-        adj.last_update = t
+    act_dyn_t_idx = int(np.round(t / dt, 12))
+    if act_dyn_t_idx > adj.last_update:
         # calculate sample means every explicit dt (other_args[-1]) - independent of solver's dt
         if type(n) is tuple:
             # choose between low and high values (randint not implemented for default_rng)
@@ -84,7 +88,7 @@ def sample_dy_dt_activity(t: float, y: np.ndarray, *all_args) -> np.ndarray:
         clt_sample_method(sn, y, n, num_samples)
 
     return sn.super_dy_dt(t, y, *other_args) + sn.D * np.sum(
-        adj[int(t / dt)] * sn._sample_means, axis=1
+        adj[act_dyn_t_idx] * sn._sample_means, axis=1
     )
 
 

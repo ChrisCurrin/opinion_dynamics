@@ -279,7 +279,7 @@ class SocialInteraction:
 
         self.conn_kwargs = conn_kwargs
 
-        self.last_update: float = 0
+        self.last_update: int = 0
 
         # private properties
         self._p_conn: np.ndarray = self.conn_method(sn.opinions, **conn_kwargs)
@@ -362,7 +362,7 @@ class SocialInteraction:
 
     def store_interactions(self, dt: float, t_dur: float):
         """Initialise the object to store social interactions (the adjacency matrix) for each time step until t_dur."""
-        t_arr = np.arange(0, t_dur + dt, dt)
+        t_arr = np.round(np.arange(0, t_dur + dt, dt), 6)
         adj_mat_memmap_file = self.filename
 
         is_extend_time = self._time_mat is not None
@@ -433,7 +433,7 @@ class SocialInteraction:
     # backwards compatibility
     accumulator = total
 
-    @lru_cache(maxsize=128)
+    @lru_cache(maxsize=256)
     def _getitem__specific(self, item: int):
         if item == -1:
             return self._last_adj_mat
@@ -441,7 +441,7 @@ class SocialInteraction:
         if self._time_mat is not None and np.sum(self._time_mat[item]) > 0:
             # we are storing interactions and have already computed this item (not every value is 0)
             return self._time_mat[item]
-
+        logger.debug(f"computing adjacency matrix for t={item}")
         # compute interactions
         self._last_adj_mat = compute_social_interaction(
             self.sn, self.sn.rn.random(), self.p_mutual_interaction, self._p_conn
