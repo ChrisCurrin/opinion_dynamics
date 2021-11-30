@@ -266,6 +266,7 @@ def show_jointplot(
                 gridspec_kw=dict(width_ratios=[1, 0.1], height_ratios=[0.1, 1]),
                 sharey="row",
                 sharex="col",
+                figsize=(3, 3),
             )
             (ax_marg_x, ax_empty), (
                 ax_joint,
@@ -307,6 +308,8 @@ def show_jointplot(
         plt.setp(ax_marg_y.get_xticklabels(), visible=False)
         ax_marg_x.yaxis.grid(False)
         ax_marg_y.xaxis.grid(False)
+        sns.despine(ax=ax_marg_x, left=True)
+        sns.despine(ax=ax_marg_y, bottom=True)
 
     # Convert the x and y data to arrays for indexing and plotting
     x_array = np.asarray(x)

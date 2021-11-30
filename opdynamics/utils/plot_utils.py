@@ -35,6 +35,10 @@ def get_time_point_idx(
         assert (
             len(time_point_or_index) == 2
         ), "`t` should be either a single value or 2 values in a tuple/list"
+        if time_point_or_index[0] == time_point_or_index[1]:
+            # return a single time index
+            return get_time_point_idx(time_series, time_point_or_index[0])
+
         return np.arange(
             get_time_point_idx(time_series, time_point_or_index[0]),
             get_time_point_idx(time_series, time_point_or_index[1]),
