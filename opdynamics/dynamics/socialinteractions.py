@@ -30,6 +30,7 @@ import inspect
 import json
 import logging
 import os
+import shutil
 from functools import lru_cache, partial
 from typing import Optional, Tuple, Union
 
@@ -336,23 +337,33 @@ class SocialInteraction:
             return prev_filename
 
         # note: reassign private property
-        #   the equivalent is assign None to self.filename and then the next call 
+        #   the equivalent is assign None to self.filename and then the next call
         #   to self.filename will generate the hash
         self._filename = hash_filename
 
         if self._time_mat is not None:
-            
+
             # remove current reference to time_mat
             self.clear(delete_file=False)
 
-            if os.path.exists(prev_filename):
-                os.rename(prev_filename, hash_filename)
-            elif os.path.exists(prev_filename.replace(".dat", ".npz")):
-                os.rename(prev_filename.replace(".dat", ".npz"), hash_filename)
-            else:
+            file_to_rename = (
+                prev_filename
+                if os.path.exists(prev_filename)
+                else prev_filename.replace(".dat", ".npz")
+            )
+            if not os.path.exists(file_to_rename):
                 raise FileNotFoundError(
-                    f"{prev_filename} or {prev_filename.replace('.dat', '.npz')} not found"
+                    f"{prev_filename} or {file_to_rename} not found"
                 )
+            try:
+                shutil.move(file_to_rename, hash_filename)
+            except (PermissionError, shutil.Error) as err:
+                if show_warning:
+                    logger.warning(
+                        f"Erroring moving {file_to_rename} to {hash_filename}:\n{err}"
+                    )
+                if raise_error:
+                    raise err
             dt = np.max(np.diff(self._t_arr))
             # re-assign memory-mapped matrix to new filename
             self.store_interactions(dt, self._t_arr[-1])

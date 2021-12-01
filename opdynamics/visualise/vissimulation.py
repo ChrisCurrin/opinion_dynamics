@@ -92,6 +92,7 @@ def show_periodic_noise(
     time_points=None,
     t_window=0.,
     dist_kwargs=None,
+    lims=None,
 ):
     logger.debug("plotting periodic noise")
     import matplotlib.pyplot as plt
@@ -159,21 +160,22 @@ def show_periodic_noise(
     # adjust view limits
     from scipy import stats
 
-    x_data, y_data = nsn.result.t, nsn.result.y
-    s = stats.describe(y_data)
-    lower_bound, upper_bound = -s.variance, s.variance
-    mask = np.logical_and(lower_bound < y_data, y_data < upper_bound)
-    y_mask = y_data[mask]
-    lim = (np.min(y_mask), np.max(y_mask))
-    ax_time.set_ylim(*lim)
-    ax_dist_time.set_xlim(*lim)
+    if lims is None:
+        x_data, y_data = nsn.result.t, nsn.result.y
+        s = stats.describe(y_data)
+        lower_bound, upper_bound = -s.variance, s.variance
+        mask = np.logical_and(lower_bound < y_data, y_data < upper_bound)
+        y_mask = y_data[mask]
+        lims = (np.min(y_mask), np.max(y_mask))
+    ax_time.set_ylim(*lims)
+    ax_dist_time.set_xlim(*lims)
 
     # annotate plots
     # points where opinion snapshots are taken
     ax_time.vlines(
         x=time_points,
-        ymin=lim[0],
-        ymax=lim[1],
+        ymin=lims[0],
+        ymax=lims[1],
         color=_colors,
         clip_on=False,
     )
@@ -185,7 +187,7 @@ def show_periodic_noise(
         noise_start + block_time * (i + 1) + interval * i for i in range(num)
     ]
     ax_time.hlines(
-        y=[lim[1]] * num,
+        y=[lims[1]] * num,
         xmin=block_times_s,
         xmax=block_times_e,
         lw=3,
@@ -193,7 +195,7 @@ def show_periodic_noise(
         clip_on=False,
     )
     # value of noise
-    ax_time.annotate(f"D = {D}", xy=(noise_start, lim[1]), ha="left", va="bottom")
+    ax_time.annotate(f"D = {D}", xy=(noise_start, lims[1]), ha="left", va="bottom")
     # recovery annotation
     # ax_time.annotate(
     #     f"D = 0",
