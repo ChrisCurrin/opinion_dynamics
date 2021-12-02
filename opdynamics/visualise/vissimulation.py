@@ -90,7 +90,7 @@ def show_periodic_noise(
     num,
     D,
     time_points=None,
-    t_window=0.,
+    t_window=0.0,
     dist_kwargs=None,
     lims=None,
 ):
@@ -109,12 +109,13 @@ def show_periodic_noise(
         ]
     if dist_kwargs is None:
         dist_kwargs = {}
-
+    bins = dist_kwargs.pop("bins", "auto")
     # calculate optimal bin edges from opinions distribution at noise start + noise_length
     t_idx, opinions = nsn.opinions_at_t((time_points[1] - t_window, time_points[1]))
+
     hist, bin_edges = np.histogram(
         opinions,
-        bins="auto",
+        bins=bins,
     )
 
     vis = VisSocialNetwork(nsn)
@@ -135,7 +136,12 @@ def show_periodic_noise(
     )
     # plot graphs
     vis.show_opinions(
-        ax=ax_time, color_code="line", subsample=5, lw=0.05, title=False, rasterized=True
+        ax=ax_time,
+        color_code="line",
+        subsample=5,
+        lw=0.05,
+        title=False,
+        rasterized=True,
     )
 
     ax_dist_time = None
@@ -153,9 +159,6 @@ def show_periodic_noise(
             kde_kws={"bw_adjust": 0.5},
             **dist_kwargs,
         )
-        if i > 0:
-            ax_dist_time.set_ylabel("")
-            ax_dist_time.set_yticklabels([])
 
     # adjust view limits
     from scipy import stats
@@ -167,8 +170,11 @@ def show_periodic_noise(
         mask = np.logical_and(lower_bound < y_data, y_data < upper_bound)
         y_mask = y_data[mask]
         lims = (np.min(y_mask), np.max(y_mask))
+
     ax_time.set_ylim(*lims)
     ax_dist_time.set_xlim(*lims)
+    ax_dist_time.set_ylabel("")
+    ax_dist_time.set_yticks([])
 
     # annotate plots
     # points where opinion snapshots are taken
@@ -204,4 +210,5 @@ def show_periodic_noise(
     #     va="bottom",
     # )
     sns.despine()
+    sns.despine(ax=ax_dist_time, left=True)
     return fig, gs
