@@ -1,0 +1,3 @@
+[submodule "social_influence_echo_chamber_model"]
+	path = social_influence_echo_chamber_model
+	url = git@github.com:ChrisCurrin/social_influence_echo_chamber_model.git
