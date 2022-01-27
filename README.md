@@ -55,31 +55,6 @@ python -m opdynamics 1000 10 2 3 -D 0.01 0.1 -beta 2 --activity negpowerlaw 2.1 
 ```
 
 ---
-# Notes
-This module uses Euler-Maruyama to solve sochastic differential equations.
-
-> **[TODO]**
->
->    Additional methods can be specified using https://pypi.org/project/diffeqpy/, but require extra steps to set up (e.g. installing Julia).
->   
->    1. Download Julia and add `julia` to system path.
->    2. `pip install diffeqpy numba`
->    
->    3. Install Python compatibility
->       ```python
->       import julia
->       julia.install()
->       import diffeqpy
->       diffeqpy.install()
->       ```
->   4. Test it works
->      ```python
->      from diffeqpy import de
->      ```
->      
->   5. Re-specify equations in Julia.
-
----
 # Development
 
 Note that the code is formatted using the [black](https://pypi.org/project/black/) Python module.
@@ -88,6 +63,9 @@ Update `environment.yml` using `conda env export --from-history > environment.ym
 
 ---
 ## TODO:
+- [ ] Use alternate peak detection alogiorthms
+  - [ ] [`peakutils`](http://peakutils.readthedocs.io/en/latest)
+  - [ ] [`scipy.signal.find_peaks_cwt`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.find_peaks_cwt.html)
 - [x] Equations:
     - [x] <img src="https://latex.codecogs.com/svg.latex?D \cdot \tanh(\sqrt{n} \cdot (\bar{X_n} - \langle x \rangle))"/>
     - [x] <img src="https://latex.codecogs.com/svg.latex?D \sqrt{n} \cdot \tanh(\bar{X_n} - \langle x \rangle)"/>

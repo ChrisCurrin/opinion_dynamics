@@ -348,7 +348,6 @@ class SocialNetwork(object):
             # use a method in `scipy.integrate`
             # use custom OdeResult (which SolverResult inherits from) for type
             from opdynamics.integrate.types import OdeResult
-            # TODO: add t_eval to solve_ivp
             t_eval = np.arange(t_span[0], t_span[1], dt)
             # noinspection PyTypeChecker
             self.result = OdeResult(
@@ -357,6 +356,7 @@ class SocialNetwork(object):
                     t_span=t_span,
                     y0=self.opinions,
                     method=method,
+                    t_eval=t_eval,
                     vectorized=True,
                     args=args,
                     first_step=dt,

@@ -398,7 +398,7 @@ def show_opinion_grid(
     Seaborn's ``sns.FacetGrid`` is used.
 
     :param df: Long-form DataFrame of observations.
-    :param columns: The column names in df to construct the FacetGrid. The first column changes with the co'l' of
+    :param columns: The column names in df to construct the FacetGrid. The first column changes with the 'col' of
         grid, the second changes with the 'row' of the grid, and the final column changes with the 'hue' of the grid.
     :param grid_kwargs: Keyword arguments for ``sns.FacetGrid``.
     :param kde_kwargs: Keyword arguments for ``kdeplot``.
