@@ -49,7 +49,7 @@ def compute_connection_probabilities(
     their opinions and a beta param, relative to all of the differences between an agent i and every other agent.
 
     .. math::
-        p_{ij} = \\frac{|x_i - x_j|^{-\\beta}}{\sum_j |x_i - x_j|^{-\\beta}}
+        p_{ij} = \\frac{|x_i - x_j|^{-\\beta}}{\\sum_j |x_i - x_j|^{-\\beta}}
 
     # FIXME: Update docstring
     :param sn: SocialNetwork object so we know
@@ -94,6 +94,38 @@ def compute_connection_probabilities_opp(
     else:
         betas = beta
     return compute_connection_probabilities(opinions, beta=betas, **conn_kwargs)
+
+
+def uniform_connection_probabilities(opinions: np.ndarray, **conn_kwargs):
+    """Create a uniform connection probability matrix"""
+    N = opinions.size
+    return (1 - np.identity(N)) / (N - 1)
+
+
+def random_connection_probabilities(opinions: np.ndarray, rng=None, **conn_kwargs):
+    """Create a random connection probability matrix"""
+    N = opinions.size
+    p_conn = rng.random((N, N))
+    p_conn[np.identity(N, dtype=bool)] = 0
+    # normalise
+    for i in range(N):
+        p_conn[i, i] = 0
+        p_conn[i] /= np.sum(p_conn[i])
+    return p_conn
+
+
+def random_sym_connection_probabilities(opinions: np.ndarray, rng=None, **conn_kwargs):
+    """Create a random symmetric connection probability matrix"""
+    N = opinions.size
+    p_conn = rng.random((N, N))
+    p_conn[np.identity(N, dtype=bool)] = 0
+    # symmetric
+    p_conn = np.tril(p_conn) + np.tril(p_conn, -1).T
+    # normalise
+    for i in range(N):
+        p_conn[i, i] = 0
+        p_conn[i] /= np.sum(p_conn[i])
+    return p_conn
 
 
 # TODO: Test
@@ -379,7 +411,7 @@ class SocialInteraction:
         """
         self._p_conn = p_conn
 
-    def update_connection_probabilities(self, opinions):
+    def update_connection_probabilities(self, opinions: np.ndarray):
         """
         Update the connection probabilities.
         """

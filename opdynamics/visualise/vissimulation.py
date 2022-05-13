@@ -127,7 +127,7 @@ def show_periodic_noise(
         figure=fig,
         wspace=0.3,
         hspace=0.8,
-        height_ratios=(1, 2),
+        height_ratios=(1, 1),
     )
     ax_time = fig.add_subplot(gs[0, :])
 
@@ -145,15 +145,17 @@ def show_periodic_noise(
     )
 
     ax_dist_time = None
+    ax_dist_times = []
     for i, time_point in enumerate(time_points):
         ax_dist_time = fig.add_subplot(
             gs[-1, i], sharey=ax_dist_time, sharex=ax_dist_time
         )
+        ax_dist_times.append(ax_dist_time)
 
         vis.show_opinions_distribution(
             ax=ax_dist_time,
             t=(time_point - t_window, time_point),
-            title=f"t = {time_point}",
+            # title=f"t = {time_point}",
             color=_colors[i],
             bins=bin_edges,
             kde_kws={"bw_adjust": 0.5},
@@ -173,7 +175,6 @@ def show_periodic_noise(
 
     ax_time.set_ylim(*lims)
     ax_dist_time.set_xlim(*lims)
-    ax_dist_time.set_ylabel("")
     ax_dist_time.set_yticks([])
 
     # annotate plots
@@ -210,5 +211,8 @@ def show_periodic_noise(
     #     va="bottom",
     # )
     sns.despine()
-    sns.despine(ax=ax_dist_time, left=True)
+    for ax_dist_time in ax_dist_times:
+        ax_dist_time.set_ylabel("")
+        ax_dist_time.set_title("")
+        sns.despine(ax=ax_dist_time, left=True)
     return fig, gs
