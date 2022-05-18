@@ -549,7 +549,8 @@ def run_product(
         p.join()
 
     logger.info(
-        f"running {len(ranges_to_run)} simulations (out of {number_of_combinations} supplied)"
+        f"running {len(ranges_to_run)} new simulations "
+        f"(out of {number_of_combinations} supplied)"
         + " in parallel"
         if parallel
         else ""
@@ -559,7 +560,7 @@ def run_product(
         run_async(n_processes=parallel if type(parallel) is int else None)
     else:
         run_sync()
-    logger.info(f"done running")
+    logger.info("done running")
 
     if plot_opinion and len(sn_list) > 0:
         show_simulation_range(sn_list)

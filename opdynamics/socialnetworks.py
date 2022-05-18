@@ -964,8 +964,8 @@ class SampleChamber(NoisySocialNetwork):
     # noinspection PyTypeChecker
     def __init__(self, *args, name="sample chamber", **kwargs):
         super().__init__(*args, name=name, **kwargs)
-        self._sample_size: int = 0
-        self._num_samples: int = None
+        self.sample_size: int = 0
+        self.num_samples: int = None
         self._sample_means: float = 0.0
         self._sample_method: Union[str, Callable] = None
         self._background: bool = True
@@ -988,10 +988,10 @@ class SampleChamber(NoisySocialNetwork):
 
         # object to store sample_means value at distinct time points
         self._sample_means = 0
-        self._sample_size = sample_size
-        self._num_samples = num_samples if num_samples is not None else self.N
+        self.sample_size = sample_size
+        self.num_samples = num_samples if num_samples is not None else self.N
 
-        if not (self._num_samples == 1 or self._num_samples == self.N):
+        if not (self.num_samples == 1 or self.num_samples == self.N):
             raise ValueError(
                 "num_samples must be either None (which becomes N) or 1 to be broadcast properly in the dynamics"
             )
@@ -1014,15 +1014,15 @@ class SampleChamber(NoisySocialNetwork):
 
     def _args(self, *args):
         return super()._args(
-            *args, self._sample_method[1], self, self._sample_size, self._num_samples
+            *args, self._sample_method[1], self, self.sample_size, self.num_samples
         )
 
     def __repr__(self):
         return (
             f"{super().__repr__()}"
             f" sample_method={self._sample_method[0]}"
-            f" n={self._sample_size}"
-            f" num_samples={self._num_samples}"
+            f" n={self.sample_size}"
+            f" num_samples={self.num_samples}"
             f" background={self._background}"
         )
 

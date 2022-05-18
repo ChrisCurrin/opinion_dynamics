@@ -480,7 +480,9 @@ class VisSocialNetwork(object):
         ax_joint.set_xlabel(OPINION_SYMBOL)
         ax_joint.set_ylabel(MEAN_NEAREST_NEIGHBOUR)
         if title:
-            fig.suptitle("Neighbour's opinions", va="bottom")
+            if isinstance(title, bool):
+                title = "Neighbour's opinions"
+            fig.suptitle(title, va="bottom")
         return fig, ax_joint, ax_marg_x, ax_marg_y
 
     def show_graph(self, **kwargs):
