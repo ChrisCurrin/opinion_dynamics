@@ -371,8 +371,8 @@ def _comp_unit(
 def run_product(
     range_parameters: Dict[str, Dict[str, Union[list, str]]],
     cls: Type[SN] = SocialNetwork,
-    cache: Union[bool, str] = False,
-    cache_sim: Union[bool, str] = True,
+    cache: Union[bool, str] = "all",
+    cache_sim: Union[bool, str] = False,
     cache_mem: bool = False,
     parallel: Union[bool, int] = False,
     plot_opinion: bool = False,
