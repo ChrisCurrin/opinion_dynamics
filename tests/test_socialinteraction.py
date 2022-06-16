@@ -27,7 +27,7 @@ class TestSocialInteraction(TestCase):
         # all active
         active_threshold = 0
 
-        self.sn.rn = np.random.default_rng(42)
+        self.sn.seed = 42
         adj_mat = compute_social_interaction(self.sn, active_threshold, r)
         self.assertTrue(np.all(np.sum(adj_mat, axis=0) == self.sn.m))
         self.assertTrue(

@@ -99,7 +99,6 @@ def show_periodic_noise(
     import seaborn as sns
     from matplotlib import gridspec
     from opdynamics.visualise import VisSocialNetwork
-    from opdynamics.utils.plot_utils import get_time_point_idx
 
     if time_points is None:
         time_points = [

@@ -3,9 +3,6 @@ import logging
 
 from unittest import TestCase
 
-import numpy as np
-from scipy.stats import powerlaw
-
 from opdynamics.simulation import run_periodic_noise
 from opdynamics.visualise import VisSocialNetwork
 from opdynamics.utils.distributions import negpowerlaw
@@ -32,5 +29,14 @@ class TestSimulation(TestCase):
         noise_start = 0.3
         noise_length = 0.5
         recovery = 0.2
-        nsn = run_periodic_noise(noise_start, noise_length, recovery, D=D, **kwargs)
+        nsn = run_periodic_noise(
+            noise_start,
+            noise_length,
+            recovery,
+            D=D,
+            cache=False,
+            cache_sim=False,
+            cache_mem=True,
+            **kwargs
+        )
         vis = VisSocialNetwork(nsn)

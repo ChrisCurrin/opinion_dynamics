@@ -296,7 +296,7 @@ def run_periodic_noise(
                 dt=dt,
                 raise_error=True,
             )
-    
+
     if plot_opinion:
         pbar.set_description(f"plotting")
         if plot_kws is None:
@@ -376,6 +376,7 @@ def run_product(
     cache_mem: bool = False,
     parallel: Union[bool, int] = False,
     plot_opinion: bool = False,
+    _self_call_flag: bool = False,
     **kwargs,
 ) -> Union[pd.DataFrame, List[SN]]:
     """Run a combination of variables, varying noise for each combination.
@@ -402,7 +403,7 @@ def run_product(
     :param range_parameters: A dictionary of parameters to vary. The product of each parameter's 'range' key is taken.
         See example for format.
     :param cls: Class of noise.
-    :param cache: Whether to cache individual simulations (default ``False``).
+    :param cache: Whether to cache individual simulations (default ``all``). True for just last time point.
     :param cache_sim: Whether to cache the ``pd.DataFrame`` used to store the simulation results (default ``True``).
         By default, saves to "noise_source.h5". Can be specified using ``cache_sim_file_name`` or ``cache_sim``
         itself.
@@ -421,6 +422,40 @@ def run_product(
 
     if not cache_sim and not cache and not cache_mem:
         raise ValueError("Must specify at least one cache method.")
+    if cache_sim and cache_mem:
+        logger.warning(
+            "cache_sim and cache_mem are both True, only cache_sim will be used."
+        )
+    elif not _self_call_flag and cache and cache_mem:
+        # at this point, cache_sim is False
+        from opdynamics.utils.logging import LoggingContext
+
+        # run normally, but don't store objects in memory **yet**
+        run_product(
+                range_parameters,
+                cls=cls,
+                cache=cache,
+                cache_sim=False,
+                cache_mem=False,
+                _self_call_flag=True,
+                parallel=parallel,
+                plot_opinion=False,
+                **kwargs,
+            )
+        with LoggingContext(logging.WARNING):
+            # run again but this time store objects in memory
+            sn_list = run_product(
+                range_parameters,
+                cls=cls,
+                cache=cache,
+                cache_sim=False,
+                cache_mem=True,
+                _self_call_flag=True,
+                parallel=False,
+                plot_opinion=plot_opinion,
+                **kwargs,
+            )
+        return sn_list
 
     cache_dir = get_cache_dir()
 
@@ -550,8 +585,7 @@ def run_product(
 
     logger.info(
         f"running {len(ranges_to_run)} new simulations "
-        f"(out of {number_of_combinations} supplied)"
-        + " in parallel"
+        f"(out of {number_of_combinations} supplied)" + " in parallel"
         if parallel
         else ""
     )
