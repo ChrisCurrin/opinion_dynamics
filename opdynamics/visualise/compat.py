@@ -185,7 +185,7 @@ def kdeplot(
     cbar_kws=None,
     ax=None,
     data=None,
-    data2=None,  # TODO move data once * is enforced
+    data2=None,
     **kwargs,
 ):
     """Fit and plot a univariate or bivariate kernel density estimate.
@@ -301,7 +301,7 @@ def kdeplot(
         ...                  cmap="Blues", shade=True, shade_lowest=False)
     """
     # Handle deprecation of `data` as name for x variable
-    # TODO this can be removed once refactored to do centralized preprocessing
+    
     # of input variables, because a vector input to `data` will be treated like
     # an input to `x`. Warning is probably not necessary.
     x_passed_as_data = x is None and data is not None and np.ndim(data) == 1
@@ -314,7 +314,7 @@ def kdeplot(
         warnings.warn(msg)
         y = data2
 
-    # TODO replace this preprocessing with central refactoring
+    
     if isinstance(x, list):
         x = np.asarray(x)
     if isinstance(y, list):
