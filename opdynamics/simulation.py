@@ -43,7 +43,7 @@ def run_params(
     plot_opinion: Union[bool, str] = False,
     write_mapping=True,
     *sim_args,
-    **sim_kwargs,
+    **sim_kwargs, # We need to add a parameter lambda
 ) -> SN:
     """
     Quickly and conveniently run a simulation where the parameters differ, but the structure
@@ -137,7 +137,7 @@ def run_periodic_noise(
     plot_kws: Dict[str, str] = None,
     write_mapping=True,
     *args,
-    **kwargs,
+    **kwargs, # Also lambda
 ) -> NSN:
     """
     Run a simulation with no noise, then bursts/periods of noise, then a recovery period.

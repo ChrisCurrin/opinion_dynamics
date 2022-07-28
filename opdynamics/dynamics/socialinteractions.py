@@ -45,11 +45,15 @@ logger = logging.getLogger("social_interactions")
 def compute_connection_probabilities(
     opinions: np.ndarray, beta: float = 0.0, **conn_kwargs
 ):
-    """For agent `i`, the probability of connecting to agent `j` is a function of the absolute strength of
-    their opinions and a beta param, relative to all of the differences between an agent i and every other agent.
+    """
 
-    .. math::
-        p_{ij} = \\frac{|x_i - x_j|^{-\\beta}}{\\sum_j |x_i - x_j|^{-\\beta}}
+            For agent `i`, the probability of connecting to agent `j` is a function of the absolute strength of
+        their opinions on topic u and a beta param, relative to all of the differences between an agent i on topic v and every other agent on 
+        either topic, varying depending on the relation betweet topics (defined by the overlap matrix \\Phi or the scalar product between x_i^u and x_j^v).
+
+        .. math::
+            p_{ij} = \\frac{|x_i - x_j|^{-\\beta}}{\sum_j |x_i - x_j|^{-\\beta}} (OLD)
+            p_{ij} = \\frac{(\sum_{u,v} x_i^u x_j^v cos(\\lambda_{u,v}))^{-\\beta}}{\sum_j (\sum_{u,v} x_i^u x_j^v cos(\\lambda_{u,v}))^{-\\beta}}
 
     # FIXME: Update docstring
     :param sn: SocialNetwork object so we know
@@ -63,17 +67,21 @@ def compute_connection_probabilities(
     # create N * N matrix of opinions
     p_conn = np.zeros(shape=(N, N))
 
-    for i in range(N):
-        # compute magnitude (between agent i and every other agent)*N agents
-        mag = np.abs(opinions[i] - opinions).ravel()
+    for i in range(N): # Adapt to new formula
+        # compute magnitude (between agent i and every other agent)*N agents 
+        mag = np.abs(opinions[i] - opinions).ravel() # Scalar product of (opinions[i] , opinions) * cos(\\lambda_{u,v}). cos(\\lambda_{u,v}) can be defined [0,1]
+        # One way to compute the numerator: (but I am not sure this is correct):
+        # angle = angle
+        # phi = np.array([[1,-angle],[-angle,1]]) 
+        # mag = np.dot(np.dot(np.transpose(opinions[i]),phi),opinions)
         mag[i] = np.nan
-        p_conn[i] = np.power(mag, -beta)
+        p_conn[i] = np.power(mag, -beta) # These would remaing the same
         p_conn[i, i] = 0
-        p_conn[i] /= np.sum(p_conn[i])
+        p_conn[i] /= np.sum(p_conn[i]) 
     return p_conn
 
 
-def compute_connection_probabilities_opp(
+def compute_connection_probabilities_opp( # Same as compute_connection_probabilities
     opinions: np.ndarray, beta: float = 0.0, p_opp: float = 0.0, rng=None, **conn_kwargs
 ):
     """For agent `i`, the probability of connecting to agent `j` is a function of the absolute strength of
@@ -99,7 +107,7 @@ def compute_connection_probabilities_opp(
 def uniform_connection_probabilities(opinions: np.ndarray, **conn_kwargs):
     """Create a uniform connection probability matrix"""
     N = opinions.size
-    return (1 - np.identity(N)) / (N - 1)
+    return (1 - np.identity(N)) / (N - 1) 
 
 
 def random_connection_probabilities(opinions: np.ndarray, rng=None, **conn_kwargs):
@@ -177,7 +185,8 @@ def compute_social_interaction(
     :return: Adjacency matrix for interactions between agents.
     :rtype: np.ndarray
     """
-    adj_mat = np.zeros((sn.N, sn.N), dtype=int)
+    adj_mat = np.zeros((sn.N, sn.N), dtype=int) # We need n of these: one for each dimension. Let's start with two.
+    # Not sure best way to do this but easiest would be to duplicate the last matrix... 
     active_agents = np.where(sn.activities >= active_threshold)[0]
     is_mutual = sn.rn.random(size=(len(active_agents), sn.m)) < p_mutual_interaction
     for loop_i, a_i in enumerate(active_agents):
@@ -194,7 +203,14 @@ def compute_social_interaction(
         # reciprocal interaction (agent i is influenced by agents j, Aij = 1), given `p_mutual_interaction`
         # keep an interaction if it exists already, or add a new mutual interaction
         adj_mat[a_i, ind] = np.logical_or(adj_mat[a_i, ind], is_mutual[loop_i])
+        # Once we know if agents are interacting then we know that Aij = 1 and it will have an effect in all topic dimensions. 
+        # In the case of two dimension u,v, then the we could just duplicate the matrices:
+        # adj_mat_u = adj_mat
+        # adj_mat_v = adj_mat
+        # adj_mat - np_array([adj_mat_u,adj_mat_v])
     return adj_mat
+    # return adj_mat_u adj_mat_v or we could create a list of matrices and we do not have to change so much of the code. We can index each position in the list
+    # retune adj_mat
 
 
 def get_social_interaction_exp(
@@ -464,7 +480,7 @@ class SocialInteraction:
             self._copy_interactions(adj_mat_memmap_file)
 
         self._time_mat = np.memmap(
-            adj_mat_memmap_file,
+            adj_mat_memmap_file, # Theses are now two
             dtype=int,
             mode="r+" if os.path.exists(adj_mat_memmap_file) else "w+",
             shape=(len(self._t_arr), self.sn.N, self.sn.N),
@@ -474,7 +490,7 @@ class SocialInteraction:
         if not is_extend_time:
             atexit.register(self.clear, delete_file=".dat")
 
-        logger.debug(f"adjacency matrix has shape = {self._time_mat.shape}")
+        logger.debug(f"adjacency matrix has shape = {self._time_mat.shape}") # These are two matrices! Maybe create a list of matrices. 
 
     def _copy_interactions(self, fname: str):
         assert fname.endswith(".dat")
@@ -535,7 +551,7 @@ class SocialInteraction:
             return self._time_mat[item]
 
         # compute interactions
-        self._last_adj_mat = compute_social_interaction(
+        self._last_adj_mat = compute_social_interaction( # but now we have two matrices!
             self.sn, self.sn.rn.random(), self.p_mutual_interaction, self._p_conn
         )
         # update accumulator
