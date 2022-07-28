@@ -119,7 +119,7 @@ class SocialNetwork(object):
         # create a dummy result in case `opinions` property is requested, which requires `result`
         self.result = SolverResult(
             np.array([0]),
-            np.expand_dims(self.rn.uniform(min_val, max_val, size=self.N), 1), # add n opinion dimensions to each agent 
+            np.expand_dims(self.rn.uniform(min_val, max_val, size=(self.N,self.N)),1), # add n opinion dimensions to each agent 
             None,
             None,
             None,

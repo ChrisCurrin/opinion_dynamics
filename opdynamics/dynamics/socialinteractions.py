@@ -71,7 +71,7 @@ def compute_connection_probabilities(
         # compute magnitude (between agent i and every other agent)*N agents 
         mag = np.abs(opinions[i] - opinions).ravel() # Scalar product of (opinions[i] , opinions) * cos(\\lambda_{u,v}). cos(\\lambda_{u,v}) can be defined [0,1]
         # One way to compute the numerator: (but I am not sure this is correct):
-        # angle = angle
+        # angle = angle # Between 0 and 1, 0 being orthogonal
         # phi = np.array([[1,-angle],[-angle,1]]) 
         # mag = np.dot(np.dot(np.transpose(opinions[i]),phi),opinions)
         mag[i] = np.nan
@@ -483,7 +483,7 @@ class SocialInteraction:
             adj_mat_memmap_file, # Theses are now two
             dtype=int,
             mode="r+" if os.path.exists(adj_mat_memmap_file) else "w+",
-            shape=(len(self._t_arr), self.sn.N, self.sn.N),
+            shape=(len(self._t_arr), self.sn.N, self.sn.N), # add n topics
         )
 
         # set up hook to clean up upon system exit
