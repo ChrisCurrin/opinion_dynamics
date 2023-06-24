@@ -113,9 +113,7 @@ def process_cache_arg(cache: Union[str, int]) -> Tuple[bool, int]:
             if cache.isnumeric():
                 complevel = int(cache)
             else:
-                raise ValueError(
-                    f"Invalid cache argument after processing: {cache}"
-                )
+                raise ValueError(f"Invalid cache argument after processing: {cache}")
     elif cache > 1:
         complevel = cache
     return only_last, complevel

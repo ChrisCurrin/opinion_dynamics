@@ -301,7 +301,7 @@ def kdeplot(
         ...                  cmap="Blues", shade=True, shade_lowest=False)
     """
     # Handle deprecation of `data` as name for x variable
-    
+
     # of input variables, because a vector input to `data` will be treated like
     # an input to `x`. Warning is probably not necessary.
     x_passed_as_data = x is None and data is not None and np.ndim(data) == 1
@@ -314,7 +314,6 @@ def kdeplot(
         warnings.warn(msg)
         y = data2
 
-    
     if isinstance(x, list):
         x = np.asarray(x)
     if isinstance(y, list):

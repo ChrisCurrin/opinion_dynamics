@@ -6,7 +6,7 @@ import logging
 import os
 
 import json
-from collections import Callable
+from typing import Callable
 
 import numpy as np
 import pandas as pd
@@ -110,7 +110,7 @@ def _holzmann_unimodal(opinions) -> bool:
     d = np.abs(μ1 - μ2) / (2 * np.sqrt(σ1 * σ2))
     is_unimodal = d <= 1
     p = pop1.size / opinions.size
-    rhs = 2 * np.log(d - np.sqrt(d ** 2 - 1)) + 2 * d * np.sqrt(d ** 2 - 1)
+    rhs = 2 * np.log(d - np.sqrt(d**2 - 1)) + 2 * d * np.sqrt(d**2 - 1)
     is_unimodal_alt = np.abs(np.log(1 - p) - np.log(p)) >= rhs
     return is_unimodal and is_unimodal_alt
 
@@ -129,7 +129,7 @@ def _ashmans_d(opinions: np.ndarray) -> float:
     μ2 = np.mean(pop2)
     σ1 = np.var(pop1)
     σ2 = np.var(pop2)
-    return np.sqrt(2) * np.abs(μ1 - μ2) / np.sqrt(σ1 ** 2 + σ2 ** 2)
+    return np.sqrt(2) * np.abs(μ1 - μ2) / np.sqrt(σ1**2 + σ2**2)
 
 
 # noinspection NonAsciiCharacters
@@ -175,7 +175,6 @@ def distribution_modality(opinions: np.ndarray, bin_width: float = "auto") -> fl
 def calc_distribution_differences(
     data: pd.DataFrame, x: str, y: str, variables: dict, N: int = 1000, **kwargs
 ):
-
     x_range = variables[x]["range"] if "range" in variables[x] else variables[x]
     y_range = variables[y]["range"] if "range" in variables[y] else variables[y]
 

@@ -432,16 +432,16 @@ def run_product(
 
         # run normally, but don't store objects in memory **yet**
         run_product(
-                range_parameters,
-                cls=cls,
-                cache=cache,
-                cache_sim=False,
-                cache_mem=False,
-                _self_call_flag=True,
-                parallel=parallel,
-                plot_opinion=False,
-                **kwargs,
-            )
+            range_parameters,
+            cls=cls,
+            cache=cache,
+            cache_sim=False,
+            cache_mem=False,
+            _self_call_flag=True,
+            parallel=parallel,
+            plot_opinion=False,
+            **kwargs,
+        )
         with LoggingContext(logging.WARNING):
             # run again but this time store objects in memory
             sn_list = run_product(

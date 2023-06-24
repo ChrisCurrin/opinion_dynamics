@@ -4,7 +4,7 @@ from operator import attrgetter
 from typing import Iterable, Tuple, Union
 
 import numpy as np
-from collections import Callable
+from typing import Callable
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.cm import ScalarMappable

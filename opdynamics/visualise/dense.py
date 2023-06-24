@@ -558,7 +558,6 @@ def plot_surfaces(
 def plot_surface_product(
     data: pd.DataFrame, x: str, y: str, params: dict, variables: dict, **kwargs
 ):
-
     x_range = variables[x]["range"] if "range" in variables[x] else variables[x]
     y_range = variables[y]["range"] if "range" in variables[y] else variables[y]
     x_label = variables[x]["title"] if "title" in variables[x] else x

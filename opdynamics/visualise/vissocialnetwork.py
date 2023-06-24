@@ -388,7 +388,6 @@ class VisSocialNetwork(object):
             opinions = np.abs(opinions)
 
         if np.iterable(sort) or sort:
-
             if isinstance(sort, np.ndarray):
                 # sort passed as indices
                 ind = sort

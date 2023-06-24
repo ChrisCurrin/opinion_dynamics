@@ -246,7 +246,6 @@ class TestSocialNetwork(TestCase):
         self.fail()
 
     def test_save_load(self):
-
         self.sn.alpha = 3  # controversialness of issue (sigmoidal shape)
         self.sn.K = 3  # social interaction strength
 
@@ -386,7 +385,6 @@ class TestNoisySocialNetwork(TestCase):
         self.sn = NoisySocialNetwork(1000, m=10, K=3.0, alpha=3.0)
 
     def test_save_load(self):
-
         self.sn.alpha = 3  # controversialness of issue (sigmoidal shape)
         self.sn.K = 3  # social interaction strength
 

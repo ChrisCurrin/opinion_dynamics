@@ -114,7 +114,7 @@ class negpowerlaw(object):
         :return: Power law-distributed values, in the range [low, high], with length of `size`.
         """
         r = np.random.random(size=size)
-        ag, bg = low ** -gamma, high ** -gamma
+        ag, bg = low**-gamma, high**-gamma
         return np.power(ag + (bg - ag) * r, 1.0 / -gamma)
 
     @staticmethod
@@ -138,7 +138,7 @@ class negpowerlaw(object):
         """
         see ``rvs_alt`` above
         """
-        ag, bg = low ** -gamma, high ** -gamma
+        ag, bg = low**-gamma, high**-gamma
         return -gamma * a ** (-gamma - 1) / (bg - ag)
 
     def __str__(self):

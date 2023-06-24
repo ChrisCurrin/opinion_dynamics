@@ -26,7 +26,7 @@ def dy_dt(t: float, y: np.ndarray, *args) -> np.ndarray:
 
     """
     K, alpha, adj, dt = args
-    
+
     # the rounding is to avoid floating point errors at extreme decimal point locations
     # Here we need two matrices (see line 37). We could do this twice... 
     act_dyn_t_idx = int(np.round(t / dt, 12))

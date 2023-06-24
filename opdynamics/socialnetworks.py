@@ -59,6 +59,7 @@ class SocialNetwork(object):
         m: int,
         K: float,
         alpha: float,
+        n_topics: int = 1,
         name="SocialNetwork",
         seed=1337,
         filename: str = None,
@@ -77,6 +78,7 @@ class SocialNetwork(object):
         self.m = m
         self.K = K
         self.alpha = alpha
+        self.n_topics = n_topics
 
         # private attributes
         self._dist: str = None
@@ -119,7 +121,7 @@ class SocialNetwork(object):
         # create a dummy result in case `opinions` property is requested, which requires `result`
         self.result = SolverResult(
             np.array([0]),
-            np.expand_dims(self.rn.uniform(min_val, max_val, size=(self.N,self.N)),1), # add n opinion dimensions to each agent 
+            self.rn.uniform(min_val, max_val, size=(self.n_topics, self.N, 1)),
             None,
             None,
             None,
@@ -165,7 +167,7 @@ class SocialNetwork(object):
     def set_social_interactions(
         self,
         beta: float = 0.0,
-        r: float = 0.5, # Why is this 0.5? 
+        r: float = 0.5,
         store_all=False,
         **kwargs,
     ):
@@ -174,7 +176,7 @@ class SocialNetwork(object):
         Populates `self.adj_mat` (adjacency matrix) that is used in opinion dynamics.
 
         For agent `i`, the probability of connecting to agent `j` is a function of the absolute strength of
-        their opinions on topic u and a beta param, relative to all of the differences between an agent i on topic v and every other agent on 
+        their opinions on topic u and a beta param, relative to all of the differences between an agent i on topic v and every other agent on
         either topic, varying depending on the relation betweet topics (defined by the overlap matrix \\Phi or the scalar product between x_i^u and x_j^v).
 
         .. math::
@@ -211,10 +213,10 @@ class SocialNetwork(object):
         self.dy_dt = dy_dt
 
     def opinions_at_t(
-        self, t: Union[Tuple[Union[int, float]], int, float] = -1, flatten: int = True
+        self, t: Union[Tuple[Union[int, float]], int, float] = -1, flatten: int = False
     ):
         t_idx = get_time_point_idx(self.result.t, t)
-        _opinions: np.ndarray = self.result.y[:, t_idx]
+        _opinions: np.ndarray = self.result.y[:, :, t_idx]
         if flatten:
             _opinions = _opinions.ravel()
         return t_idx, _opinions
@@ -350,6 +352,7 @@ class SocialNetwork(object):
             # use a method in `scipy.integrate`
             # use custom OdeResult (which SolverResult inherits from) for type
             from opdynamics.integrate.types import OdeResult
+
             t_eval = np.arange(t_span[0], t_span[1], dt)
             # noinspection PyTypeChecker
             self.result = OdeResult(
@@ -390,12 +393,14 @@ class SocialNetwork(object):
             idx = np.argmin(np.abs(t - self.result.t))
         else:
             idx = t if t is not None else np.arange(len(self.result.t))
-        time_point, average = self.result.t[idx], np.mean(self.result.y[:, idx], axis=0) ## Call each dimension and estimate mean for each:
+        time_point, average = self.result.t[idx], np.mean(
+            self.result.y[:, idx], axis=0
+        )  ## Call each dimension and estimate mean for each:
         # time_point_u, average_u = self.result.t[idx], np.mean(self.result.y[:, idx], axis=0) ## Call each dimension and estimate mean for each:
         # time_point_v, average_v = self.result.t[idx], np.mean(self.result.y[:, idx], axis=0) ## Call each dimension and estimate mean for each:
         return time_point, average
 
-    def get_sample_means( # But for each dimension or the mean of each vectorized opinion?
+    def get_sample_means(  # But for each dimension or the mean of each vectorized opinion?
         self,
         sample_size: int,
         num_samples: int = 1,
@@ -410,7 +415,7 @@ class SocialNetwork(object):
 
         Means are taken either from ``opinions`` argument or from ``self.result.y`` at time point ``t``.
 
-        see https://en.wikipedia.org/wiki/Central_limit_theorem 
+        see https://en.wikipedia.org/wiki/Central_limit_theorem
 
         :param sample_size: Pick this many agents' opinions (i.e. a sample).
         :param num_samples: Number of sample to perform.
@@ -419,7 +424,9 @@ class SocialNetwork(object):
         """
 
         t_idx = np.argmin(np.abs(t - self.result.t)) if isinstance(t, float) else t
-        opinions = self.result.y[:, t_idx] # Call each dimension and estimate mean... We would show opinions on only one topic? How would this work? Or the vectorized mean?:
+        opinions = self.result.y[
+            :, t_idx
+        ]  # Call each dimension and estimate mean... We would show opinions on only one topic? How would this work? Or the vectorized mean?:
         # np.mean( np.array([opinions]), axis=0 )
         return sample_means(opinions, sample_size, num_samples, rng=self.rn)
 
@@ -433,7 +440,7 @@ class SocialNetwork(object):
         and :math:`\\sum_j a_{ij}` is the degree of node `i`.
 
         """
-        idx, opinions = self.opinions_at_t(t) # call opinions by dimensions... 
+        idx, opinions = self.opinions_at_t(t)  # call opinions by dimensions...
         snapshot_adj_mat = self.adj_mat.accumulate(idx)
         return nearest_neighbours(opinions, snapshot_adj_mat)
 
@@ -460,13 +467,13 @@ class SocialNetwork(object):
 
 
         """
-        t_idx, opinions = self.opinions_at_t(t) # call opinions by dimensions... 
+        t_idx, opinions = self.opinions_at_t(t)  # call opinions by dimensions...
         return distribution_modality(opinions)
 
     def get_change_in_opinions(self, dt=0.01) -> np.ndarray:
         """Calculate the change of opinions for a given time step ``dt``."""
         # create time array with constant dt (variable dt may have been used in the numerical integration method)
-        t_indices = [ # We want to estimate these changes in each dimension. We also want to evantually graph the movement in both dimensions (see Fig 1)
+        t_indices = [  # We want to estimate these changes in each dimension. We also want to evantually graph the movement in both dimensions (see Fig 1)
             np.nanargmin(np.abs(t - self.result.t))
             for t in np.arange(0, self.result.t[-1] + dt, dt)
         ]
@@ -475,7 +482,9 @@ class SocialNetwork(object):
         return t_indices, t, np.diff(opinions, axis=1)
 
     @lru_cache(maxsize=None, typed=True)
-    def get_network_graph(self, t: Union[Tuple[Union[int, float]], int, float] = -1): # I think we can keep this one the same... 
+    def get_network_graph(
+        self, t: Union[Tuple[Union[int, float]], int, float] = -1
+    ):  # I think we can keep this one the same...
         """Construct a graph of the network
 
         :param t: The time point (or range) for the network.
@@ -486,7 +495,7 @@ class SocialNetwork(object):
 
         import networkx as nx
 
-        t_idx, opinions = self.opinions_at_t(t) 
+        t_idx, opinions = self.opinions_at_t(t)
 
         conn_weights = self.adj_mat.accumulate(t_idx)
 
@@ -627,7 +636,6 @@ class SocialNetwork(object):
         df_meta = pd.Series(meta, name="meta")
 
         try:
-
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", NaturalNameWarning)
                 warnings.simplefilter("ignore", PerformanceWarning)
@@ -746,9 +754,7 @@ class SocialNetwork(object):
                         # not everything loaded
                         return False
 
-                adj_mat_file_compressed = self.adj_mat.filename.replace(
-                        ".dat", ".npz"
-                    )
+                adj_mat_file_compressed = self.adj_mat.filename.replace(".dat", ".npz")
                 if os.path.exists(adj_mat_file_compressed):
                     new_time_mat = np.load(adj_mat_file_compressed, mmap_mode="r+")[
                         "time_mat"
@@ -921,7 +927,7 @@ class ContrastChamber(NoisySocialNetwork):
             or the difference between the current agent and agent k (True).
         """
         super().set_dynamics(D=D)
-        super_dy_dt = self.dy_dt # We can contrast but to compare 
+        super_dy_dt = self.dy_dt  # We can contrast but to compare
 
         self._idx = np.round(self.rn.uniform(0, self.N - 1, size=self.N), 0).astype(int)
         precision, scale = precision_and_scale(k_steps)
@@ -933,12 +939,14 @@ class ContrastChamber(NoisySocialNetwork):
                 self._idx = np.round(
                     self.rn.uniform(0, self.N - 1, size=self.N), 0
                 ).astype(int)
-        
-        # For both of these we would need to estimate the equation for each dimension. 
+
+        # For both of these we would need to estimate the equation for each dimension.
         def contrast_k(t, y, *nudge_args):
             _k_steps, _alpha_2, dt = nudge_args
             choose_k(t, dt, _k_steps)
-            return D * np.tanh(_alpha_2 * (y - y[self._idx])) # One option would be to estimate the difference between both vectors of opinions. We might also weigh it by cos(\\lambda) but that implies knowing \\lambda, which we do not... 
+            return D * np.tanh(
+                _alpha_2 * (y - y[self._idx])
+            )  # One option would be to estimate the difference between both vectors of opinions. We might also weigh it by cos(\\lambda) but that implies knowing \\lambda, which we do not...
 
         def show_k(t, y, *nudge_args):
             _k_steps, _alpha_2, dt = nudge_args
@@ -960,9 +968,9 @@ class ContrastChamber(NoisySocialNetwork):
         return super()._args(*args, self.k_steps, self.alpha_2)
 
 
-class SampleChamber(NoisySocialNetwork): 
+class SampleChamber(NoisySocialNetwork):
     """
-    Provide a mean sample of opinions to each agent. 
+    Provide a mean sample of opinions to each agent.
 
     see https://en.wikipedia.org/wiki/Central_limit_theorem
     """
@@ -972,7 +980,7 @@ class SampleChamber(NoisySocialNetwork):
         super().__init__(*args, name=name, **kwargs)
         self.sample_size: int = 0
         self.num_samples: int = None
-        self._sample_means: float = 0.0 
+        self._sample_means: float = 0.0
         self._sample_method: Union[str, Callable] = None
         self._background: bool = True
 

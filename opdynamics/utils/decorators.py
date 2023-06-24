@@ -174,5 +174,5 @@ class CountCalls:
     def print(self):
         """Convenience method to print counted methods."""
         padding = len(max(CountCalls.counters.keys()))
-        for (name, count) in CountCalls.counters.items():
+        for name, count in CountCalls.counters.items():
             print(f"{name:>{padding}}: {count}")
